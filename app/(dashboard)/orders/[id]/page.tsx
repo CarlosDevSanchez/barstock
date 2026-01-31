@@ -157,7 +157,7 @@ export default function OrderDetailPage() {
                         </div>
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Created By:</span>
-                            <span>{order.created_by_user?.full_name || 'Unknown'}</span>
+                            <span>{order.created_by || 'System'}</span>
                         </div>
                     </CardContent>
                 </Card>
