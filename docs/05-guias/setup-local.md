@@ -20,13 +20,14 @@ cd barstock
 bun install --frozen-lockfile
 ```
 
-### 2. Base de datos (SQL Editor de Supabase, en este orden)
-1. `supabase/schema.sql`
-2. `supabase/fix_rls_policies.sql` — **solo en desarrollo**. Abre RLS a cualquier usuario autenticado
-   ([C1](../04-auditoria/hallazgos/C1-rls-permisivo.md)). Es necesario hoy para poder vender con el esquema actual.
-3. `supabase/seed.sql` (opcional). Ejecutar **una sola vez** (no es idempotente).
-
-Detalles y advertencias: [seed y migraciones](../02-base-de-datos/06-seed-y-migraciones.md).
+### 2. Base de datos local (Supabase CLI + Docker)
+```bash
+# requiere Docker Desktop activo y la Supabase CLI (brew install supabase/tap/supabase)
+bun run db:start          # aplica supabase/migrations/* y supabase/seed.sql
+supabase status -o env    # API_URL, ANON_KEY, SERVICE_ROLE_KEY para .env.local
+```
+Detalles: [seed y migraciones](../02-base-de-datos/06-seed-y-migraciones.md). Ya no se pegan `schema.sql`/`fix_rls_policies.sql` en el SQL Editor
+(están en `supabase/legacy/`, solo como historia). Para un proyecto hospedado, ver "Aplicar a una base existente" en ese documento.
 
 ### 3. Variables de entorno
 Crear `.env.local` en la raíz (ver [variables-de-entorno](variables-de-entorno.md)):
@@ -39,30 +40,29 @@ APP_URL=http://localhost:3000
 ```
 
 ### 4. Autenticación en desarrollo
-En Supabase → *Authentication → Providers → Email*: desactivar **Confirm email** en el proyecto de desarrollo
-(o confirmar manualmente los usuarios desde el panel).
+Local ya viene configurado (`supabase/config.toml`): registro público **cerrado**, confirmación de email activa y correos en Mailpit
+(<http://127.0.0.1:54324>). No hay que tocar nada.
 
 ### 5. Arrancar
 ```bash
 bun run dev          # http://localhost:3000
 ```
 
-### 6. Crear el primer usuario y darle rol admin
-1. Registrarse en `/register` (el selector de rol se ignora: todos nacen `cashier`).
-2. Promover desde el SQL Editor:
-   ```sql
-   update public.profiles set role = 'admin' where email = 'tu@correo.com';
-   ```
-   (Desde el SQL Editor `auth.uid()` es nulo, por lo que un futuro trigger de protección de rol no debe bloquear este paso;
-   ver [diseño objetivo](../06-roadmap/diseno-objetivo-seguridad.md).)
-
-### 7. Crear stock
-No hay pantalla para crear inventario. Para probar ventas, el seed ya crea filas de `inventory` para 5 productos.
-Para un producto nuevo:
-```sql
-insert into public.inventory (product_id, quantity, low_stock_threshold)
-values ('<product uuid>', 50, 10);
+### 6. Crear el primer usuario (admin)
+No hay registro público: los usuarios se crean por invitación de un admin, y el primero se crea con la API de administración de Auth
+(el trigger asigna el rol y activa el perfil cuando `app_metadata.role` cambia):
+```bash
+. <(supabase status -o env | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')
+curl -s -X POST "$API_URL/auth/v1/admin/users" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"email":"admin@local.dev","password":"a-long-local-password","email_confirm":true,"app_metadata":{"role":"admin"}}'
 ```
+> ⚠️ Mientras dure el refactor a API (Paso 5), las páginas siguen llamando a Supabase directamente y **no** funcionan contra estas
+> políticas ([RLS](../02-base-de-datos/03-rls-y-politicas.md)).
+
+### 7. Stock
+Cada producto recibe su fila de `inventory` (cantidad 0) por trigger; el seed fija las cantidades iniciales. Para ajustar stock se usa el RPC
+`adjust_inventory` (gerente/admin, con motivo), no `INSERT`/`UPDATE` directos (están revocados).
 
 ## Verificación rápida
 
@@ -78,9 +78,8 @@ bun run build                        # requiere las variables de entorno
 |---|---|---|
 | `Invalid environment variables: X: missing` al ejecutar `dev`/`build` | Falta esa variable | Definirla en `.env.local` ([variables](variables-de-entorno.md), [H5](../04-auditoria/hallazgos/H5-build-sin-env.md)) |
 | `npx tsc` imprime "This is not the tsc command you are looking for" | `typescript` no está instalado y npx descargó un paquete `tsc` distinto | `bun install` y usar `bun run typecheck` |
-| Login correcto pero las pantallas salen vacías | RLS sin políticas para el rol (no se ejecutó `fix_rls_policies.sql`) o la sesión no cargó el perfil | Revisar políticas con las consultas de [RLS](../02-base-de-datos/03-rls-y-politicas.md) |
-| "Invalid login credentials" tras registrarse | Email sin confirmar | Confirmar el email o desactivar la confirmación en desarrollo |
-| El enlace de "olvidé mi contraseña" da 404 | `/reset-password` no existe ([H4](../04-auditoria/hallazgos/H4-flujos-incompletos.md)) | Restablecer desde el panel de Supabase |
-| El stock no baja tras una venta | Hipótesis de [C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md) | Seguir [verificar-checkout](verificar-checkout.md) |
+| Login correcto pero las pantallas salen vacías | El perfil está inactivo (`is_active = false`): no pasa ninguna política | Activarlo (admin) o crearlo con `app_metadata.role` |
+| El enlace de "olvidé mi contraseña" da 404 | `/reset-password` no existe todavía ([H4](../04-auditoria/hallazgos/H4-flujos-incompletos.md), Paso 5) | Restablecer con la API de administración |
+| El stock no baja tras una venta | El POS actual no usa `create_sale` aún | Llega con el refactor del POS (Paso 5); el RPC ya descuenta stock ([verificado](../02-base-de-datos/04-triggers-y-funciones.md)) |
 | No se puede crear el segundo producto/cliente sin código/email | Cadena vacía contra columna `UNIQUE` ([M14](../04-auditoria/hallazgos/medios-y-bajos.md)) | Rellenar el campo o corregir el formulario |
 | Error por categoría al crear producto | `category_id: ''` inválido para `uuid` | Elegir una categoría |

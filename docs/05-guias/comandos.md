@@ -42,16 +42,22 @@ NEXT_PUBLIC_SUPABASE_URL=... NEXT_PUBLIC_SUPABASE_ANON_KEY=... bun run build
 Y, si se tocó la base de datos: aplicar la migración en un proyecto de **staging**, ejecutar las pruebas SQL de
 políticas y actualizar [`docs/02-base-de-datos/`](../02-base-de-datos/).
 
-## Supabase CLI (propuesto; aún no configurado)
+## Supabase CLI (configurado; requiere Docker Desktop activo)
 
 ```bash
-supabase init                                   # crea supabase/config.toml
-supabase link --project-ref <ref>               # enlaza con el proyecto remoto
-supabase db pull                                # captura el esquema real como primera migración
+bun run db:start                                # supabase start: BD local + Auth + Mailpit (aplica migraciones y seed)
+bun run db:reset                                # recrea la BD local desde cero
+bun run db:types                                # regenera types/database.ts (tras cada migración)
+supabase status -o env                          # URLs y claves locales (API_URL, ANON_KEY, SERVICE_ROLE_KEY)
 supabase migration new <tema>                   # nueva migración con timestamp
+supabase stop                                   # apaga los contenedores
+# contra un proyecto remoto (paso controlado, ver 06-seed-y-migraciones):
+supabase link --project-ref <ref>
+supabase db pull                                # comparar el esquema real con la baseline
 supabase db push                                # aplica migraciones al remoto
-supabase gen types typescript --linked > types/database.ts
 ```
+
+Mailpit (correos de invitación y restablecer contraseña): <http://127.0.0.1:54324> · Studio: <http://127.0.0.1:54323>.
 
 ## Consultas SQL de diagnóstico (SQL Editor)
 
