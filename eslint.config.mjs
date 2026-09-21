@@ -5,11 +5,12 @@ import nextTs from 'eslint-config-next/typescript'
 const supabaseAndServerOnly = [
     {
         group: ['@supabase/*', '@/lib/supabase', '@/lib/supabase/**'],
-        message: 'El navegador no habla con Supabase: usa lib/api/* (la lógica vive en app/api/v1 y lib/server).'
+        message:
+            'The browser does not talk to Supabase: use lib/api/* (business logic lives in app/api/v1 and lib/server).'
     },
     {
         group: ['@/lib/server', '@/lib/server/**'],
-        message: 'lib/server es solo para el servidor: llámalo desde un Route Handler o un Server Component.'
+        message: 'lib/server is server-only: call it from a Route Handler or a Server Component.'
     }
 ]
 
@@ -29,7 +30,7 @@ const eslintConfig = defineConfig([
         }
     },
     {
-        // La lógica de negocio va en la API: las capas de UI no importan Supabase ni lib/server.
+        // Business logic lives in the API: UI layers must not import Supabase or lib/server.
         files: ['app/(auth)/**/*.{ts,tsx}', 'app/(dashboard)/**/*.{ts,tsx}', 'components/**/*.{ts,tsx}'],
         rules: {
             'no-restricted-imports': ['error', { patterns: supabaseAndServerOnly }]

@@ -30,9 +30,12 @@ Detalles y advertencias: [seed y migraciones](../02-base-de-datos/06-seed-y-migr
 
 ### 3. Variables de entorno
 Crear `.env.local` en la raíz (ver [variables-de-entorno](variables-de-entorno.md)):
+Copiar `.env.example` a `.env.local` y rellenar las 4 variables (URL, anon key, service role key, `APP_URL`):
 ```env
 NEXT_PUBLIC_SUPABASE_URL=https://<ref>.supabase.co
 NEXT_PUBLIC_SUPABASE_ANON_KEY=<anon key>
+SUPABASE_SERVICE_ROLE_KEY=<service role key>   # solo servidor
+APP_URL=http://localhost:3000
 ```
 
 ### 4. Autenticación en desarrollo
@@ -73,7 +76,7 @@ bun run build                        # requiere las variables de entorno
 
 | Síntoma | Causa | Solución |
 |---|---|---|
-| `Error: supabaseUrl is required` al hacer build | Faltan variables `NEXT_PUBLIC_*` | Definirlas antes del build ([H5](../04-auditoria/hallazgos/H5-build-sin-env.md)) |
+| `Invalid environment variables: X: missing` al ejecutar `dev`/`build` | Falta esa variable | Definirla en `.env.local` ([variables](variables-de-entorno.md), [H5](../04-auditoria/hallazgos/H5-build-sin-env.md)) |
 | `npx tsc` imprime "This is not the tsc command you are looking for" | `typescript` no está instalado y npx descargó un paquete `tsc` distinto | `bun install` y usar `bun run typecheck` |
 | Login correcto pero las pantallas salen vacías | RLS sin políticas para el rol (no se ejecutó `fix_rls_policies.sql`) o la sesión no cargó el perfil | Revisar políticas con las consultas de [RLS](../02-base-de-datos/03-rls-y-politicas.md) |
 | "Invalid login credentials" tras registrarse | Email sin confirmar | Confirmar el email o desactivar la confirmación en desarrollo |

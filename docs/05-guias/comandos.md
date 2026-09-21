@@ -8,13 +8,13 @@
 |---|---|---|
 | `bun install --frozen-lockfile` | Instala exactamente lo de `bun.lock` (falla si el lockfile no cuadra con `package.json`) | ✅ |
 | `bun run dev` | Servidor de desarrollo (Turbopack) en `:3000` | ✅ |
-| `bun run build` | Build de producción | ❌ sin variables de entorno ([H5](../04-auditoria/hallazgos/H5-build-sin-env.md)) |
+| `bun run build` | Build de producción | ✅ con las 4 variables de `.env.example`; sin ellas falla nombrando cuál ([H5](../04-auditoria/hallazgos/H5-build-sin-env.md)) |
 | `bun run start` | Sirve el build | ✅ tras un build correcto |
 | `bun run lint` | ESLint (`--max-warnings 0`) | ❌ errores existentes en las páginas cliente, que se eliminan con el refactor a API ([lint](../04-auditoria/lint-y-tipos.md)) |
 | `bun run typecheck` | `tsc --noEmit` con `strict` + `noUncheckedIndexedAccess` | ✅ |
 | `bun run format` / `format:check` | Prettier (4 espacios, sin `;`, comillas simples) | — |
-| `bun run test` · `test:unit` · `test:integration` · `test:e2e` | Tests (`bun test`, Playwright para e2e) | — (se añaden en el Paso 6 de la etapa 1) |
-| `bun run audit` | `bun audit` | ❌ hasta actualizar Next ([C3](../04-auditoria/hallazgos/C3-dependencias-vulnerables.md)) |
+| `bun run test` · `test:unit` · `test:integration` · `test:e2e` | Tests (`bun test`, Playwright para e2e) | ✅ unitarios de `lib/env`; el resto llega en el Paso 6 |
+| `bun run audit` | `bun audit` | ✅ limpio tras Next 16.3.5 ([C3](../04-auditoria/hallazgos/C3-dependencias-vulnerables.md)) |
 | `bun run db:start` · `db:reset` · `db:types` | Supabase CLI local | — (requiere Docker y Supabase CLI) |
 | `bun run check` | typecheck → lint → test → build | — |
 

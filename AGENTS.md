@@ -9,15 +9,15 @@ Aplicación de **punto de venta e inventario** para un solo negocio: catálogo, 
 proveedores, stock y reportes. Next.js (App Router) + Supabase (Postgres, Auth, PostgREST).
 
 > ⚠️ **Es un prototipo funcional, NO apto para dinero real todavía.** Auditoría completa en
-> [`docs/04-auditoria/README.md`](docs/04-auditoria/README.md). Tres críticos abiertos: no hay autorización efectiva (RLS permisivo),
-> el cobro no es atómico y el stock probablemente no se descuenta, y `next@16.1.6` tiene vulnerabilidades. No asumas que algo
+> [`docs/04-auditoria/README.md`](docs/04-auditoria/README.md). Dos críticos abiertos: no hay autorización efectiva (RLS permisivo)
+> y el cobro no es atómico (el stock probablemente no se descuenta). C3 (`next` vulnerable) ya está actualizado a `16.3.5`. No asumas que algo
 > "funciona" solo porque el README o el commit lo digan: ver [`readme-vs-realidad`](docs/04-auditoria/readme-vs-realidad.md).
 
 ## 2. Stack
 
 | | |
 |---|---|
-| Framework | Next.js `16.1.6` (App Router, Turbopack), React `19.2.3`, TypeScript `^5` (`strict`) |
+| Framework | Next.js `16.3.5` (App Router, Turbopack), React `19.3.0`, TypeScript `^5` (`strict`) |
 | Backend | Supabase vía `@supabase/supabase-js 2.116.0` (+ `@supabase/ssr`). **No hay API routes, Server Actions ni middleware** |
 | UI | Tailwind CSS 4, shadcn/ui (`new-york`) sobre Radix, lucide-react, Sonner, next-themes, Recharts |
 | Estado | Zustand (`stores/auth.ts`, `stores/cart.ts` persistido, `stores/settings.ts` **sin uso**) |
@@ -31,8 +31,8 @@ bun run dev                             # http://localhost:3000
 bun run typecheck                       # tsc --noEmit (hoy limpio)
 bun run lint                            # HOY FALLA: 93 errores (reglas estrictas; caen con el refactor a API)
 bun run format:check                    # Prettier (el reformateo del repo va en un commit aparte)
-bun audit --audit-level=high            # HOY FALLA (next crítico)
-bun run build                           # requiere NEXT_PUBLIC_SUPABASE_URL y NEXT_PUBLIC_SUPABASE_ANON_KEY
+bun audit --audit-level=high            # limpio (C3 en curso: falta CI)
+bun run build                           # requiere las 4 variables de .env.example; si falta alguna, el error la nombra
 ```
 
 Trampas: `npx tsc` sin instalar descarga un paquete falso; **todas** las dependencias están a versión exacta (actualizar con `bun add next@x`);
@@ -111,7 +111,7 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 | Dashboard/Reportes | KPI "Low Stock" topado en 5; top productos con `limit` sin orden y con ventas reembolsadas; "Loyalty Points" = `floor(total_spent)` | [dashboard](docs/03-modulos/dashboard.md), [reportes](docs/03-modulos/reportes.md) |
 | Órdenes de compra, gastos, variantes | Solo esquema; sin UI | [proveedores](docs/03-modulos/proveedores-y-compras.md) |
 | Carrito | Persiste el `Product` completo (precio obsoleto) y no se limpia al cerrar sesión | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
-| `next build` | Falla sin variables de entorno | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
+| `next build` / `next dev` | Fallan si falta alguna de las 4 variables (el error nombra cuál) | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
 | Impresión | `window.print()` tras vaciar el carrito; no hay recibo | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
 | README | Inexacto en muchos puntos | [readme-vs-realidad](docs/04-auditoria/readme-vs-realidad.md) |
 

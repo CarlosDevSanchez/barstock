@@ -5,7 +5,7 @@
 | **Severidad** | Alto (DevOps / DX) |
 | **Área** | Configuración y despliegue |
 | **Esfuerzo** | Pequeño |
-| **Estado** | Abierto |
+| **Estado** | En curso (validación con zod y `.env.example` hechos; falta CI) |
 | **Confianza** | **[Verificado]** ejecutando `next build` |
 
 ## Hallazgo
@@ -52,7 +52,7 @@ Builds de CI/CD rotos hasta configurar secretos, mensajes de error poco útiles,
 
 ## Criterios de aceptación
 
-- [ ] `npm run build` con variables definidas termina correctamente en CI.
-- [ ] Sin variables, el error indica cuál falta.
-- [ ] `.env.example` está versionado y el README lo referencia correctamente.
-- [ ] La versión de Node está declarada.
+- [ ] `bun run build` con variables definidas termina correctamente en CI. (Local ✅; el CI llega en el Paso 7.)
+- [x] Sin variables, el error indica cuál falta (`EnvError` desde `next.config.ts`; probado en `lib/env/schema.test.ts`).
+- [ ] `.env.example` está versionado (✅) y el README lo referencia correctamente (pendiente: se reescribe en el Paso 8).
+- [x] La versión de Node está declarada (`engines`, `.nvmrc`).

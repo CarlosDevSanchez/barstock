@@ -36,14 +36,14 @@ Límites: el grafo indexa 48 de los 61 archivos versionados; **no** cubre bien S
 - **Confianza en lo documentado:** respetar las etiquetas `[Verificado]` / `[Inferido]` / `[Por verificar]`. Si compruebas una hipótesis,
   actualiza la etiqueta en el documento.
 - **Al terminar una tarea:** revisar `AGENTS.md` §10 (definición de hecho) y §11 (documentación viva) antes de dar el trabajo por cerrado.
-- **Informar con fidelidad:** si `lint`, `build` o una prueba falla, decirlo con la salida. Hoy `bun run lint` y `bun audit` **ya fallan** por
-  causas conocidas ([lint](docs/04-auditoria/lint-y-tipos.md), [C3](docs/04-auditoria/hallazgos/C3-dependencias-vulnerables.md)); distinguir
+- **Informar con fidelidad:** si `lint`, `build` o una prueba falla, decirlo con la salida. Hoy `bun run lint` **ya falla** por
+  causas conocidas ([lint](docs/04-auditoria/lint-y-tipos.md)); distinguir
   "falla nuevo" de "falla existente".
 
 ### Herramientas y trampas del entorno
 - Gestor de paquetes: **Bun**. Instalar antes de verificar: `bun install --frozen-lockfile`. Después `bun run typecheck`, no `npx tsc` (descarga un paquete falso).
 - En zsh, entrecomillar los globs (`--include='*.tsx'`); si no, el comando falla con `no matches found`.
-- `next build` necesita `NEXT_PUBLIC_SUPABASE_URL` y `NEXT_PUBLIC_SUPABASE_ANON_KEY`; sin ellas falla ([H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md)).
+- `next dev`/`next build` validan el entorno con zod (`lib/env/schema.ts`): necesitan las 4 variables de `.env.example` (copiarlo a `.env.local`); si falta alguna, el error la nombra ([H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md)).
 - Tras un `next build` local, borrar `.next/` si no se necesita (está en `.gitignore`, no ensucia git).
 
 ### Skills útiles (si están disponibles en la sesión)

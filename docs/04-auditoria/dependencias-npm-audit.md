@@ -48,6 +48,10 @@ Lista completa con enlaces: `npm audit --json` (campo `vulnerabilities.next.via`
 El proyecto no usa middleware/proxy, Server Actions, rewrites ni `next/image`; el endpoint `/_next/image` sí está disponible
 por defecto. Al añadir `proxy.ts` ([H1](hallazgos/H1-sin-proteccion-servidor.md)) los avisos de bypass pasan a aplicar directamente.
 
+> **Actualización etapa 1 (Paso 2):** `next`/`eslint-config-next` 16.3.5, `react`/`react-dom` 19.3.0, `@supabase/supabase-js` 2.116.0 y
+> el resto de minors/patches aplicados con versiones exactas; `bun audit --audit-level=high` reporta 0 vulnerabilidades (548 paquetes).
+> Siguen sin actualizar por ser saltos mayores: `lucide-react` 1.x, `typescript` 7, `eslint` 10, `@types/node` 26.
+
 ## Paquetes desactualizados
 
 `npm outdated` (tras `npm ci`). Nota: `next`, `react`, `react-dom` y `eslint-config-next` están **fijados sin `^`** en

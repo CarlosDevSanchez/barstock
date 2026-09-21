@@ -1,4 +1,4 @@
 import { mock } from 'bun:test'
 
-// `server-only` lanza un error fuera de React Server Components; en los tests se neutraliza.
+// `server-only` throws outside React Server Components; neutralize it in tests.
 void mock.module('server-only', () => ({}))
