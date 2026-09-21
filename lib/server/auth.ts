@@ -23,12 +23,11 @@ const profileSchema = z.object({
 })
 
 /**
- * Resolves the caller from the session cookie. `auth.getUser()` validates the JWT against Supabase Auth (unlike
- * `getSession()`, which trusts the cookie). The role is read from `profiles` on every request, so a role change or
- * deactivation takes effect immediately. Returns null when there is no valid, active user.
+ * Resolves the caller from the session held by `supabase`. `auth.getUser()` validates the JWT against Supabase Auth
+ * (unlike `getSession()`, which trusts the cookie). The role is read from `profiles` on every request, so a role change
+ * or deactivation takes effect immediately. Returns null when there is no valid, active user.
  */
-export async function getSession(): Promise<Session | null> {
-    const supabase = await createSupabaseServerClient()
+export async function loadSession(supabase: AppSupabaseClient): Promise<Session | null> {
     const {
         data: { user },
         error
@@ -54,6 +53,10 @@ export async function getSession(): Promise<Session | null> {
         },
         supabase
     }
+}
+
+export async function getSession(): Promise<Session | null> {
+    return loadSession(await createSupabaseServerClient())
 }
 
 export async function requireUser(): Promise<Session> {

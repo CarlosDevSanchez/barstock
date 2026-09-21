@@ -82,8 +82,12 @@ export async function apiGet<T>(path: string, query?: Query, signal?: AbortSigna
 }
 
 /** GET a list: returns the whole paginated envelope. */
-export async function apiList<T>(path: string, query?: Query, signal?: AbortSignal): Promise<Paginated<T>> {
-    return (await request('GET', path, { query, signal })) as Paginated<T>
+export async function apiList<T, S = undefined>(
+    path: string,
+    query?: Query,
+    signal?: AbortSignal
+): Promise<Paginated<T, S>> {
+    return (await request('GET', path, { query, signal })) as Paginated<T, S>
 }
 
 export async function apiPost<T = void>(path: string, body?: unknown): Promise<T> {
@@ -96,4 +100,14 @@ export async function apiPatch<T = void>(path: string, body: unknown): Promise<T
 
 export async function apiDelete(path: string): Promise<void> {
     await request('DELETE', path)
+}
+
+/** A message fit for a toast: the API message plus the first field problem of a validation error. */
+export function errorMessage(error: unknown, fallback = 'Something went wrong'): string {
+    if (!(error instanceof Error)) return fallback
+    if (error instanceof ApiError && Array.isArray(error.details)) {
+        const first = error.details[0] as { path?: string; message?: string } | undefined
+        if (first?.message) return `${first.path ? `${first.path}: ` : ''}${first.message}`
+    }
+    return error.message || fallback
 }

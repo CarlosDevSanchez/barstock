@@ -2,9 +2,9 @@ import 'server-only'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
 import { clientEnv } from '@/lib/env/client'
+import type { Database } from '@/types/database'
 
-/** One place to change once `types/database.ts` exists: `SupabaseClient<Database>`. */
-export type AppSupabaseClient = ReturnType<typeof createServerClient>
+export type AppSupabaseClient = ReturnType<typeof createServerClient<Database>>
 
 /**
  * Supabase client bound to the request's cookies: it carries the user's JWT, so RLS applies.
@@ -12,7 +12,7 @@ export type AppSupabaseClient = ReturnType<typeof createServerClient>
  */
 export async function createSupabaseServerClient(): Promise<AppSupabaseClient> {
     const cookieStore = await cookies()
-    return createServerClient(clientEnv.NEXT_PUBLIC_SUPABASE_URL, clientEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
+    return createServerClient<Database>(clientEnv.NEXT_PUBLIC_SUPABASE_URL, clientEnv.NEXT_PUBLIC_SUPABASE_ANON_KEY, {
         cookies: {
             getAll: () => cookieStore.getAll(),
             setAll: cookiesToSet => {

@@ -244,10 +244,15 @@ otp_expiry = 3600
 # admin_email = "admin@email.com"
 # sender_name = "Admin"
 
-# Uncomment to customize email template
-# [auth.email.template.invite]
-# subject = "You have been invited"
-# content_path = "./supabase/templates/invite.html"
+# The app confirms the emailed token on the server (app/auth/confirm) with verifyOtp(token_hash), so no tokens travel through
+# the browser or a URL fragment. On a hosted project paste the same templates in Authentication > Email Templates.
+[auth.email.template.invite]
+subject = "You have been invited"
+content_path = "./supabase/templates/invite.html"
+
+[auth.email.template.recovery]
+subject = "Reset your password"
+content_path = "./supabase/templates/recovery.html"
 
 # Uncomment to customize notification email template
 # [auth.email.notification.password_changed]

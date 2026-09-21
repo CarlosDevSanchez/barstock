@@ -5,7 +5,9 @@ import { roleAtLeast, USER_ROLES, type UserRole } from '@/lib/auth/roles'
 import { clientEnv } from '@/lib/env/client'
 
 // UX guard + early 401. It is NOT the security boundary: every Route Handler re-checks the role (route()) and RLS decides the data.
-const PUBLIC_PAGES = ['/login', '/forgot-password', '/reset-password']
+const PUBLIC_PAGES = ['/login', '/forgot-password', '/reset-password', '/auth/confirm']
+// Reachable while signed in: the user may open an invitation/recovery link, and must be able to set a password.
+const SIGNED_IN_ALLOWED = ['/reset-password', '/auth/confirm']
 const PUBLIC_API_PREFIX = '/api/v1/auth/'
 const PAGE_ROLE_GUARDS: Array<{ prefix: string; minimum: UserRole }> = [
     { prefix: '/settings', minimum: 'admin' },
@@ -64,7 +66,7 @@ export async function proxy(request: NextRequest) {
         return redirectTo('/login', pathname === '/' ? undefined : { next: pathname + request.nextUrl.search })
     }
 
-    if (isPublicPage && pathname !== '/reset-password') return redirectTo('/dashboard')
+    if (isPublicPage && !SIGNED_IN_ALLOWED.some(page => matches(pathname, page))) return redirectTo('/dashboard')
 
     const guard = PAGE_ROLE_GUARDS.find(({ prefix }) => matches(pathname, prefix))
     if (guard && !isApi) {

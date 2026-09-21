@@ -53,6 +53,13 @@ describe('customers', () => {
 })
 
 describe('sales', () => {
+    test('accepts any well-formed uuid, like the database (seed ids are not RFC 4122 versioned)', () => {
+        const seedId = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'
+        expect(
+            saleSchema.safeParse({ items: [{ product_id: seedId, quantity: 1 }], payment_method: 'cash' }).success
+        ).toBe(true)
+    })
+
     const line = { product_id: id, quantity: 2 }
 
     test('accepts ids and quantities only, and strips prices', () => {
@@ -86,6 +93,12 @@ describe('refund and inventory adjustment require a reason', () => {
         expect(refundSchema.safeParse({}).success).toBe(false)
         expect(refundSchema.safeParse({ reason: 'ok' }).success).toBe(false)
         expect(refundSchema.parse({ reason: ' damaged item ' }).reason).toBe('damaged item')
+    })
+    test('adjustment accepts what a number input sends (a string), never a blank as 0', () => {
+        expect(inventoryAdjustSchema.parse({ delta: '12', reason: 'delivery' }).delta).toBe(12)
+        expect(inventoryAdjustSchema.parse({ delta: '-3', reason: 'damaged' }).delta).toBe(-3)
+        expect(inventoryAdjustSchema.safeParse({ delta: '', reason: 'delivery' }).success).toBe(false)
+        expect(inventoryAdjustSchema.safeParse({ delta: 'abc', reason: 'delivery' }).success).toBe(false)
     })
     test('adjustment: non-zero integer delta', () => {
         expect(inventoryAdjustSchema.safeParse({ delta: 0, reason: 'count' }).success).toBe(false)

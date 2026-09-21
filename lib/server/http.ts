@@ -17,8 +17,11 @@ export class ApiResult {
 export const ok = <T>(data: T) => new ApiResult(200, { data })
 export const created = <T>(data: T) => new ApiResult(201, { data })
 export const noContent = () => new ApiResult(204)
-export const paginated = <T>(data: T[], meta: { page: number; pageSize: number; total: number }) =>
-    new ApiResult(200, { data, ...meta })
+export const paginated = <T>(
+    data: T[],
+    meta: { page: number; pageSize: number; total: number },
+    summary?: Record<string, unknown>
+) => new ApiResult(200, { data, ...meta, ...(summary ? { summary } : {}) })
 
 type Out<T> = T extends z.ZodType ? z.output<T> : undefined
 

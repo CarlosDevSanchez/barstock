@@ -76,7 +76,7 @@ describe('input validation', () => {
         role: 'cashier',
         body: z.object({ name: z.string().min(1) }),
         query: z.object({ page: z.coerce.number() }),
-        params: z.object({ id: z.uuid() }),
+        params: z.object({ id: z.guid() }),
         handler: async ({ body, query, params }) => ok({ body, query, params })
     })
     const id = '11111111-1111-4111-8111-111111111111'

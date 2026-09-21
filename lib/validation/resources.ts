@@ -1,7 +1,13 @@
 import { z } from 'zod'
 import { USER_ROLES } from '@/lib/auth/roles'
 import {
+    blankToNull,
     money,
+    toNumber,
+    optionalUuid,
+    paginationSchema,
+    queryBoolean,
+    uuidList,
     nullableEmail,
     nullableText,
     nullableUrl,
@@ -66,12 +72,16 @@ export const supplierUpdateSchema = supplierCreateSchema.partial()
 
 // ---- Inventory
 export const inventoryAdjustSchema = z.object({
-    delta: z
-        .number()
-        .int()
-        .min(-1_000_000)
-        .max(1_000_000)
-        .refine(value => value !== 0, 'Delta must not be 0'),
+    // A number input delivers a string: convert it (and never treat '' as 0).
+    delta: z.preprocess(
+        toNumber,
+        z
+            .number()
+            .int()
+            .min(-1_000_000)
+            .max(1_000_000)
+            .refine(value => value !== 0, 'Delta must not be 0')
+    ),
     reason: z.string().trim().min(3, 'A reason is required').max(500)
 })
 
@@ -82,7 +92,7 @@ export const saleSchema = z.object({
     items: z
         .array(
             z.object({
-                product_id: z.uuid(),
+                product_id: z.guid(),
                 variant_id: nullableUuid,
                 quantity: positiveInt(100_000),
                 discount: money.optional()
@@ -127,13 +137,45 @@ export const settingsSchema = z.object({
         .regex(/^[A-Z]{3}$/, 'ISO 4217 code')
         .refine(isValidCurrency, 'Unknown currency'),
     timezone: z.string().refine(isValidTimeZone, 'Unknown time zone'),
-    low_stock_threshold: z.preprocess(
-        v => (typeof v === 'string' && v.trim() !== '' ? Number(v) : v),
-        z.number().int().min(0).max(100_000)
-    ),
+    low_stock_threshold: z.preprocess(toNumber, z.number().int().min(0).max(100_000)),
     tax_rate: taxRate,
     receipt_template: z.object({ header: z.string().trim().max(200), footer: z.string().trim().max(200) })
 })
 export const settingsUpdateSchema = settingsSchema.partial()
 export type SettingsInput = z.infer<typeof settingsSchema>
 export type SettingKey = keyof SettingsInput
+
+// ---- Query strings
+export const ORDER_STATUSES = ['draft', 'pending', 'completed', 'refunded'] as const
+const optionalDate = z.preprocess(value => blankToNull(value) ?? undefined, z.iso.date().optional())
+
+export const productsQuerySchema = paginationSchema.extend({
+    category_id: optionalUuid,
+    active: queryBoolean,
+    // Refreshes specific products (e.g. the current cart) with their live price and stock.
+    ids: uuidList
+})
+export const inventoryQuerySchema = paginationSchema.extend({ low: queryBoolean })
+export const ordersQuerySchema = paginationSchema.extend({
+    status: z.preprocess(value => blankToNull(value) ?? undefined, z.enum(ORDER_STATUSES).optional()),
+    customer_id: optionalUuid,
+    from: optionalDate,
+    to: optionalDate
+})
+export const reportQuerySchema = z.object({ from: z.iso.date(), to: z.iso.date() })
+
+// ---- Inferred inputs (what services receive after validation)
+export type ProductCreate = z.output<typeof productCreateSchema>
+export type ProductUpdate = z.output<typeof productUpdateSchema>
+export type CategoryCreate = z.output<typeof categoryCreateSchema>
+export type CategoryUpdate = z.output<typeof categoryUpdateSchema>
+export type CustomerCreate = z.output<typeof customerCreateSchema>
+export type CustomerUpdate = z.output<typeof customerUpdateSchema>
+export type SupplierCreate = z.output<typeof supplierCreateSchema>
+export type SupplierUpdate = z.output<typeof supplierUpdateSchema>
+export type SaleInput = z.output<typeof saleSchema>
+export type InviteUserInput = z.output<typeof inviteUserSchema>
+export type UpdateUserInput = z.output<typeof updateUserSchema>
+export type ProductsQuery = z.output<typeof productsQuerySchema>
+export type InventoryQuery = z.output<typeof inventoryQuerySchema>
+export type OrdersQuery = z.output<typeof ordersQuerySchema>

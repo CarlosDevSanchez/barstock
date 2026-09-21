@@ -4,7 +4,7 @@ import { z } from 'zod'
 export const blankToNull = (value: unknown) => (typeof value === 'string' && value.trim() === '' ? null : value)
 
 /** Form inputs deliver strings: convert numeric ones, and treat '' as "not provided" (never as 0). */
-const toNumber = (value: unknown) => {
+export const toNumber = (value: unknown) => {
     if (typeof value !== 'string') return value
     return value.trim() === '' ? undefined : Number(value)
 }
@@ -16,8 +16,22 @@ const hasAtMostDecimals = (decimals: number) => (value: number) => {
 
 export const requiredText = (max: number) => z.string().trim().min(1, 'Required').max(max)
 export const nullableText = (max: number) => z.preprocess(blankToNull, z.string().trim().max(max).nullable().optional())
-export const nullableUuid = z.preprocess(blankToNull, z.uuid().nullable().optional())
+export const nullableUuid = z.preprocess(blankToNull, z.guid().nullable().optional())
 export const nullableEmail = z.preprocess(blankToNull, z.email().max(254).toLowerCase().nullable().optional())
+/** `?ids=a,b,c` -> ['a','b','c'] (at most 100). */
+export const uuidList = z.preprocess(
+    value => (typeof value === 'string' && value.trim() !== '' ? value.split(',').map(part => part.trim()) : undefined),
+    z.array(z.guid()).max(100).optional()
+)
+export const optionalUuid = z.preprocess(value => blankToNull(value) ?? undefined, z.guid().optional())
+export const idParamsSchema = z.object({ id: z.guid() })
+
+/** `?active=true` / `?low=false` from a query string. */
+export const queryBoolean = z.preprocess(
+    value => (value === 'true' ? true : value === 'false' ? false : value === '' ? undefined : value),
+    z.boolean().optional()
+)
+
 export const nullableUrl = z.preprocess(blankToNull, z.url().max(2048).nullable().optional())
 
 // NUMERIC(10,2). Float noise from client arithmetic (0.1 + 0.2) is tolerated and rounded to cents; real extra precision (1.005) is rejected.
@@ -34,6 +48,17 @@ export const money = z.preprocess(
 export const taxRate = z.preprocess(
     toNumber,
     z.number().min(0).max(1).refine(hasAtMostDecimals(4), 'At most 4 decimals')
+)
+/**
+ * Tax rate typed as a percentage in a form ("7.25") and converted to the fraction the API stores (0.0725).
+ * Integer arithmetic on basis points avoids float noise (7.25 / 100 is not exact).
+ */
+export const taxRatePercent = z.preprocess(
+    value => {
+        const number = toNumber(value)
+        return typeof number === 'number' && Number.isFinite(number) ? Math.round(number * 100) / 10000 : number
+    },
+    z.number().min(0).max(1).refine(hasAtMostDecimals(4), 'At most 2 decimals')
 )
 export const positiveInt = (max: number) => z.preprocess(toNumber, z.number().int().min(1).max(max))
 

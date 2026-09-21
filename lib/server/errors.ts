@@ -7,6 +7,7 @@ export type ErrorCode =
     | 'not_found'
     | 'conflict'
     | 'validation_failed'
+    | 'too_many_requests'
     | 'unprocessable'
     | 'internal_error'
 
@@ -17,6 +18,7 @@ const STATUS: Record<ErrorCode, number> = {
     not_found: 404,
     conflict: 409,
     validation_failed: 422,
+    too_many_requests: 429,
     unprocessable: 422,
     internal_error: 500
 }
@@ -38,6 +40,8 @@ export class AppError extends Error {
 export const badRequest = (message: string, details?: unknown) => new AppError('bad_request', message, details)
 export const unauthorized = (message = 'Authentication required') => new AppError('unauthorized', message)
 export const forbidden = (message = 'You are not allowed to do this') => new AppError('forbidden', message)
+export const tooManyRequests = (message = 'Too many attempts, try again later') =>
+    new AppError('too_many_requests', message)
 export const notFound = (message = 'Not found') => new AppError('not_found', message)
 export const conflict = (message: string) => new AppError('conflict', message)
 export const unprocessable = (message: string) => new AppError('unprocessable', message)
