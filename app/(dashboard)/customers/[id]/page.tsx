@@ -1,76 +1,67 @@
 'use client'
 
-import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { format } from 'date-fns'
+import { ArrowLeft, ShoppingBag, TrendingUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { supabase } from '@/lib/supabase/client'
-import { toast } from 'sonner'
-import { ArrowLeft, ShoppingBag, TrendingUp } from 'lucide-react'
-import { format } from 'date-fns'
-import type { Customer, Order } from '@/types'
+import { QueryError } from '@/components/query-error'
+import { PageSpinner } from '@/components/page-spinner'
+import { useMoney } from '@/components/session-provider'
+import { ApiError } from '@/lib/api/client'
+import { customersApi } from '@/lib/api/customers'
+import { ordersApi } from '@/lib/api/orders'
+import { useApiQuery } from '@/hooks/use-api-query'
 
 export default function CustomerDetailPage() {
-    const params = useParams()
+    const params = useParams<{ id: string }>()
     const router = useRouter()
-    const [customer, setCustomer] = useState<Customer | null>(null)
-    const [orders, setOrders] = useState<Order[]>([])
-    const [loading, setLoading] = useState(true)
+    const money = useMoney()
 
-    useEffect(() => {
-        if (params.id) {
-            fetchCustomerDetails(params.id as string)
+    const customerQuery = useApiQuery(signal => customersApi.get(params.id, signal), `customer:${params.id}`)
+    // Cashiers only receive their own orders (RLS); managers and admins receive all of them.
+    const ordersQuery = useApiQuery(
+        signal => ordersApi.list({ customer_id: params.id, pageSize: 100 }, signal),
+        `customer-orders:${params.id}`
+    )
+
+    if (customerQuery.error) {
+        if (customerQuery.error instanceof ApiError && customerQuery.error.status === 404) {
+            return (
+                <div className="text-center py-12">
+                    <p className="text-muted-foreground">Customer not found</p>
+                    <Button onClick={() => router.push('/customers')} className="mt-4">
+                        Back to Customers
+                    </Button>
+                </div>
+            )
         }
-    }, [params.id])
-
-    const fetchCustomerDetails = async (id: string) => {
-        try {
-            const { data: customerData } = await supabase.from('customers').select('*').eq('id', id).single()
-
-            const { data: ordersData } = await supabase
-                .from('orders')
-                .select('*')
-                .eq('customer_id', id)
-                .order('created_at', { ascending: false })
-
-            setCustomer(customerData)
-            setOrders(ordersData || [])
-        } catch (error: any) {
-            toast.error('Failed to load customer details')
-            console.error(error)
-        } finally {
-            setLoading(false)
-        }
+        return <QueryError error={customerQuery.error} onRetry={customerQuery.reload} />
     }
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-            </div>
+    if (!customerQuery.data || !ordersQuery.data) {
+        return ordersQuery.error ? (
+            <QueryError error={ordersQuery.error} onRetry={ordersQuery.reload} />
+        ) : (
+            <PageSpinner />
         )
     }
 
-    if (!customer) {
-        return (
-            <div className="text-center py-12">
-                <p className="text-muted-foreground">Customer not found</p>
-                <Button onClick={() => router.push('/customers')} className="mt-4">
-                    Back to Customers
-                </Button>
-            </div>
-        )
-    }
-
+    const customer = customerQuery.data
+    const orders = ordersQuery.data.data
     const totalOrders = orders.length
     const completedOrders = orders.filter(o => o.status === 'completed').length
 
     return (
         <div className="space-y-6">
             <div className="flex items-center gap-4">
-                <Button variant="ghost" size="icon" onClick={() => router.push('/customers')}>
+                <Button
+                    variant="ghost"
+                    size="icon"
+                    aria-label="Back to customers"
+                    onClick={() => router.push('/customers')}
+                >
                     <ArrowLeft className="h-5 w-5" />
                 </Button>
                 <div>
@@ -87,7 +78,7 @@ export default function CustomerDetailPage() {
                         <TrendingUp className="h-4 w-4 text-emerald-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-emerald-600">${customer.total_spent.toFixed(2)}</div>
+                        <div className="text-2xl font-bold text-emerald-600">{money(customer.total_spent)}</div>
                     </CardContent>
                 </Card>
 
@@ -186,7 +177,7 @@ export default function CustomerDetailPage() {
                                             </Badge>
                                         </TableCell>
                                         <TableCell className="text-right font-semibold text-emerald-600">
-                                            ${order.total.toFixed(2)}
+                                            {money(order.total)}
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <Button

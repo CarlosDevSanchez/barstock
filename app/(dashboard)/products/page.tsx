@@ -1,6 +1,11 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import type { z } from 'zod'
+import { toast } from 'sonner'
+import { Plus, Search, Edit, Trash2, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -13,148 +18,171 @@ import {
     DialogHeader,
     DialogTitle
 } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Form } from '@/components/ui/form'
 import { Badge } from '@/components/ui/badge'
-import { supabase } from '@/lib/supabase/client'
-import { toast } from 'sonner'
-import { Plus, Search, Edit, Trash2, Package } from 'lucide-react'
-import type { Product, Category } from '@/types'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SelectField, TextField } from '@/components/form-fields'
+import { Pagination } from '@/components/pagination'
+import { QueryError } from '@/components/query-error'
+import { PageSpinner } from '@/components/page-spinner'
+import { useMoney, useSession } from '@/components/session-provider'
+import { categoriesApi } from '@/lib/api/categories'
+import { errorMessage } from '@/lib/api/client'
+import { productsApi, type ProductListItem } from '@/lib/api/products'
+import { roleAtLeast } from '@/lib/auth/roles'
+import { taxRatePercent } from '@/lib/validation/common'
+import { productCreateSchema } from '@/lib/validation/resources'
+import { useApiQuery } from '@/hooks/use-api-query'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 
-export default function ProductsPage() {
-    const [products, setProducts] = useState<Product[]>([])
-    const [categories, setCategories] = useState<Category[]>([])
-    const [searchQuery, setSearchQuery] = useState('')
-    const [showDialog, setShowDialog] = useState(false)
-    const [editingProduct, setEditingProduct] = useState<Product | null>(null)
-    const [formData, setFormData] = useState({
-        name: '',
-        description: '',
-        sku: '',
-        barcode: '',
-        category_id: '',
-        cost_price: '',
-        selling_price: '',
-        tax_rate: '0.1',
-        is_active: true
+const PAGE_SIZE = 25
+
+// The API stores the tax rate as a fraction (0.10); people type a percentage (10).
+const productFormSchema = productCreateSchema.extend({
+    tax_rate: taxRatePercent,
+    cost_price: productCreateSchema.shape.selling_price
+})
+
+const emptyValues = {
+    name: '',
+    description: '',
+    sku: '',
+    barcode: '',
+    category_id: '',
+    cost_price: '',
+    selling_price: '',
+    tax_rate: '10'
+}
+
+function valuesFor(product: ProductListItem | null) {
+    if (!product) return emptyValues
+    return {
+        name: product.name,
+        description: product.description ?? '',
+        sku: product.sku,
+        barcode: product.barcode ?? '',
+        category_id: product.category_id ?? '',
+        cost_price: String(product.cost_price),
+        selling_price: String(product.selling_price),
+        tax_rate: String(Math.round(product.tax_rate * 10_000) / 100)
+    }
+}
+
+interface ProductDialogProps {
+    product: ProductListItem | null
+    categories: Array<{ value: string; label: string }>
+    onClose: () => void
+    onSaved: () => void
+}
+
+function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogProps) {
+    const form = useForm<z.input<typeof productFormSchema>, unknown, z.output<typeof productFormSchema>>({
+        resolver: zodResolver(productFormSchema),
+        defaultValues: valuesFor(product)
     })
+    const submitting = form.formState.isSubmitting
 
-    useEffect(() => {
-        fetchProducts()
-        fetchCategories()
-    }, [])
-
-    const fetchProducts = async () => {
-        const { data } = await supabase
-            .from('products')
-            .select('*, category:categories(*)')
-            .order('created_at', { ascending: false })
-        setProducts(data || [])
-    }
-
-    const fetchCategories = async () => {
-        const { data } = await supabase.from('categories').select('*')
-        setCategories(data || [])
-    }
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-
+    const onSubmit = form.handleSubmit(async values => {
         try {
-            const productData = {
-                ...formData,
-                cost_price: parseFloat(formData.cost_price),
-                selling_price: parseFloat(formData.selling_price),
-                tax_rate: parseFloat(formData.tax_rate)
-            }
-
-            if (editingProduct) {
-                const { error } = await supabase.from('products').update(productData).eq('id', editingProduct.id)
-
-                if (error) throw error
+            if (product) {
+                await productsApi.update(product.id, values)
                 toast.success('Product updated successfully')
             } else {
-                const { error } = await supabase.from('products').insert(productData)
-
-                if (error) throw error
+                await productsApi.create(values)
                 toast.success('Product created successfully')
             }
-
-            setShowDialog(false)
-            resetForm()
-            fetchProducts()
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to save product')
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, 'Failed to save product'))
         }
-    }
+    })
 
-    const handleDelete = async (id: string) => {
-        if (!confirm('Are you sure you want to delete this product?')) return
-
-        try {
-            const { error } = await supabase.from('products').delete().eq('id', id)
-
-            if (error) throw error
-            toast.success('Product deleted successfully')
-            fetchProducts()
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to delete product')
-        }
-    }
-
-    const handleEdit = (product: Product) => {
-        setEditingProduct(product)
-        setFormData({
-            name: product.name,
-            description: product.description || '',
-            sku: product.sku,
-            barcode: product.barcode || '',
-            category_id: product.category_id || '',
-            cost_price: product.cost_price.toString(),
-            selling_price: product.selling_price.toString(),
-            tax_rate: product.tax_rate.toString(),
-            is_active: product.is_active
-        })
-        setShowDialog(true)
-    }
-
-    const resetForm = () => {
-        setEditingProduct(null)
-        setFormData({
-            name: '',
-            description: '',
-            sku: '',
-            barcode: '',
-            category_id: '',
-            cost_price: '',
-            selling_price: '',
-            tax_rate: '0.1',
-            is_active: true
-        })
-    }
-
-    const filteredProducts = products.filter(
-        p =>
-            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-            p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+    return (
+        <Dialog open onOpenChange={open => !open && onClose()}>
+            <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
+                <DialogHeader>
+                    <DialogTitle>{product ? 'Edit Product' : 'Add New Product'}</DialogTitle>
+                    <DialogDescription>
+                        {product ? 'Update product details' : 'Fill in the product information'}
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={onSubmit} noValidate className="flex flex-col flex-1 overflow-hidden">
+                        <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
+                            <TextField name="name" label="Product Name *" className="col-span-2" />
+                            <TextField name="description" label="Description" className="col-span-2" />
+                            <TextField name="sku" label="SKU *" />
+                            <TextField name="barcode" label="Barcode" />
+                            <SelectField
+                                name="category_id"
+                                label="Category"
+                                placeholder="Select category"
+                                noneLabel="No category"
+                                options={categories}
+                            />
+                            <TextField
+                                name="tax_rate"
+                                label="Tax Rate (%)"
+                                type="number"
+                                step="0.01"
+                                min="0"
+                                max="100"
+                            />
+                            <TextField name="cost_price" label="Cost Price *" type="number" step="0.01" min="0" />
+                            <TextField name="selling_price" label="Selling Price *" type="number" step="0.01" min="0" />
+                        </div>
+                        <DialogFooter className="mt-4">
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting ? 'Saving…' : product ? 'Update Product' : 'Create Product'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
     )
+}
+
+export default function ProductsPage() {
+    const { user } = useSession()
+    const money = useMoney()
+    const canManage = roleAtLeast(user.role, 'manager')
+
+    const [searchQuery, setSearchQuery] = useState('')
+    const [page, setPage] = useState(1)
+    const search = useDebouncedValue(searchQuery)
+    // undefined = closed, null = creating, product = editing
+    const [editing, setEditing] = useState<ProductListItem | null | undefined>(undefined)
+    const [toDelete, setToDelete] = useState<ProductListItem | null>(null)
+
+    const products = useApiQuery(
+        signal => productsApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
+        JSON.stringify({ page, search })
+    )
+    const categories = useApiQuery(signal => categoriesApi.list({ pageSize: 100 }, signal), 'categories')
+    const categoryOptions = (categories.data?.data ?? []).map(category => ({
+        value: category.id,
+        label: category.name
+    }))
 
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
                     <h1 className="text-3xl font-bold">Products</h1>
-                    <p className="text-muted-foreground">Manage your product catalog</p>
+                    <p className="text-muted-foreground">
+                        {canManage ? 'Manage your product catalog' : 'Browse the product catalog'}
+                    </p>
                 </div>
-                <Button
-                    onClick={() => {
-                        resetForm()
-                        setShowDialog(true)
-                    }}
-                >
-                    <Plus className="mr-2 h-4 w-4" />
-                    Add Product
-                </Button>
+                {canManage && (
+                    <Button onClick={() => setEditing(null)}>
+                        <Plus className="mr-2 h-4 w-4" />
+                        Add Product
+                    </Button>
+                )}
             </div>
 
             <Card className="rounded-2xl p-6">
@@ -162,193 +190,140 @@ export default function ProductsPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search products..."
+                            placeholder="Search by name, SKU or barcode..."
                             value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
+                            onChange={e => {
+                                setSearchQuery(e.target.value)
+                                setPage(1)
+                            }}
                             className="pl-10"
                         />
                     </div>
                 </div>
 
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Product</TableHead>
-                            <TableHead>SKU</TableHead>
-                            <TableHead>Category</TableHead>
-                            <TableHead>Cost</TableHead>
-                            <TableHead>Price</TableHead>
-                            <TableHead>Status</TableHead>
-                            <TableHead className="text-right">Actions</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredProducts.map(product => (
-                            <TableRow key={product.id}>
-                                <TableCell>
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
-                                            <Package className="h-4 w-4 text-emerald-600" />
-                                        </div>
-                                        <div>
-                                            <p className="font-medium">{product.name}</p>
-                                            <p className="text-sm text-muted-foreground">{product.description}</p>
-                                        </div>
-                                    </div>
-                                </TableCell>
-                                <TableCell className="font-mono text-sm">{product.sku}</TableCell>
-                                <TableCell>{product.category?.name || '-'}</TableCell>
-                                <TableCell>${product.cost_price.toFixed(2)}</TableCell>
-                                <TableCell className="font-semibold text-emerald-600">
-                                    ${product.selling_price.toFixed(2)}
-                                </TableCell>
-                                <TableCell>
-                                    <Badge variant={product.is_active ? 'default' : 'secondary'}>
-                                        {product.is_active ? 'Active' : 'Inactive'}
-                                    </Badge>
-                                </TableCell>
-                                <TableCell className="text-right">
-                                    <div className="flex justify-end gap-2">
-                                        <Button size="sm" variant="ghost" onClick={() => handleEdit(product)}>
-                                            <Edit className="h-4 w-4" />
-                                        </Button>
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            className="text-red-600 hover:text-red-700"
-                                            onClick={() => handleDelete(product.id)}
-                                        >
-                                            <Trash2 className="h-4 w-4" />
-                                        </Button>
-                                    </div>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                {products.error ? (
+                    <QueryError error={products.error} onRetry={products.reload} />
+                ) : !products.data ? (
+                    <PageSpinner />
+                ) : (
+                    <>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Product</TableHead>
+                                    <TableHead>SKU</TableHead>
+                                    <TableHead>Category</TableHead>
+                                    {canManage && <TableHead>Cost</TableHead>}
+                                    <TableHead>Price</TableHead>
+                                    <TableHead>Stock</TableHead>
+                                    <TableHead>Status</TableHead>
+                                    {canManage && <TableHead className="text-right">Actions</TableHead>}
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {products.data.data.map(product => (
+                                    <TableRow key={product.id}>
+                                        <TableCell>
+                                            <div className="flex items-center gap-3">
+                                                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                                                    <Package className="h-4 w-4 text-emerald-600" />
+                                                </div>
+                                                <div>
+                                                    <p className="font-medium">{product.name}</p>
+                                                    <p className="text-sm text-muted-foreground">
+                                                        {product.description}
+                                                    </p>
+                                                </div>
+                                            </div>
+                                        </TableCell>
+                                        <TableCell className="font-mono text-sm">{product.sku}</TableCell>
+                                        <TableCell>{product.category?.name || '-'}</TableCell>
+                                        {canManage && <TableCell>{money(product.cost_price)}</TableCell>}
+                                        <TableCell className="font-semibold text-emerald-600">
+                                            {money(product.selling_price)}
+                                        </TableCell>
+                                        <TableCell>{product.stock ?? '-'}</TableCell>
+                                        <TableCell>
+                                            <Badge variant={product.is_active ? 'default' : 'secondary'}>
+                                                {product.is_active ? 'Active' : 'Inactive'}
+                                            </Badge>
+                                        </TableCell>
+                                        {canManage && (
+                                            <TableCell className="text-right">
+                                                <div className="flex justify-end gap-2">
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        aria-label={`Edit ${product.name}`}
+                                                        onClick={() => setEditing(product)}
+                                                    >
+                                                        <Edit className="h-4 w-4" />
+                                                    </Button>
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-red-600 hover:text-red-700"
+                                                        aria-label={`Delete ${product.name}`}
+                                                        onClick={() => setToDelete(product)}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                </div>
+                                            </TableCell>
+                                        )}
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                        {products.data.data.length === 0 && (
+                            <p className="py-8 text-center text-muted-foreground">No products found</p>
+                        )}
+                        <Pagination
+                            page={page}
+                            pageSize={PAGE_SIZE}
+                            total={products.data.total}
+                            onPageChange={setPage}
+                        />
+                    </>
+                )}
             </Card>
 
-            {/* Add/Edit Dialog */}
-            <Dialog open={showDialog} onOpenChange={setShowDialog}>
-                <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
-                    <DialogHeader>
-                        <DialogTitle>{editingProduct ? 'Edit Product' : 'Add New Product'}</DialogTitle>
-                        <DialogDescription>
-                            {editingProduct ? 'Update product details' : 'Fill in the product information'}
-                        </DialogDescription>
-                    </DialogHeader>
-                    <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
-                        <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
-                            <div className="col-span-2 space-y-2">
-                                <Label htmlFor="name" className="text-foreground font-semibold">
-                                    Product Name *
-                                </Label>
-                                <Input
-                                    id="name"
-                                    value={formData.name}
-                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div className="col-span-2 space-y-2">
-                                <Label htmlFor="description" className="text-foreground font-semibold">
-                                    Description
-                                </Label>
-                                <Input
-                                    id="description"
-                                    value={formData.description}
-                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="sku" className="text-foreground font-semibold">
-                                    SKU *
-                                </Label>
-                                <Input
-                                    id="sku"
-                                    value={formData.sku}
-                                    onChange={e => setFormData({ ...formData, sku: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="barcode" className="text-foreground font-semibold">
-                                    Barcode
-                                </Label>
-                                <Input
-                                    id="barcode"
-                                    value={formData.barcode}
-                                    onChange={e => setFormData({ ...formData, barcode: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="category" className="text-foreground font-semibold">
-                                    Category
-                                </Label>
-                                <Select
-                                    value={formData.category_id || undefined}
-                                    onValueChange={value => setFormData({ ...formData, category_id: value })}
-                                >
-                                    <SelectTrigger>
-                                        <SelectValue placeholder="Select category" />
-                                    </SelectTrigger>
-                                    <SelectContent>
-                                        {categories.map(cat => (
-                                            <SelectItem key={cat.id} value={cat.id}>
-                                                {cat.name}
-                                            </SelectItem>
-                                        ))}
-                                    </SelectContent>
-                                </Select>
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="tax_rate" className="text-foreground font-semibold">
-                                    Tax Rate
-                                </Label>
-                                <Input
-                                    id="tax_rate"
-                                    type="number"
-                                    step="0.01"
-                                    value={formData.tax_rate}
-                                    onChange={e => setFormData({ ...formData, tax_rate: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="cost_price" className="text-foreground font-semibold">
-                                    Cost Price *
-                                </Label>
-                                <Input
-                                    id="cost_price"
-                                    type="number"
-                                    step="0.01"
-                                    value={formData.cost_price}
-                                    onChange={e => setFormData({ ...formData, cost_price: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label htmlFor="selling_price" className="text-foreground font-semibold">
-                                    Selling Price *
-                                </Label>
-                                <Input
-                                    id="selling_price"
-                                    type="number"
-                                    step="0.01"
-                                    value={formData.selling_price}
-                                    onChange={e => setFormData({ ...formData, selling_price: e.target.value })}
-                                    required
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter className="mt-4">
-                            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
-                                Cancel
-                            </Button>
-                            <Button type="submit">{editingProduct ? 'Update Product' : 'Create Product'}</Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+            {editing !== undefined && (
+                <ProductDialog
+                    key={editing?.id ?? 'new'}
+                    product={editing}
+                    categories={categoryOptions}
+                    onClose={() => setEditing(undefined)}
+                    onSaved={() => {
+                        setEditing(undefined)
+                        products.reload()
+                    }}
+                />
+            )}
+
+            <ConfirmDialog
+                open={toDelete !== null}
+                onOpenChange={open => !open && setToDelete(null)}
+                title="Delete product?"
+                description={
+                    <>
+                        <strong>{toDelete?.name}</strong> will no longer appear in the catalog or the POS. Its sales
+                        history is kept.
+                    </>
+                }
+                confirmLabel="Delete"
+                onConfirm={async () => {
+                    if (!toDelete) return
+                    try {
+                        await productsApi.remove(toDelete.id)
+                        toast.success('Product deleted successfully')
+                        products.reload()
+                    } catch (error: unknown) {
+                        toast.error(errorMessage(error, 'Failed to delete product'))
+                        throw error
+                    }
+                }}
+            />
         </div>
     )
 }
