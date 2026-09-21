@@ -1,6 +1,11 @@
 # Esquema de tablas
 
 > Fuente: `supabase/schema.sql` (392 líneas) · Base: commit `54962b9` · Confianza: **[Verificado]** contra el archivo SQL; **[Por verificar]** contra la base desplegada (no se tuvo acceso).
+>
+> **Cambios de la etapa 1 (migraciones `…02`–`…04`), posteriores al commit `54962b9`:** este documento describe la **baseline**; encima se aplicó:
+> `products.tax_rate` `NUMERIC(6,4)` (fracción 0–1) y `NOT NULL`; `products.deleted_at` (borrado lógico); `profiles.is_active`;
+> `orders.refunded_at/refunded_by/refund_reason`; `created_at`/`updated_at` y las FKs de pertenencia `NOT NULL`; `CHECK` en cantidades,
+> precios e importes; `profiles.id ON DELETE CASCADE`. Detalle en [seed y migraciones](06-seed-y-migraciones.md).
 > Extensión: `uuid-ossp` (los ids usan `uuid_generate_v4()`). Esquema: `public`.
 
 ## Enums
