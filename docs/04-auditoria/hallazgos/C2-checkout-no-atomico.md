@@ -5,7 +5,7 @@
 | **Severidad** | Crítico |
 | **Área** | Lógica de negocio / integridad de datos |
 | **Esfuerzo** | Medio |
-| **Estado** | Abierto |
+| **Estado** | En curso (RPC `create_sale`/`refund_order` transaccionales implementados y verificados en BD local; falta que el POS los use) |
 | **Confianza** | Defectos de código **[Verificado]**; efecto real sobre el stock **[Por verificar]** con [`verificar-checkout.md`](../../05-guias/verificar-checkout.md) |
 
 ## Impacto

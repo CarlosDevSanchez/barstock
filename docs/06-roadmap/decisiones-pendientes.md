@@ -8,15 +8,15 @@
 
 | ID | Decisión | Bloquea | Recomendación técnica | Estado |
 |---|---|---|---|---|
-| D1 | ¿Registro público, por invitación o solo admin crea usuarios? | [C1](../04-auditoria/hallazgos/C1-rls-permisivo.md) | Solo admin crea/invita usuarios | Pendiente |
+| D1 | ¿Registro público, por invitación o solo admin crea usuarios? | [C1](../04-auditoria/hallazgos/C1-rls-permisivo.md) | Solo admin crea/invita usuarios | **Decidido (2026-09-21, propietario)**: solo por invitación del admin |
 | D2 | ¿Un solo negocio, o varias sucursales/tiendas? | Esquema (`store_id`), RLS | Si hay riesgo de multi-sucursal, añadir `store_id` **antes** de más datos | Pendiente |
-| D3 | Regla fiscal: ¿tasa por producto o global? ¿precio con o sin impuesto? ¿redondeo por línea o por total? ¿descuento antes o después del impuesto? | [H3](../04-auditoria/hallazgos/H3-impuestos-y-dinero.md), `create_sale` | Tasa por producto, precios sin impuesto, redondeo por línea, descuento antes del impuesto — **validar con contabilidad** | Pendiente |
+| D3 | Regla fiscal: ¿tasa por producto o global? ¿precio con o sin impuesto? ¿redondeo por línea o por total? ¿descuento antes o después del impuesto? | [H3](../04-auditoria/hallazgos/H3-impuestos-y-dinero.md), `create_sale` | Tasa por producto, precios sin impuesto, redondeo por línea, descuento antes del impuesto — **validar con contabilidad** | **Supuesto aplicado, sin validar** (ver abajo) |
 | D4 | Moneda: ¿única o varias? ¿formato regional? | UI, `settings` | Una moneda por instalación, configurable; `Intl.NumberFormat` | Pendiente |
 | D5 | Pagos: ¿mixtos (efectivo+tarjeta)? ¿vuelto? ¿propinas? ¿integración con terminal? | `payments`, UI de cobro | Permitir varios pagos por orden (el esquema ya lo permite) y calcular vuelto | Pendiente |
 | D6 | Descuentos: ¿topes por rol? ¿motivo obligatorio? ¿aprobación de gerente? | `create_sale`, RLS | Tope por rol y motivo sobre cierto monto, auditado | Pendiente |
-| D7 | Fidelidad: ¿cómo se acumulan y canjean los puntos? ¿los reembolsos los restan? | [clientes](../03-modulos/clientes.md) | Derivar de las órdenes (trigger/vista), no editar a mano | Pendiente |
+| D7 | Fidelidad: ¿cómo se acumulan y canjean los puntos? ¿los reembolsos los restan? | [clientes](../03-modulos/clientes.md) | Derivar de las órdenes (trigger/vista), no editar a mano | **Supuesto aplicado, sin validar**: `floor(total_spent)`, reembolsos restan |
 | D8 | Reembolsos: ¿parciales? ¿ventana de tiempo? ¿quién autoriza? ¿devuelve al stock siempre? | `refund_order` | Solo gerente/admin, con motivo; parcial por ítem como evolución | Pendiente |
-| D9 | Stock: ¿se permite vender sin stock o sin fila de inventario? ¿stock negativo? | `create_sale`, `CHECK` | No permitir negativo; productos sin control de stock marcados explícitamente | Pendiente |
+| D9 | Stock: ¿se permite vender sin stock o sin fila de inventario? ¿stock negativo? | `create_sale`, `CHECK` | No permitir negativo; productos sin control de stock marcados explícitamente | **Supuesto aplicado, sin validar**: nunca negativo; vender sin fila de inventario falla |
 | D10 | Variantes: ¿se venden desde el POS? ¿qué atributos? | UI del POS, inventario | Si sí: selector de variante y alta en productos | Pendiente |
 | D11 | Ajustes: ¿en BD (`settings`), en cliente, o ambos? | [ajustes](../03-modulos/ajustes.md) | **Solo BD** (tabla `settings`) con RLS solo-admin | Pendiente |
 | D12 | Idioma de la interfaz | UI | Definir si se traduce (i18n) o se queda en inglés | Pendiente |
@@ -28,6 +28,18 @@
 | D18 | Backups: RPO/RTO aceptables; quién restaura | [migraciones](../02-base-de-datos/06-seed-y-migraciones.md) | PITR si el negocio no tolera perder ventas | Pendiente |
 | D19 | Política de rotación de claves y accesos | [variables de entorno](../05-guias/variables-de-entorno.md) | Rotación tras salida de personal y ante sospecha | Pendiente |
 | D20 | Licencia del proyecto (el README declara MIT; no hay `LICENSE`) | Legal | Definir con el cliente/propietario; añadir `LICENSE` acorde | Pendiente |
+
+## Supuestos aplicados en la etapa 1 (a validar con el negocio)
+
+Se implementaron para poder cerrar la base técnica; **cambiarlos es una migración**, no un rediseño:
+
+| ID | Supuesto implementado (`create_sale` / triggers) |
+|---|---|
+| D3 | Impuesto **por producto** (`products.tax_rate`, fracción); precios **sin** impuesto; redondeo **por línea** (`round(base × tasa, 2)`); descuento de línea antes del impuesto; **descuento global después del impuesto** (`total = Σ base + Σ impuesto − descuento`). `settings.tax_rate` queda como tasa por defecto para productos nuevos, no interviene en las órdenes |
+| D7 | `loyalty_points = floor(total_spent)`; `total_spent` = Σ de órdenes `completed`; un reembolso resta |
+| D9 | Stock nunca negativo (`CHECK` + `UPDATE … WHERE quantity >= n`); un producto sin fila de inventario no se puede vender; cada producto nuevo recibe su fila con cantidad 0 |
+| D8 | Reembolso **total**, solo gerente/admin, con motivo, idempotente |
+| D6 | Sin topes de descuento por rol (sigue pendiente) |
 
 ## Detalle de las decisiones de mayor impacto
 

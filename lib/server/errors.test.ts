@@ -28,6 +28,12 @@ describe('fromDatabaseError', () => {
         }
     })
 
+    test('P0002 (not found in an RPC) maps to 404 with our message', () => {
+        const error = fromDatabaseError({ code: 'P0002', message: 'Order not found' })
+        expect(error.status).toBe(404)
+        expect(error.message).toBe('Order not found')
+    })
+
     test('passes through messages raised by our own RPCs (P0001)', () => {
         const error = fromDatabaseError({ code: 'P0001', message: 'insufficient stock for product abc' })
         expect(error.status).toBe(422)

@@ -21,7 +21,7 @@ proveedores, stock y reportes. Next.js (App Router) + Supabase (Postgres, Auth, 
 | Backend | Supabase vía `@supabase/supabase-js 2.116.0` (+ `@supabase/ssr`). **No hay API routes, Server Actions ni middleware** |
 | UI | Tailwind CSS 4, shadcn/ui (`new-york`) sobre Radix, lucide-react, Sonner, next-themes, Recharts |
 | Estado | Zustand (`stores/auth.ts`, `stores/cart.ts` persistido, `stores/settings.ts` **sin uso**) |
-| Instalado **sin uso** | `zod`, `react-hook-form`, `@hookform/resolvers` |
+| Instalado **sin uso** todavía | `react-hook-form`, `@hookform/resolvers` (`zod` ya se usa en `lib/validation` y `lib/env`) |
 
 ## 3. Comandos
 
@@ -33,6 +33,7 @@ bun run lint                            # HOY FALLA: 93 errores (reglas estricta
 bun run format:check                    # Prettier (el reformateo del repo va en un commit aparte)
 bun audit --audit-level=high            # limpio (C3 en curso: falta CI)
 bun run build                           # requiere las 4 variables de .env.example; si falta alguna, el error la nombra
+bun run db:start                        # Supabase local (Docker): migraciones + seed; luego `bun run db:types`
 ```
 
 Trampas: `npx tsc` sin instalar descarga un paquete falso; **todas** las dependencias están a versión exacta (actualizar con `bun add next@x`);
@@ -44,9 +45,10 @@ en zsh, entrecomillar los globs. Más en [`docs/05-guias/comandos.md`](docs/05-g
 
 - **Todo corre en el navegador.** 15 de 16 páginas y el layout del dashboard son `"use client"`; cada página llama a `supabase` directamente.
   Sin capa de datos (`lib/data/` no existe). Detalle: [`docs/01-arquitectura/`](docs/01-arquitectura/01-vision-general.md).
-- **El único control de acceso del servidor es RLS.** Hoy permite todo a cualquier usuario autenticado
-  ([`docs/02-base-de-datos/03-rls-y-politicas.md`](docs/02-base-de-datos/03-rls-y-politicas.md)). Los roles (`admin/manager/cashier`) son
-  **cosméticos**: `isAdmin()`, `isManager()`, `canManageProducts()` no se llaman en ningún sitio.
+- **Base de datos (migrada, verificada): RLS por rol** (`admin ≥ manager ≥ cashier`), usuario inactivo sin acceso, alta solo por invitación,
+  ventas/reembolsos/stock **solo vía RPC transaccionales** (`create_sale`, `refund_order`, `adjust_inventory`)
+  ([`docs/02-base-de-datos/`](docs/02-base-de-datos/03-rls-y-politicas.md)). **Las páginas aún no están adaptadas** (siguen llamando a Supabase
+  directamente y el POS inserta en tablas que ahora están revocadas): el refactor a `/api/v1` es el resto del Paso 5.
 - **La lógica de negocio (totales, stock, reembolso) está en el cliente**, sin transacciones
   ([`docs/03-modulos/pos-checkout.md`](docs/03-modulos/pos-checkout.md)).
 - **Guarda de rutas solo en cliente** (`app/(dashboard)/layout.tsx:44-67`); sesión en `localStorage`.
@@ -63,7 +65,7 @@ lib/                   env/ (zod), server/ (route, auth, errores; solo servidor)
 proxy.ts               sesión + guarda de rutas y de roles (ver docs/01-arquitectura/08-api.md)
 stores/                auth.ts, cart.ts, settings.ts (SIN uso)
 types/index.ts         tipos escritos a mano (no generados)
-supabase/              schema.sql → fix_rls_policies.sql → seed.sql (a mano; sin migraciones)
+supabase/              config.toml, migrations/ (baseline + integridad + roles/RLS + RPC + reportes), seed.sql, legacy/ (SQL histórico, NO ejecutar)
 docs/                  documentación interna (ver índice)
 ```
 
@@ -102,10 +104,10 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 
 | Área | Realidad | Documento |
 |---|---|---|
-| Roles | No restringen nada; el selector de rol del registro se ignora (todos nacen `cashier`) | [auth](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
-| `profiles.role` | El propio usuario puede modificarlo por API | [C1](docs/04-auditoria/hallazgos/C1-rls-permisivo.md) |
-| Stock al vender | Probablemente **no se descuenta** (`.eq('variant_id', null)`); el toast dice éxito | [C2](docs/04-auditoria/hallazgos/C2-checkout-no-atomico.md) |
-| Crear producto | No crea su fila de `inventory`; no hay UI para crear/ajustar stock | [productos](docs/03-modulos/productos.md), [inventario](docs/03-modulos/inventario.md) |
+| Roles | **En la BD sí restringen** (RLS). En la UI aún no (el layout no oculta nada por rol); `/register` sigue existiendo pero el signup está cerrado | [RLS](docs/02-base-de-datos/03-rls-y-politicas.md) |
+| `profiles.role` | Corregido: solo un admin lo cambia (trigger). **Ojo:** un `UPDATE`/`DELETE` que RLS no permite afecta **0 filas sin error** | [RLS](docs/02-base-de-datos/03-rls-y-politicas.md) |
+| Stock al vender | El POS actual **sigue sin descontarlo** (`.eq('variant_id', null)`); `create_sale` sí lo hace y está verificado, falta conectarlo | [C2](docs/04-auditoria/hallazgos/C2-checkout-no-atomico.md) |
+| Crear producto | La BD ya crea su fila de `inventory` (trigger, cantidad 0); falta la UI de ajuste de stock (`adjust_inventory`) | [productos](docs/03-modulos/productos.md), [inventario](docs/03-modulos/inventario.md) |
 | Formularios | `barcode: ''`, `category_id: ''`, `email: ''` chocan con `UNIQUE`/`uuid` (segundo registro falla) | [M14](docs/04-auditoria/hallazgos/medios-y-bajos.md) |
 | Impuestos | Orden usa tasa global `0.1`; líneas usan `product.tax_rate`; no coinciden. `tax_rate` es `DECIMAL(5,2)` | [H3](docs/04-auditoria/hallazgos/H3-impuestos-y-dinero.md) |
 | Ajustes (`/settings`) | No persisten; `settings` (tabla) y `stores/settings.ts` no se leen | [ajustes](docs/03-modulos/ajustes.md) |

@@ -1,6 +1,11 @@
-# Diseño objetivo: permisos y funciones transaccionales (BORRADOR)
+# Diseño objetivo: permisos y funciones transaccionales
 
-> ⚠️ **Borrador de diseño. NO ejecutado ni probado.** El SQL es un punto de partida para revisión y pruebas en **staging**.
+> ✅ **Implementado en la etapa 1** (migraciones `supabase/migrations/…03`–`…05`; ver [RLS](../02-base-de-datos/03-rls-y-politicas.md) y
+> [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md)). Este documento se conserva como **el borrador de origen**; donde
+> difiere, manda la migración (p. ej. `refund_order` ahora es idempotente y guarda `refunded_at/by/reason`, `create_sale` ordena las líneas contra
+> deadlocks y comprueba el rol dentro, y `handle_new_user` deja inactivos a los usuarios sin rol asignado por el servidor).
+>
+> ~~⚠️ Borrador de diseño. NO ejecutado ni probado.~~ (histórico:) El SQL es un punto de partida para revisión y pruebas en **staging**.
 > No pegar en producción tal cual. Antes de aplicarlo: ejecutar la baseline de migraciones y las consultas de integridad
 > ([plan, Fase 1](plan-de-remediacion.md)). Las reglas fiscales y de negocio marcadas como *decisión pendiente* dependen de
 > [decisiones-pendientes](decisiones-pendientes.md).

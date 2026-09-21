@@ -56,7 +56,7 @@ export function isDatabaseError(value: unknown): value is DatabaseError {
 
 /**
  * Maps a Postgres/PostgREST error to an AppError without leaking raw driver messages.
- * The one exception is P0001 (`raise exception` in our own RPCs, e.g. "insufficient stock for product X"):
+ * The exceptions are P0001 (business rule) and P0002 (not found) raised by our own RPCs, e.g. `Insufficient stock for "X"`:
  * those messages are authored by us for the client.
  */
 export function fromDatabaseError(error: DatabaseError): AppError {
@@ -76,6 +76,8 @@ export function fromDatabaseError(error: DatabaseError): AppError {
             return badRequest('Invalid value')
         case 'P0001':
             return unprocessable(error.message)
+        case 'P0002':
+            return notFound(error.message)
         case '42501':
             return forbidden()
         case 'PGRST116':
