@@ -5,7 +5,7 @@
 | **Severidad** | Crítico |
 | **Área** | Seguridad — autenticación y autorización |
 | **Esfuerzo** | Medio |
-| **Estado** | Abierto |
+| **Estado** | En curso (BD corregida y verificada; falta la capa de API/UI y las pruebas automáticas) |
 | **Confianza** | Análisis del SQL **[Verificado]**; estado real de la base y configuración de Auth **[Por verificar]** |
 
 ## Impacto
