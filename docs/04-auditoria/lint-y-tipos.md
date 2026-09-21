@@ -23,6 +23,9 @@ para los *embeds* de Supabase (`orders`, `order_items`, `inventory`).
 > `no-explicit-any` como error y la restricción de imports de Supabase en las capas de UI, el recuento pasa a **93 errores**,
 > todos en `app/(auth)`, `app/(dashboard)` y `types/index.ts`. Se eliminan con el refactor a API (Paso 5). `tsc` sigue limpio con
 > `noUncheckedIndexedAccess` (un único ajuste en `stores/cart.ts`).
+>
+> **Actualización (refactor a API, Paso 5):** `bun run lint` termina con **0 errores y 0 warnings**. Los errores de las páginas cliente desaparecieron al
+> reescribirlas (sin `any`, sin `fetch` en efectos, datos vía `useApiQuery`).
 
 ### Por regla
 

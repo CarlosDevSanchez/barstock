@@ -36,8 +36,8 @@ Límites: el grafo indexa 48 de los 61 archivos versionados; **no** cubre bien S
 - **Confianza en lo documentado:** respetar las etiquetas `[Verificado]` / `[Inferido]` / `[Por verificar]`. Si compruebas una hipótesis,
   actualiza la etiqueta en el documento.
 - **Al terminar una tarea:** revisar `AGENTS.md` §10 (definición de hecho) y §11 (documentación viva) antes de dar el trabajo por cerrado.
-- **Informar con fidelidad:** si `lint`, `build` o una prueba falla, decirlo con la salida. Hoy `bun run lint` **ya falla** por
-  causas conocidas ([lint](docs/04-auditoria/lint-y-tipos.md)); distinguir
+- **Informar con fidelidad:** si `lint`, `build` o una prueba falla, decirlo con la salida. Hoy `bun run lint`, `typecheck`, `test` y `build` pasan
+  ([lint](docs/04-auditoria/lint-y-tipos.md) guarda el histórico de los 32 errores originales); distinguir
   "falla nuevo" de "falla existente".
 
 ### Herramientas y trampas del entorno

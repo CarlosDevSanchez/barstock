@@ -27,20 +27,3 @@ export type OrderItem = Tables<'order_items'> & { product?: Product; variant?: P
 export type Payment = Tables<'payments'>
 export type Expense = Tables<'expenses'>
 export type Settings = Tables<'settings'>
-
-// Cart item for POS
-export interface CartItem {
-    product: Product
-    variant?: ProductVariant
-    quantity: number
-    discount: number
-}
-
-// Dashboard stats
-export interface DashboardStats {
-    todayRevenue: number
-    monthlyRevenue: number
-    todayOrders: number
-    totalCustomers: number
-    lowStockCount: number
-}

@@ -1,5 +1,8 @@
 # Módulo: Punto de venta y checkout
 
+> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
+> lógica de negocio vive en RPC de la BD: ver [API](../01-arquitectura/08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+
 > Archivo: `app/(dashboard)/pos/page.tsx` (419 líneas) + `stores/cart.ts` · Base: commit `54962b9`
 > Es el archivo **más crítico** del sistema: crea dinero y mueve stock. Hallazgo asociado: [C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md).
 

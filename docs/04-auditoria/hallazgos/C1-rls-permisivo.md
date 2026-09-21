@@ -5,7 +5,7 @@
 | **Severidad** | Crítico |
 | **Área** | Seguridad — autenticación y autorización |
 | **Esfuerzo** | Medio |
-| **Estado** | En curso (BD corregida y verificada; falta la capa de API/UI y las pruebas automáticas) |
+| **Estado** | Corregido (RLS por rol, alta por invitación, rol protegido por trigger, verificados en BD y API). Pendiente de **Verificado**: pruebas automáticas de RLS (Paso 6) |
 | **Confianza** | Análisis del SQL **[Verificado]**; estado real de la base y configuración de Auth **[Por verificar]** |
 
 ## Impacto

@@ -5,7 +5,7 @@
 | **Severidad** | Alto |
 | **Área** | Lógica de negocio |
 | **Esfuerzo** | Medio |
-| **Estado** | Abierto |
+| **Estado** | En curso (impuesto por producto, redondeo por línea y `NUMERIC(6,4)` implementados en `create_sale`; la regla fiscal **D3 sigue sin validar** con contabilidad) |
 | **Confianza** | **[Verificado]** en código |
 
 ## Hallazgo

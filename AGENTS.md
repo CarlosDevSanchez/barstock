@@ -29,7 +29,7 @@ proveedores, stock y reportes. Next.js (App Router) + Supabase (Postgres, Auth, 
 bun install --frozen-lockfile           # instalar (respeta bun.lock; NO `bun install` a secas en CI)
 bun run dev                             # http://localhost:3000
 bun run typecheck                       # tsc --noEmit (hoy limpio)
-bun run lint                            # HOY FALLA: 93 errores (reglas estrictas; caen con el refactor a API)
+bun run lint                            # limpio (0 errores, 0 warnings)
 bun run format:check                    # Prettier (el reformateo del repo va en un commit aparte)
 bun audit --audit-level=high            # limpio (C3 en curso: falta CI)
 bun run build                           # requiere las 4 variables de .env.example; si falta alguna, el error la nombra
@@ -43,15 +43,15 @@ en zsh, entrecomillar los globs. Más en [`docs/05-guias/comandos.md`](docs/05-g
 
 ## 4. Arquitectura en 60 segundos
 
-- **Todo corre en el navegador.** 15 de 16 páginas y el layout del dashboard son `"use client"`; cada página llama a `supabase` directamente.
-  Sin capa de datos (`lib/data/` no existe). Detalle: [`docs/01-arquitectura/`](docs/01-arquitectura/01-vision-general.md).
-- **Base de datos (migrada, verificada): RLS por rol** (`admin ≥ manager ≥ cashier`), usuario inactivo sin acceso, alta solo por invitación,
+- **El navegador solo habla con `/api/v1`** (Route Handlers + `lib/server/services`); las páginas son Client Components que usan `lib/api/*` y
+  `useApiQuery`, y el layout del dashboard es un Server Component. Detalle: [`docs/01-arquitectura/08-api.md`](docs/01-arquitectura/08-api.md).
+  El lint prohíbe importar `@supabase/*` y `lib/server` desde `app/` y `components/`.
+- **Base de datos: RLS por rol** (`admin ≥ manager ≥ cashier`), usuario inactivo sin acceso, alta solo por invitación,
   ventas/reembolsos/stock **solo vía RPC transaccionales** (`create_sale`, `refund_order`, `adjust_inventory`)
-  ([`docs/02-base-de-datos/`](docs/02-base-de-datos/03-rls-y-politicas.md)). **Las páginas aún no están adaptadas** (siguen llamando a Supabase
-  directamente y el POS inserta en tablas que ahora están revocadas): el refactor a `/api/v1` es el resto del Paso 5.
-- **La lógica de negocio (totales, stock, reembolso) está en el cliente**, sin transacciones
-  ([`docs/03-modulos/pos-checkout.md`](docs/03-modulos/pos-checkout.md)).
-- **Guarda de rutas solo en cliente** (`app/(dashboard)/layout.tsx:44-67`); sesión en `localStorage`.
+  ([`docs/02-base-de-datos/`](docs/02-base-de-datos/03-rls-y-politicas.md)).
+- **La lógica de negocio (totales, stock, reembolso) está en la BD** (RPC transaccionales); el cliente solo muestra una vista previa del carrito
+  ([`docs/03-modulos/pos-checkout.md`](docs/03-modulos/pos-checkout.md) describe el estado anterior).
+- **Sesión en cookies** (`@supabase/ssr`); `proxy.ts` refresca la sesión y guarda rutas y roles, `route()` comprueba el rol en cada endpoint.
 
 ## 5. Mapa del repositorio
 
@@ -104,19 +104,19 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 
 | Área | Realidad | Documento |
 |---|---|---|
-| Roles | **En la BD sí restringen** (RLS). En la UI aún no (el layout no oculta nada por rol); `/register` sigue existiendo pero el signup está cerrado | [RLS](docs/02-base-de-datos/03-rls-y-politicas.md) |
+| Roles | Restringen en la BD (RLS), en cada endpoint (`route()`), en `proxy.ts` y en la navegación. No hay `/register`: el alta es por invitación | [RLS](docs/02-base-de-datos/03-rls-y-politicas.md) |
 | `profiles.role` | Corregido: solo un admin lo cambia (trigger). **Ojo:** un `UPDATE`/`DELETE` que RLS no permite afecta **0 filas sin error** | [RLS](docs/02-base-de-datos/03-rls-y-politicas.md) |
-| Stock al vender | El POS actual **sigue sin descontarlo** (`.eq('variant_id', null)`); `create_sale` sí lo hace y está verificado, falta conectarlo | [C2](docs/04-auditoria/hallazgos/C2-checkout-no-atomico.md) |
-| Crear producto | La BD ya crea su fila de `inventory` (trigger, cantidad 0); falta la UI de ajuste de stock (`adjust_inventory`) | [productos](docs/03-modulos/productos.md), [inventario](docs/03-modulos/inventario.md) |
-| Formularios | `barcode: ''`, `category_id: ''`, `email: ''` chocan con `UNIQUE`/`uuid` (segundo registro falla) | [M14](docs/04-auditoria/hallazgos/medios-y-bajos.md) |
+| Stock al vender | Corregido: el POS llama a `POST /sales` (RPC `create_sale`) y el stock baja atómicamente | [C2](docs/04-auditoria/hallazgos/C2-checkout-no-atomico.md) |
+| Crear producto | La BD crea su fila de `inventory` (trigger, cantidad 0); el stock se ajusta desde `/inventory` (gerente+) con motivo | [productos](docs/03-modulos/productos.md), [inventario](docs/03-modulos/inventario.md) |
+| Formularios | Corregido en los esquemas zod (`''` → `null`). Los `<input type="number">` entregan **strings**: usar `toNumber`/`money` de `lib/validation/common` | [M14](docs/04-auditoria/hallazgos/medios-y-bajos.md) |
 | Impuestos | Orden usa tasa global `0.1`; líneas usan `product.tax_rate`; no coinciden. `tax_rate` es `DECIMAL(5,2)` | [H3](docs/04-auditoria/hallazgos/H3-impuestos-y-dinero.md) |
-| Ajustes (`/settings`) | No persisten; `settings` (tabla) y `stores/settings.ts` no se leen | [ajustes](docs/03-modulos/ajustes.md) |
-| Recuperar contraseña | `/reset-password` no existe (404) | [H4](docs/04-auditoria/hallazgos/H4-flujos-incompletos.md) |
-| Dashboard/Reportes | KPI "Low Stock" topado en 5; top productos con `limit` sin orden y con ventas reembolsadas; "Loyalty Points" = `floor(total_spent)` | [dashboard](docs/03-modulos/dashboard.md), [reportes](docs/03-modulos/reportes.md) |
+| Ajustes (`/settings`) | Persisten en la tabla `settings` (solo admin escribe) y los lee el layout | [ajustes](docs/03-modulos/ajustes.md) |
+| Recuperar contraseña | Funciona: `/forgot-password` → correo → `/auth/confirm` → `/reset-password` | [H4](docs/04-auditoria/hallazgos/H4-flujos-incompletos.md) |
+| Dashboard/Reportes | Corregido: agregan en SQL, sin reembolsos, umbral por fila y zona horaria de `settings`. "Loyalty Points" = `floor(total_spent)` derivado (D7, sin validar) | [dashboard](docs/03-modulos/dashboard.md), [reportes](docs/03-modulos/reportes.md) |
 | Órdenes de compra, gastos, variantes | Solo esquema; sin UI | [proveedores](docs/03-modulos/proveedores-y-compras.md) |
-| Carrito | Persiste el `Product` completo (precio obsoleto) y no se limpia al cerrar sesión | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
-| `next build` / `next dev` | Fallan si falta alguna de las 4 variables (el error nombra cuál) | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
-| Impresión | `window.print()` tras vaciar el carrito; no hay recibo | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
+| Carrito | Persiste solo ids y cantidades y se vacía en el logout; el total mostrado es una vista previa | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
+| `next build` / `next dev` | Fallan si falta alguna de las 4 variables (el error nombra cuál). `next dev` no debe escribir en `AGENTS.md` (`agentRules: false`) | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
+| Impresión | Solo `window.print()` en el detalle de orden; no hay recibo | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
 | README | Inexacto en muchos puntos | [readme-vs-realidad](docs/04-auditoria/readme-vs-realidad.md) |
 
 ## 9. Antes de tocar X, lee Y
@@ -137,7 +137,7 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 
 ## 10. Definición de "hecho"
 
-- [ ] `bun run typecheck` sin errores y `bun run lint` sin errores **nuevos** (idealmente reduciendo los 93 existentes).
+- [ ] `bun run typecheck` sin errores y `bun run lint` **sin errores ni warnings**.
 - [ ] `bun run build` con variables definidas.
 - [ ] Sin `any` nuevos, sin `.eq(col, null)`, sin cadenas vacías hacia columnas opcionales.
 - [ ] Si toca datos/dinero: la lógica está en una RPC/servidor y tiene prueba; si toca esquema: migración probada en staging.

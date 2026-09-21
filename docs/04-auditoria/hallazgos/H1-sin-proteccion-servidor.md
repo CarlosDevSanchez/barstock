@@ -5,7 +5,7 @@
 | **Severidad** | Alto |
 | **Área** | Seguridad — autenticación |
 | **Esfuerzo** | Medio |
-| **Estado** | Abierto |
+| **Estado** | Corregido (`proxy.ts` + `route()` + RLS; sesión en cookies con `@supabase/ssr`). Pendiente de **Verificado**: pruebas automáticas del Paso 6 |
 | **Confianza** | **[Verificado]** en código |
 
 ## Hallazgo

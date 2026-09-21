@@ -5,7 +5,7 @@
 | **Severidad** | Alto (funcional) |
 | **Área** | Funcionalidad / veracidad del producto |
 | **Esfuerzo** | Medio |
-| **Estado** | Abierto |
+| **Estado** | En curso (recuperar contraseña, ajustes persistentes y ajuste de stock **hechos**; órdenes de compra y gastos siguen sin UI: etapa 2) |
 | **Confianza** | **[Verificado]** (búsquedas por `from('tabla')` y lectura de cada pantalla) |
 
 ## Hallazgos

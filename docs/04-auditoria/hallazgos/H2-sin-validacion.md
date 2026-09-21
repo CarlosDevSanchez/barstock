@@ -5,7 +5,7 @@
 | **Severidad** | Alto |
 | **Área** | Seguridad / calidad de datos |
 | **Esfuerzo** | Medio |
-| **Estado** | Abierto |
+| **Estado** | Corregido (esquemas zod compartidos cliente/servidor + `CHECK`/`NOT NULL` en la BD). Pendiente de **Verificado**: pruebas del Paso 6 |
 | **Confianza** | **[Verificado]** |
 
 ## Hallazgo

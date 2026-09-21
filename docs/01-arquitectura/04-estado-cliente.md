@@ -1,5 +1,8 @@
 # Estado del cliente (Zustand)
 
+> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
+> lógica de negocio vive en RPC de la BD: ver [API](08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+
 > Base: commit `54962b9` · Confianza: **[Verificado]**
 
 Hay tres stores en `stores/`. Solo dos persisten en `localStorage`. Uno no se usa.
