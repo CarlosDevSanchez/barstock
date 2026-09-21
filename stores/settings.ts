@@ -17,21 +17,21 @@ interface SettingsStore {
 
 export const useSettingsStore = create<SettingsStore>()(
     persist(
-        (set) => ({
+        set => ({
             storeName: 'POS Inventory System',
             currency: 'USD',
             taxRate: 0.1,
             lowStockThreshold: 10,
             theme: 'light',
 
-            setStoreName: (name) => set({ storeName: name }),
-            setCurrency: (currency) => set({ currency }),
-            setTaxRate: (rate) => set({ taxRate: rate }),
-            setLowStockThreshold: (threshold) => set({ lowStockThreshold: threshold }),
-            setTheme: (theme) => set({ theme }),
+            setStoreName: name => set({ storeName: name }),
+            setCurrency: currency => set({ currency }),
+            setTaxRate: rate => set({ taxRate: rate }),
+            setLowStockThreshold: threshold => set({ lowStockThreshold: threshold }),
+            setTheme: theme => set({ theme })
         }),
         {
-            name: 'pos-settings',
+            name: 'pos-settings'
         }
     )
 )

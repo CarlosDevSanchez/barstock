@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
@@ -21,7 +21,7 @@ export default function SuppliersPage() {
         contact_person: '',
         email: '',
         phone: '',
-        address: '',
+        address: ''
     })
 
     useEffect(() => {
@@ -47,9 +47,7 @@ export default function SuppliersPage() {
         }
     }
 
-    const filteredSuppliers = suppliers.filter(s =>
-        s.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredSuppliers = suppliers.filter(s => s.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
     return (
         <div className="space-y-6">
@@ -85,7 +83,7 @@ export default function SuppliersPage() {
                         <Input
                             placeholder="Search suppliers..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
                     </div>
@@ -102,7 +100,7 @@ export default function SuppliersPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredSuppliers.map((supplier) => (
+                        {filteredSuppliers.map(supplier => (
                             <TableRow key={supplier.id}>
                                 <TableCell className="font-medium">{supplier.name}</TableCell>
                                 <TableCell>{supplier.contact_person || '-'}</TableCell>
@@ -126,7 +124,7 @@ export default function SuppliersPage() {
                                 <Label className="text-foreground font-semibold">Company Name *</Label>
                                 <Input
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
                                     required
                                 />
                             </div>
@@ -134,7 +132,7 @@ export default function SuppliersPage() {
                                 <Label className="text-foreground font-semibold">Contact Person</Label>
                                 <Input
                                     value={formData.contact_person}
-                                    onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, contact_person: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
@@ -142,26 +140,28 @@ export default function SuppliersPage() {
                                 <Input
                                     type="email"
                                     value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-foreground font-semibold">Phone</Label>
                                 <Input
                                     value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-foreground font-semibold">Address</Label>
                                 <Input
                                     value={formData.address}
-                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, address: e.target.value })}
                                 />
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
+                            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
+                                Cancel
+                            </Button>
                             <Button type="submit">Add Supplier</Button>
                         </DialogFooter>
                     </form>

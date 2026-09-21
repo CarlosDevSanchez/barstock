@@ -1,11 +1,18 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Badge } from '@/components/ui/badge'
@@ -29,7 +36,7 @@ export default function ProductsPage() {
         cost_price: '',
         selling_price: '',
         tax_rate: '0.1',
-        is_active: true,
+        is_active: true
     })
 
     useEffect(() => {
@@ -58,21 +65,16 @@ export default function ProductsPage() {
                 ...formData,
                 cost_price: parseFloat(formData.cost_price),
                 selling_price: parseFloat(formData.selling_price),
-                tax_rate: parseFloat(formData.tax_rate),
+                tax_rate: parseFloat(formData.tax_rate)
             }
 
             if (editingProduct) {
-                const { error } = await supabase
-                    .from('products')
-                    .update(productData)
-                    .eq('id', editingProduct.id)
+                const { error } = await supabase.from('products').update(productData).eq('id', editingProduct.id)
 
                 if (error) throw error
                 toast.success('Product updated successfully')
             } else {
-                const { error } = await supabase
-                    .from('products')
-                    .insert(productData)
+                const { error } = await supabase.from('products').insert(productData)
 
                 if (error) throw error
                 toast.success('Product created successfully')
@@ -90,10 +92,7 @@ export default function ProductsPage() {
         if (!confirm('Are you sure you want to delete this product?')) return
 
         try {
-            const { error } = await supabase
-                .from('products')
-                .delete()
-                .eq('id', id)
+            const { error } = await supabase.from('products').delete().eq('id', id)
 
             if (error) throw error
             toast.success('Product deleted successfully')
@@ -114,7 +113,7 @@ export default function ProductsPage() {
             cost_price: product.cost_price.toString(),
             selling_price: product.selling_price.toString(),
             tax_rate: product.tax_rate.toString(),
-            is_active: product.is_active,
+            is_active: product.is_active
         })
         setShowDialog(true)
     }
@@ -130,13 +129,14 @@ export default function ProductsPage() {
             cost_price: '',
             selling_price: '',
             tax_rate: '0.1',
-            is_active: true,
+            is_active: true
         })
     }
 
-    const filteredProducts = products.filter(p =>
-        p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        p.sku.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredProducts = products.filter(
+        p =>
+            p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            p.sku.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     return (
@@ -146,7 +146,12 @@ export default function ProductsPage() {
                     <h1 className="text-3xl font-bold">Products</h1>
                     <p className="text-muted-foreground">Manage your product catalog</p>
                 </div>
-                <Button onClick={() => { resetForm(); setShowDialog(true) }}>
+                <Button
+                    onClick={() => {
+                        resetForm()
+                        setShowDialog(true)
+                    }}
+                >
                     <Plus className="mr-2 h-4 w-4" />
                     Add Product
                 </Button>
@@ -159,7 +164,7 @@ export default function ProductsPage() {
                         <Input
                             placeholder="Search products..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
                     </div>
@@ -178,7 +183,7 @@ export default function ProductsPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredProducts.map((product) => (
+                        {filteredProducts.map(product => (
                             <TableRow key={product.id}>
                                 <TableCell>
                                     <div className="flex items-center gap-3">
@@ -194,7 +199,9 @@ export default function ProductsPage() {
                                 <TableCell className="font-mono text-sm">{product.sku}</TableCell>
                                 <TableCell>{product.category?.name || '-'}</TableCell>
                                 <TableCell>${product.cost_price.toFixed(2)}</TableCell>
-                                <TableCell className="font-semibold text-emerald-600">${product.selling_price.toFixed(2)}</TableCell>
+                                <TableCell className="font-semibold text-emerald-600">
+                                    ${product.selling_price.toFixed(2)}
+                                </TableCell>
                                 <TableCell>
                                     <Badge variant={product.is_active ? 'default' : 'secondary'}>
                                         {product.is_active ? 'Active' : 'Inactive'}
@@ -202,11 +209,7 @@ export default function ProductsPage() {
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => handleEdit(product)}
-                                        >
+                                        <Button size="sm" variant="ghost" onClick={() => handleEdit(product)}>
                                             <Edit className="h-4 w-4" />
                                         </Button>
                                         <Button
@@ -237,81 +240,102 @@ export default function ProductsPage() {
                     <form onSubmit={handleSubmit} className="flex flex-col flex-1 overflow-hidden">
                         <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
                             <div className="col-span-2 space-y-2">
-                                <Label htmlFor="name" className="text-foreground font-semibold">Product Name *</Label>
+                                <Label htmlFor="name" className="text-foreground font-semibold">
+                                    Product Name *
+                                </Label>
                                 <Input
                                     id="name"
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
                                     required
                                 />
                             </div>
                             <div className="col-span-2 space-y-2">
-                                <Label htmlFor="description" className="text-foreground font-semibold">Description</Label>
+                                <Label htmlFor="description" className="text-foreground font-semibold">
+                                    Description
+                                </Label>
                                 <Input
                                     id="description"
                                     value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="sku" className="text-foreground font-semibold">SKU *</Label>
+                                <Label htmlFor="sku" className="text-foreground font-semibold">
+                                    SKU *
+                                </Label>
                                 <Input
                                     id="sku"
                                     value={formData.sku}
-                                    onChange={(e) => setFormData({ ...formData, sku: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, sku: e.target.value })}
                                     required
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="barcode" className="text-foreground font-semibold">Barcode</Label>
+                                <Label htmlFor="barcode" className="text-foreground font-semibold">
+                                    Barcode
+                                </Label>
                                 <Input
                                     id="barcode"
                                     value={formData.barcode}
-                                    onChange={(e) => setFormData({ ...formData, barcode: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, barcode: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="category" className="text-foreground font-semibold">Category</Label>
-                                <Select value={formData.category_id || undefined} onValueChange={(value) => setFormData({ ...formData, category_id: value })}>
+                                <Label htmlFor="category" className="text-foreground font-semibold">
+                                    Category
+                                </Label>
+                                <Select
+                                    value={formData.category_id || undefined}
+                                    onValueChange={value => setFormData({ ...formData, category_id: value })}
+                                >
                                     <SelectTrigger>
                                         <SelectValue placeholder="Select category" />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        {categories.map((cat) => (
-                                            <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                        {categories.map(cat => (
+                                            <SelectItem key={cat.id} value={cat.id}>
+                                                {cat.name}
+                                            </SelectItem>
                                         ))}
                                     </SelectContent>
                                 </Select>
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="tax_rate" className="text-foreground font-semibold">Tax Rate</Label>
+                                <Label htmlFor="tax_rate" className="text-foreground font-semibold">
+                                    Tax Rate
+                                </Label>
                                 <Input
                                     id="tax_rate"
                                     type="number"
                                     step="0.01"
                                     value={formData.tax_rate}
-                                    onChange={(e) => setFormData({ ...formData, tax_rate: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, tax_rate: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="cost_price" className="text-foreground font-semibold">Cost Price *</Label>
+                                <Label htmlFor="cost_price" className="text-foreground font-semibold">
+                                    Cost Price *
+                                </Label>
                                 <Input
                                     id="cost_price"
                                     type="number"
                                     step="0.01"
                                     value={formData.cost_price}
-                                    onChange={(e) => setFormData({ ...formData, cost_price: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, cost_price: e.target.value })}
                                     required
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="selling_price" className="text-foreground font-semibold">Selling Price *</Label>
+                                <Label htmlFor="selling_price" className="text-foreground font-semibold">
+                                    Selling Price *
+                                </Label>
                                 <Input
                                     id="selling_price"
                                     type="number"
                                     step="0.01"
                                     value={formData.selling_price}
-                                    onChange={(e) => setFormData({ ...formData, selling_price: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, selling_price: e.target.value })}
                                     required
                                 />
                             </div>
@@ -320,9 +344,7 @@ export default function ProductsPage() {
                             <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
                                 Cancel
                             </Button>
-                            <Button type="submit">
-                                {editingProduct ? 'Update Product' : 'Create Product'}
-                            </Button>
+                            <Button type="submit">{editingProduct ? 'Update Product' : 'Create Product'}</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

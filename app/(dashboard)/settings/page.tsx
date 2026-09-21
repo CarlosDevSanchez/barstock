@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -17,7 +17,7 @@ export default function SettingsPage() {
         storeEmail: 'info@posystem.com',
         taxRate: '10',
         currency: 'USD',
-        lowStockThreshold: '10',
+        lowStockThreshold: '10'
     })
 
     const handleSave = () => {
@@ -45,21 +45,21 @@ export default function SettingsPage() {
                             <Label className="text-foreground font-semibold">Store Name</Label>
                             <Input
                                 value={settings.storeName}
-                                onChange={(e) => setSettings({ ...settings, storeName: e.target.value })}
+                                onChange={e => setSettings({ ...settings, storeName: e.target.value })}
                             />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-foreground font-semibold">Address</Label>
                             <Input
                                 value={settings.storeAddress}
-                                onChange={(e) => setSettings({ ...settings, storeAddress: e.target.value })}
+                                onChange={e => setSettings({ ...settings, storeAddress: e.target.value })}
                             />
                         </div>
                         <div className="space-y-2">
                             <Label className="text-foreground font-semibold">Phone</Label>
                             <Input
                                 value={settings.storePhone}
-                                onChange={(e) => setSettings({ ...settings, storePhone: e.target.value })}
+                                onChange={e => setSettings({ ...settings, storePhone: e.target.value })}
                             />
                         </div>
                         <div className="space-y-2">
@@ -67,7 +67,7 @@ export default function SettingsPage() {
                             <Input
                                 type="email"
                                 value={settings.storeEmail}
-                                onChange={(e) => setSettings({ ...settings, storeEmail: e.target.value })}
+                                onChange={e => setSettings({ ...settings, storeEmail: e.target.value })}
                             />
                         </div>
                     </CardContent>
@@ -81,7 +81,10 @@ export default function SettingsPage() {
                     <CardContent className="space-y-4">
                         <div className="space-y-2">
                             <Label className="text-foreground font-semibold">Currency</Label>
-                            <Select value={settings.currency} onValueChange={(value) => setSettings({ ...settings, currency: value })}>
+                            <Select
+                                value={settings.currency}
+                                onValueChange={value => setSettings({ ...settings, currency: value })}
+                            >
                                 <SelectTrigger>
                                     <SelectValue />
                                 </SelectTrigger>
@@ -97,7 +100,7 @@ export default function SettingsPage() {
                             <Input
                                 type="number"
                                 value={settings.taxRate}
-                                onChange={(e) => setSettings({ ...settings, taxRate: e.target.value })}
+                                onChange={e => setSettings({ ...settings, taxRate: e.target.value })}
                             />
                         </div>
                         <div className="space-y-2">
@@ -105,7 +108,7 @@ export default function SettingsPage() {
                             <Input
                                 type="number"
                                 value={settings.lowStockThreshold}
-                                onChange={(e) => setSettings({ ...settings, lowStockThreshold: e.target.value })}
+                                onChange={e => setSettings({ ...settings, lowStockThreshold: e.target.value })}
                             />
                         </div>
                     </CardContent>

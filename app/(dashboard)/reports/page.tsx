@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -80,7 +80,7 @@ export default function ReportsPage() {
                 .limit(1000)
 
             if (orderItems) {
-                const productMap = new Map<string, { name: string, quantity: number, revenue: number }>()
+                const productMap = new Map<string, { name: string; quantity: number; revenue: number }>()
 
                 orderItems.forEach((item: any) => {
                     if (item.product && item.product.name) {
@@ -112,17 +112,18 @@ export default function ReportsPage() {
                 .limit(5)
 
             if (customers) {
-                const { data: orders } = await supabase
-                    .from('orders')
-                    .select('customer_id')
-                    .eq('status', 'completed')
+                const { data: orders } = await supabase.from('orders').select('customer_id').eq('status', 'completed')
 
-                const customerOrderCount = orders?.reduce((acc, o) => {
-                    if (o.customer_id) {
-                        acc[o.customer_id] = (acc[o.customer_id] || 0) + 1
-                    }
-                    return acc
-                }, {} as Record<string, number>) || {}
+                const customerOrderCount =
+                    orders?.reduce(
+                        (acc, o) => {
+                            if (o.customer_id) {
+                                acc[o.customer_id] = (acc[o.customer_id] || 0) + 1
+                            }
+                            return acc
+                        },
+                        {} as Record<string, number>
+                    ) || {}
 
                 const topCust = customers.map(c => ({
                     customer_name: c.name,
@@ -132,7 +133,6 @@ export default function ReportsPage() {
 
                 setTopCustomers(topCust)
             }
-
         } catch (error) {
             console.error('Error fetching reports:', error)
         } finally {

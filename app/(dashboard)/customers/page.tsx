@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -23,7 +23,7 @@ export default function CustomersPage() {
         name: '',
         email: '',
         phone: '',
-        address: '',
+        address: ''
     })
 
     useEffect(() => {
@@ -31,10 +31,7 @@ export default function CustomersPage() {
     }, [])
 
     const fetchCustomers = async () => {
-        const { data } = await supabase
-            .from('customers')
-            .select('*')
-            .order('created_at', { ascending: false })
+        const { data } = await supabase.from('customers').select('*').order('created_at', { ascending: false })
         setCustomers(data || [])
     }
 
@@ -52,10 +49,11 @@ export default function CustomersPage() {
         }
     }
 
-    const filteredCustomers = customers.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.phone?.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredCustomers = customers.filter(
+        c =>
+            c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            c.phone?.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     return (
@@ -92,7 +90,7 @@ export default function CustomersPage() {
                         <Input
                             placeholder="Search customers..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
                     </div>
@@ -110,7 +108,7 @@ export default function CustomersPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredCustomers.map((customer) => (
+                        {filteredCustomers.map(customer => (
                             <TableRow
                                 key={customer.id}
                                 className="cursor-pointer hover:bg-muted/50"
@@ -147,7 +145,7 @@ export default function CustomersPage() {
                                 <Label className="text-foreground font-semibold">Name *</Label>
                                 <Input
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
                                     required
                                 />
                             </div>
@@ -156,26 +154,28 @@ export default function CustomersPage() {
                                 <Input
                                     type="email"
                                     value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, email: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-foreground font-semibold">Phone</Label>
                                 <Input
                                     value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, phone: e.target.value })}
                                 />
                             </div>
                             <div className="space-y-2">
                                 <Label className="text-foreground font-semibold">Address</Label>
                                 <Input
                                     value={formData.address}
-                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, address: e.target.value })}
                                 />
                             </div>
                         </div>
                         <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
+                            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
+                                Cancel
+                            </Button>
                             <Button type="submit">Add Customer</Button>
                         </DialogFooter>
                     </form>

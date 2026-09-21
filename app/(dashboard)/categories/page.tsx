@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Card } from '@/components/ui/card'
@@ -20,7 +20,7 @@ export default function CategoriesPage() {
     const [editingCategory, setEditingCategory] = useState<Category | null>(null)
     const [formData, setFormData] = useState({
         name: '',
-        description: '',
+        description: ''
     })
 
     useEffect(() => {
@@ -28,10 +28,7 @@ export default function CategoriesPage() {
     }, [])
 
     const fetchCategories = async () => {
-        const { data } = await supabase
-            .from('categories')
-            .select('*')
-            .order('created_at', { ascending: false })
+        const { data } = await supabase.from('categories').select('*').order('created_at', { ascending: false })
         setCategories(data || [])
     }
 
@@ -40,17 +37,12 @@ export default function CategoriesPage() {
 
         try {
             if (editingCategory) {
-                const { error } = await supabase
-                    .from('categories')
-                    .update(formData)
-                    .eq('id', editingCategory.id)
+                const { error } = await supabase.from('categories').update(formData).eq('id', editingCategory.id)
 
                 if (error) throw error
                 toast.success('Category updated successfully')
             } else {
-                const { error } = await supabase
-                    .from('categories')
-                    .insert(formData)
+                const { error } = await supabase.from('categories').insert(formData)
 
                 if (error) throw error
                 toast.success('Category created successfully')
@@ -68,10 +60,7 @@ export default function CategoriesPage() {
         if (!confirm('Are you sure you want to delete this category?')) return
 
         try {
-            const { error } = await supabase
-                .from('categories')
-                .delete()
-                .eq('id', id)
+            const { error } = await supabase.from('categories').delete().eq('id', id)
 
             if (error) throw error
             toast.success('Category deleted successfully')
@@ -85,7 +74,7 @@ export default function CategoriesPage() {
         setEditingCategory(category)
         setFormData({
             name: category.name,
-            description: category.description || '',
+            description: category.description || ''
         })
         setShowDialog(true)
     }
@@ -94,25 +83,21 @@ export default function CategoriesPage() {
         setEditingCategory(null)
         setFormData({
             name: '',
-            description: '',
+            description: ''
         })
     }
 
-    const filteredCategories = categories.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase())
-    )
+    const filteredCategories = categories.filter(c => c.name.toLowerCase().includes(searchQuery.toLowerCase()))
 
     // Count products per category
     const [productCounts, setProductCounts] = useState<Record<string, number>>({})
 
     useEffect(() => {
         const fetchProductCounts = async () => {
-            const { data } = await supabase
-                .from('products')
-                .select('category_id')
+            const { data } = await supabase.from('products').select('category_id')
 
             const counts: Record<string, number> = {}
-            data?.forEach((product) => {
+            data?.forEach(product => {
                 if (product.category_id) {
                     counts[product.category_id] = (counts[product.category_id] || 0) + 1
                 }
@@ -130,7 +115,12 @@ export default function CategoriesPage() {
                     <h1 className="text-3xl font-bold">Categories</h1>
                     <p className="text-muted-foreground">Organize your products with categories</p>
                 </div>
-                <Button onClick={() => { resetForm(); setShowDialog(true) }}>
+                <Button
+                    onClick={() => {
+                        resetForm()
+                        setShowDialog(true)
+                    }}
+                >
                     <Plus className="mr-2 h-4 w-4" />
                     Add Category
                 </Button>
@@ -143,7 +133,7 @@ export default function CategoriesPage() {
                         <Input
                             placeholder="Search categories..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
                     </div>
@@ -159,7 +149,7 @@ export default function CategoriesPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredCategories.map((category) => (
+                        {filteredCategories.map(category => (
                             <TableRow key={category.id}>
                                 <TableCell>
                                     <div className="flex items-center gap-3">
@@ -171,17 +161,11 @@ export default function CategoriesPage() {
                                 </TableCell>
                                 <TableCell className="text-muted-foreground">{category.description || '-'}</TableCell>
                                 <TableCell>
-                                    <Badge variant="secondary">
-                                        {productCounts[category.id] || 0} products
-                                    </Badge>
+                                    <Badge variant="secondary">{productCounts[category.id] || 0} products</Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">
-                                        <Button
-                                            size="sm"
-                                            variant="ghost"
-                                            onClick={() => handleEdit(category)}
-                                        >
+                                        <Button size="sm" variant="ghost" onClick={() => handleEdit(category)}>
                                             <Edit className="h-4 w-4" />
                                         </Button>
                                         <Button
@@ -209,20 +193,24 @@ export default function CategoriesPage() {
                     <form onSubmit={handleSubmit}>
                         <div className="space-y-4 py-4">
                             <div className="space-y-2">
-                                <Label htmlFor="name" className="text-foreground font-semibold">Category Name *</Label>
+                                <Label htmlFor="name" className="text-foreground font-semibold">
+                                    Category Name *
+                                </Label>
                                 <Input
                                     id="name"
                                     value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, name: e.target.value })}
                                     required
                                 />
                             </div>
                             <div className="space-y-2">
-                                <Label htmlFor="description" className="text-foreground font-semibold">Description</Label>
+                                <Label htmlFor="description" className="text-foreground font-semibold">
+                                    Description
+                                </Label>
                                 <Input
                                     id="description"
                                     value={formData.description}
-                                    onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+                                    onChange={e => setFormData({ ...formData, description: e.target.value })}
                                 />
                             </div>
                         </div>
@@ -230,9 +218,7 @@ export default function CategoriesPage() {
                             <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>
                                 Cancel
                             </Button>
-                            <Button type="submit">
-                                {editingCategory ? 'Update Category' : 'Create Category'}
-                            </Button>
+                            <Button type="submit">{editingCategory ? 'Update Category' : 'Create Category'}</Button>
                         </DialogFooter>
                     </form>
                 </DialogContent>

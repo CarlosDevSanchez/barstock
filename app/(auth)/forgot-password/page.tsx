@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -23,7 +23,7 @@ export default function ForgotPasswordPage() {
 
         try {
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: `${window.location.origin}/reset-password`,
+                redirectTo: `${window.location.origin}/reset-password`
             })
 
             if (error) throw error
@@ -61,19 +61,14 @@ export default function ForgotPasswordPage() {
                                     type="email"
                                     placeholder="name@example.com"
                                     value={email}
-                                    onChange={(e) => setEmail(e.target.value)}
+                                    onChange={e => setEmail(e.target.value)}
                                     required
                                     disabled={loading}
                                 />
                             </div>
                         </CardContent>
                         <CardFooter className="flex flex-col space-y-4">
-                            <Button
-                                type="submit"
-                                className="w-full"
-                                size="lg"
-                                disabled={loading}
-                            >
+                            <Button type="submit" className="w-full" size="lg" disabled={loading}>
                                 {loading ? 'Sending...' : 'Send Reset Link'}
                             </Button>
                             <p className="text-sm text-center text-muted-foreground">
@@ -97,11 +92,7 @@ export default function ForgotPasswordPage() {
                                 Please check your inbox and follow the instructions.
                             </p>
                         </div>
-                        <Button
-                            onClick={() => router.push('/login')}
-                            className="w-full"
-                            variant="outline"
-                        >
+                        <Button onClick={() => router.push('/login')} className="w-full" variant="outline">
                             Back to Login
                         </Button>
                     </CardContent>

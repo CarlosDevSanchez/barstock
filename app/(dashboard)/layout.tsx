@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter, usePathname } from 'next/navigation'
@@ -6,14 +6,33 @@ import Link from 'next/link'
 import { Button } from '@/components/ui/button'
 import { Sheet, SheetContent, SheetTrigger } from '@/components/ui/sheet'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
-import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import {
+    DropdownMenu,
+    DropdownMenuContent,
+    DropdownMenuItem,
+    DropdownMenuLabel,
+    DropdownMenuSeparator,
+    DropdownMenuTrigger
+} from '@/components/ui/dropdown-menu'
 import { supabase } from '@/lib/supabase/client'
 import { useAuthStore } from '@/stores/auth'
 import { useTheme } from 'next-themes'
 import {
-    LayoutDashboard, ShoppingCart, Package, Warehouse,
-    ShoppingBag, Users, Truck, BarChart3, Settings2,
-    Menu, Moon, Sun, LogOut, User, FolderTree
+    LayoutDashboard,
+    ShoppingCart,
+    Package,
+    Warehouse,
+    ShoppingBag,
+    Users,
+    Truck,
+    BarChart3,
+    Settings2,
+    Menu,
+    Moon,
+    Sun,
+    LogOut,
+    User,
+    FolderTree
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
 
@@ -27,14 +46,10 @@ const navItems = [
     { icon: Users, label: 'Customers', href: '/customers' },
     { icon: Truck, label: 'Suppliers', href: '/suppliers' },
     { icon: BarChart3, label: 'Reports', href: '/reports' },
-    { icon: Settings2, label: 'Settings', href: '/settings' },
+    { icon: Settings2, label: 'Settings', href: '/settings' }
 ]
 
-export default function DashboardLayout({
-    children,
-}: {
-    children: React.ReactNode
-}) {
+export default function DashboardLayout({ children }: { children: React.ReactNode }) {
     const router = useRouter()
     const pathname = usePathname()
     const { user, setUser } = useAuthStore()
@@ -43,18 +58,16 @@ export default function DashboardLayout({
 
     useEffect(() => {
         const checkUser = async () => {
-            const { data: { session } } = await supabase.auth.getSession()
+            const {
+                data: { session }
+            } = await supabase.auth.getSession()
 
             if (!session) {
                 router.push('/login')
                 return
             }
 
-            const { data: profile } = await supabase
-                .from('profiles')
-                .select('*')
-                .eq('id', session.user.id)
-                .single()
+            const { data: profile } = await supabase.from('profiles').select('*').eq('id', session.user.id).single()
 
             if (profile) {
                 setUser(profile)
@@ -88,7 +101,7 @@ export default function DashboardLayout({
                     <h1 className="text-2xl font-bold text-emerald-600">POS System</h1>
                 </div>
                 <nav className="flex-1 px-4 space-y-1 overflow-y-auto">
-                    {navItems.map((item) => {
+                    {navItems.map(item => {
                         const Icon = item.icon
                         const isActive = pathname === item.href
                         return (
@@ -96,10 +109,10 @@ export default function DashboardLayout({
                                 key={item.href}
                                 href={item.href}
                                 className={cn(
-                                    "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                                    'flex items-center gap-3 px-4 py-3 rounded-xl transition-all',
                                     isActive
-                                        ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium"
-                                        : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                        ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium'
+                                        : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                                 )}
                             >
                                 <Icon className="w-5 h-5" />
@@ -131,7 +144,11 @@ export default function DashboardLayout({
                                 Profile
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-                                {theme === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                                {theme === 'dark' ? (
+                                    <Sun className="mr-2 h-4 w-4" />
+                                ) : (
+                                    <Moon className="mr-2 h-4 w-4" />
+                                )}
                                 {theme === 'dark' ? 'Light' : 'Dark'} Mode
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -159,7 +176,7 @@ export default function DashboardLayout({
                                 <h1 className="text-2xl font-bold text-emerald-600">POS System</h1>
                             </div>
                             <nav className="px-4 space-y-1">
-                                {navItems.map((item) => {
+                                {navItems.map(item => {
                                     const Icon = item.icon
                                     const isActive = pathname === item.href
                                     return (
@@ -167,10 +184,10 @@ export default function DashboardLayout({
                                             key={item.href}
                                             href={item.href}
                                             className={cn(
-                                                "flex items-center gap-3 px-4 py-3 rounded-xl transition-all",
+                                                'flex items-center gap-3 px-4 py-3 rounded-xl transition-all',
                                                 isActive
-                                                    ? "bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium"
-                                                    : "text-muted-foreground hover:bg-muted hover:text-foreground"
+                                                    ? 'bg-emerald-100 dark:bg-emerald-900/30 text-emerald-700 dark:text-emerald-400 font-medium'
+                                                    : 'text-muted-foreground hover:bg-muted hover:text-foreground'
                                             )}
                                         >
                                             <Icon className="w-5 h-5" />
@@ -200,7 +217,11 @@ export default function DashboardLayout({
                                 Profile
                             </DropdownMenuItem>
                             <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
-                                {theme === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
+                                {theme === 'dark' ? (
+                                    <Sun className="mr-2 h-4 w-4" />
+                                ) : (
+                                    <Moon className="mr-2 h-4 w-4" />
+                                )}
                                 {theme === 'dark' ? 'Light' : 'Dark'} Mode
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
@@ -213,9 +234,7 @@ export default function DashboardLayout({
                 </header>
 
                 {/* Main Content Area */}
-                <main className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900">
-                    {children}
-                </main>
+                <main className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900">{children}</main>
             </div>
         </div>
     )

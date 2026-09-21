@@ -12,7 +12,7 @@ interface AuthStore {
 export const useAuthStore = create<AuthStore>((set, get) => ({
     user: null,
 
-    setUser: (user) => set({ user }),
+    setUser: user => set({ user }),
 
     isAdmin: () => get().user?.role === 'admin',
 

@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -24,7 +24,7 @@ export default function LoginPage() {
         try {
             const { data, error } = await supabase.auth.signInWithPassword({
                 email,
-                password,
+                password
             })
 
             if (error) throw error
@@ -61,7 +61,7 @@ export default function LoginPage() {
                                 type="email"
                                 placeholder="name@example.com"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={e => setEmail(e.target.value)}
                                 required
                                 disabled={loading}
                             />
@@ -81,19 +81,14 @@ export default function LoginPage() {
                                 type="password"
                                 placeholder="••••••••"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={e => setPassword(e.target.value)}
                                 required
                                 disabled={loading}
                             />
                         </div>
                     </CardContent>
                     <CardFooter className="flex flex-col space-y-4">
-                        <Button
-                            type="submit"
-                            className="w-full"
-                            size="lg"
-                            disabled={loading}
-                        >
+                        <Button type="submit" className="w-full" size="lg" disabled={loading}>
                             {loading ? 'Signing in...' : 'Sign In'}
                         </Button>
                         <p className="text-sm text-center text-muted-foreground">

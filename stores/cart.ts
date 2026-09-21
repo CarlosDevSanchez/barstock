@@ -68,16 +68,14 @@ export const useCartStore = create<CartStore>()(
             updateItemDiscount: (productId, variantId, discount) => {
                 set(state => ({
                     items: state.items.map(item =>
-                        item.product.id === productId && item.variant?.id === variantId
-                            ? { ...item, discount }
-                            : item
+                        item.product.id === productId && item.variant?.id === variantId ? { ...item, discount } : item
                     )
                 }))
             },
 
-            setGlobalDiscount: (discount) => set({ discount }),
+            setGlobalDiscount: discount => set({ discount }),
 
-            setTaxRate: (rate) => set({ taxRate: rate }),
+            setTaxRate: rate => set({ taxRate: rate }),
 
             clearCart: () => set({ items: [], discount: 0 }),
 
@@ -104,7 +102,7 @@ export const useCartStore = create<CartStore>()(
             }
         }),
         {
-            name: 'pos-cart',
+            name: 'pos-cart'
         }
     )
 )

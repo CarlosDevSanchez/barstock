@@ -1,11 +1,18 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
@@ -30,7 +37,18 @@ export default function POSPage() {
     const [showPaymentDialog, setShowPaymentDialog] = useState(false)
     const [processing, setProcessing] = useState(false)
 
-    const { items, addItem, removeItem, updateQuantity, setGlobalDiscount, discount, getSubtotal, getTax, getTotal, clearCart } = useCartStore()
+    const {
+        items,
+        addItem,
+        removeItem,
+        updateQuantity,
+        setGlobalDiscount,
+        discount,
+        getSubtotal,
+        getTax,
+        getTotal,
+        clearCart
+    } = useCartStore()
     const { user } = useAuthStore()
 
     useEffect(() => {
@@ -43,10 +61,11 @@ export default function POSPage() {
         let filtered = products
 
         if (searchQuery) {
-            filtered = filtered.filter(p =>
-                p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
-                p.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
+            filtered = filtered.filter(
+                p =>
+                    p.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    p.sku.toLowerCase().includes(searchQuery.toLowerCase()) ||
+                    p.barcode?.toLowerCase().includes(searchQuery.toLowerCase())
             )
         }
 
@@ -58,10 +77,7 @@ export default function POSPage() {
     }, [searchQuery, selectedCategory, products])
 
     const fetchProducts = async () => {
-        const { data } = await supabase
-            .from('products')
-            .select('*')
-            .eq('is_active', true)
+        const { data } = await supabase.from('products').select('*').eq('is_active', true)
 
         setProducts(data || [])
         setFilteredProducts(data || [])
@@ -100,7 +116,7 @@ export default function POSPage() {
                     discount: discount,
                     tax: getTax(),
                     total: getTotal(),
-                    created_by: user?.id,
+                    created_by: user?.id
                 })
                 .select()
                 .single()
@@ -115,24 +131,23 @@ export default function POSPage() {
                 quantity: item.quantity,
                 unit_price: item.variant?.selling_price ?? item.product.selling_price,
                 discount: item.discount,
-                tax: (item.variant?.selling_price ?? item.product.selling_price) * item.quantity * (item.product.tax_rate || 0),
-                total: (item.variant?.selling_price ?? item.product.selling_price) * item.quantity - item.discount,
+                tax:
+                    (item.variant?.selling_price ?? item.product.selling_price) *
+                    item.quantity *
+                    (item.product.tax_rate || 0),
+                total: (item.variant?.selling_price ?? item.product.selling_price) * item.quantity - item.discount
             }))
 
-            const { error: itemsError } = await supabase
-                .from('order_items')
-                .insert(orderItems)
+            const { error: itemsError } = await supabase.from('order_items').insert(orderItems)
 
             if (itemsError) throw itemsError
 
             // Create payment
-            const { error: paymentError } = await supabase
-                .from('payments')
-                .insert({
-                    order_id: order.id,
-                    payment_method: paymentMethod,
-                    amount: getTotal(),
-                })
+            const { error: paymentError } = await supabase.from('payments').insert({
+                order_id: order.id,
+                payment_method: paymentMethod,
+                amount: getTotal()
+            })
 
             if (paymentError) throw paymentError
 
@@ -152,15 +167,13 @@ export default function POSPage() {
                         .eq('id', inventory.id)
 
                     // Log transaction
-                    await supabase
-                        .from('inventory_transactions')
-                        .insert({
-                            inventory_id: inventory.id,
-                            transaction_type: 'sale',
-                            quantity: -item.quantity,
-                            reference_id: order.id,
-                            created_by: user?.id,
-                        })
+                    await supabase.from('inventory_transactions').insert({
+                        inventory_id: inventory.id,
+                        transaction_type: 'sale',
+                        quantity: -item.quantity,
+                        reference_id: order.id,
+                        created_by: user?.id
+                    })
                 }
             }
 
@@ -197,7 +210,7 @@ export default function POSPage() {
                         <Input
                             placeholder="Search by name, SKU, or barcode..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
                     </div>
@@ -208,7 +221,9 @@ export default function POSPage() {
                         <SelectContent>
                             <SelectItem value="all">All Categories</SelectItem>
                             {categories.map(cat => (
-                                <SelectItem key={cat.id} value={cat.id}>{cat.name}</SelectItem>
+                                <SelectItem key={cat.id} value={cat.id}>
+                                    {cat.name}
+                                </SelectItem>
                             ))}
                         </SelectContent>
                     </Select>
@@ -229,7 +244,9 @@ export default function POSPage() {
                                 <CardContent className="p-4">
                                     <h3 className="font-semibold line-clamp-2 text-sm">{product.name}</h3>
                                     <p className="text-xs text-muted-foreground mt-1">SKU: {product.sku}</p>
-                                    <p className="text-lg font-bold text-emerald-600 mt-2">${product.selling_price.toFixed(2)}</p>
+                                    <p className="text-lg font-bold text-emerald-600 mt-2">
+                                        ${product.selling_price.toFixed(2)}
+                                    </p>
                                 </CardContent>
                             </Card>
                         ))}
@@ -276,14 +293,18 @@ export default function POSPage() {
                         ) : (
                             <div className="space-y-3">
                                 {items.map((item, index) => (
-                                    <div key={`${item.product.id}-${item.variant?.id || 'no-variant'}-${index}`} className="flex items-center gap-3 p-3 rounded-xl bg-muted">
+                                    <div
+                                        key={`${item.product.id}-${item.variant?.id || 'no-variant'}-${index}`}
+                                        className="flex items-center gap-3 p-3 rounded-xl bg-muted"
+                                    >
                                         <div className="flex-1 min-w-0">
                                             <p className="font-medium text-sm truncate">{item.product.name}</p>
                                             {item.variant && (
                                                 <p className="text-xs text-muted-foreground">{item.variant.name}</p>
                                             )}
                                             <p className="text-sm font-bold text-emerald-600">
-                                                ${(item.variant?.selling_price ?? item.product.selling_price).toFixed(2)}
+                                                $
+                                                {(item.variant?.selling_price ?? item.product.selling_price).toFixed(2)}
                                             </p>
                                         </div>
                                         <div className="flex items-center gap-2">
@@ -291,7 +312,9 @@ export default function POSPage() {
                                                 size="icon"
                                                 variant="outline"
                                                 className="h-7 w-7"
-                                                onClick={() => updateQuantity(item.product.id, item.variant?.id, item.quantity - 1)}
+                                                onClick={() =>
+                                                    updateQuantity(item.product.id, item.variant?.id, item.quantity - 1)
+                                                }
                                             >
                                                 <Minus className="h-3 w-3" />
                                             </Button>
@@ -300,7 +323,9 @@ export default function POSPage() {
                                                 size="icon"
                                                 variant="outline"
                                                 className="h-7 w-7"
-                                                onClick={() => updateQuantity(item.product.id, item.variant?.id, item.quantity + 1)}
+                                                onClick={() =>
+                                                    updateQuantity(item.product.id, item.variant?.id, item.quantity + 1)
+                                                }
                                             >
                                                 <Plus className="h-3 w-3" />
                                             </Button>
@@ -333,7 +358,7 @@ export default function POSPage() {
                                     <Input
                                         type="number"
                                         value={discount}
-                                        onChange={(e) => setGlobalDiscount(Number(e.target.value))}
+                                        onChange={e => setGlobalDiscount(Number(e.target.value))}
                                         className="w-24 h-8 text-right"
                                         min="0"
                                         step="0.01"
@@ -370,7 +395,8 @@ export default function POSPage() {
                     <DialogHeader>
                         <DialogTitle>Complete Payment</DialogTitle>
                         <DialogDescription>
-                            Total amount: <span className="text-lg font-bold text-emerald-600">${getTotal().toFixed(2)}</span>
+                            Total amount:{' '}
+                            <span className="text-lg font-bold text-emerald-600">${getTotal().toFixed(2)}</span>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">

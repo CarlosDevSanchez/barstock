@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -43,9 +43,9 @@ export default function RegisterPage() {
                 options: {
                     data: {
                         full_name: fullName,
-                        role: role,
-                    },
-                },
+                        role: role
+                    }
+                }
             })
 
             if (error) throw error
@@ -69,9 +69,7 @@ export default function RegisterPage() {
                         </div>
                     </div>
                     <CardTitle className="text-2xl text-center font-bold">Create Account</CardTitle>
-                    <CardDescription className="text-center">
-                        Sign up to get started with POS System
-                    </CardDescription>
+                    <CardDescription className="text-center">Sign up to get started with POS System</CardDescription>
                 </CardHeader>
                 <form onSubmit={handleRegister}>
                     <CardContent className="space-y-4">
@@ -81,7 +79,7 @@ export default function RegisterPage() {
                                 id="fullName"
                                 placeholder="John Doe"
                                 value={fullName}
-                                onChange={(e) => setFullName(e.target.value)}
+                                onChange={e => setFullName(e.target.value)}
                                 required
                                 disabled={loading}
                             />
@@ -93,7 +91,7 @@ export default function RegisterPage() {
                                 type="email"
                                 placeholder="name@example.com"
                                 value={email}
-                                onChange={(e) => setEmail(e.target.value)}
+                                onChange={e => setEmail(e.target.value)}
                                 required
                                 disabled={loading}
                             />
@@ -118,7 +116,7 @@ export default function RegisterPage() {
                                 type="password"
                                 placeholder="••••••••"
                                 value={password}
-                                onChange={(e) => setPassword(e.target.value)}
+                                onChange={e => setPassword(e.target.value)}
                                 required
                                 disabled={loading}
                             />
@@ -130,19 +128,14 @@ export default function RegisterPage() {
                                 type="password"
                                 placeholder="••••••••"
                                 value={confirmPassword}
-                                onChange={(e) => setConfirmPassword(e.target.value)}
+                                onChange={e => setConfirmPassword(e.target.value)}
                                 required
                                 disabled={loading}
                             />
                         </div>
                     </CardContent>
                     <CardFooter className="flex flex-col space-y-4">
-                        <Button
-                            type="submit"
-                            className="w-full"
-                            size="lg"
-                            disabled={loading}
-                        >
+                        <Button type="submit" className="w-full" size="lg" disabled={loading}>
                             {loading ? 'Creating account...' : 'Create Account'}
                         </Button>
                         <p className="text-sm text-center text-muted-foreground">

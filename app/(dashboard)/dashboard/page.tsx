@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -14,7 +14,7 @@ export default function DashboardPage() {
         monthlyRevenue: 0,
         todayOrders: 0,
         totalCustomers: 0,
-        lowStockCount: 0,
+        lowStockCount: 0
     })
     const [salesData, setSalesData] = useState<any[]>([])
     const [topProducts, setTopProducts] = useState<any[]>([])
@@ -114,12 +114,12 @@ export default function DashboardPage() {
                 monthlyRevenue,
                 todayOrders: todayOrdersCount,
                 totalCustomers: customerCount || 0,
-                lowStockCount: lowStock?.length || 0,
+                lowStockCount: lowStock?.length || 0
             })
 
             setSalesData(salesChartData)
             setTopProducts(topProductsData)
-            setLowStockItems(lowStock as any || [])
+            setLowStockItems((lowStock as any) || [])
         } catch (error) {
             console.error('Error fetching dashboard data:', error)
         } finally {
@@ -241,13 +241,14 @@ export default function DashboardPage() {
                 </CardHeader>
                 <CardContent>
                     {lowStockItems.length === 0 ? (
-                        <p className="text-sm text-muted-foreground text-center py-8">
-                            All items are well stocked! 🎉
-                        </p>
+                        <p className="text-sm text-muted-foreground text-center py-8">All items are well stocked! 🎉</p>
                     ) : (
                         <div className="space-y-3">
-                            {lowStockItems.map((item) => (
-                                <div key={item.id} className="flex items-center justify-between p-3 rounded-xl bg-muted">
+                            {lowStockItems.map(item => (
+                                <div
+                                    key={item.id}
+                                    className="flex items-center justify-between p-3 rounded-xl bg-muted"
+                                >
                                     <div className="flex items-center gap-3">
                                         <div className="p-2 rounded-lg bg-background">
                                             <Package className="h-4 w-4" />
@@ -258,10 +259,12 @@ export default function DashboardPage() {
                                         </div>
                                     </div>
                                     <div className="text-right">
-                                        <p className={cn(
-                                            "font-bold",
-                                            item.quantity < 5 ? "text-red-600" : "text-orange-600"
-                                        )}>
+                                        <p
+                                            className={cn(
+                                                'font-bold',
+                                                item.quantity < 5 ? 'text-red-600' : 'text-orange-600'
+                                            )}
+                                        >
                                             {item.quantity} left
                                         </p>
                                         <p className="text-xs text-muted-foreground">Min: {item.low_stock_threshold}</p>

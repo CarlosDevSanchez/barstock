@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,13 +25,14 @@ export default function InventoryPage() {
             .select('*, product: products(*)')
             .order('quantity', { ascending: true })
 
-        setInventory(data as any || [])
+        setInventory((data as any) || [])
         setLoading(false)
     }
 
-    const filteredInventory = inventory.filter(item =>
-        item.product?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.product?.sku.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredInventory = inventory.filter(
+        item =>
+            item.product?.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            item.product?.sku.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     const lowStockCount = inventory.filter(item => item.quantity < item.low_stock_threshold).length
@@ -74,7 +75,10 @@ export default function InventoryPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">
-                            ${inventory.reduce((sum, item) => sum + (item.quantity * (item.product?.cost_price || 0)), 0).toFixed(2)}
+                            $
+                            {inventory
+                                .reduce((sum, item) => sum + item.quantity * (item.product?.cost_price || 0), 0)
+                                .toFixed(2)}
                         </div>
                         <p className="text-xs text-muted-foreground">Total inventory value</p>
                     </CardContent>
@@ -88,7 +92,7 @@ export default function InventoryPage() {
                         <Input
                             placeholder="Search inventory..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
                     </div>
@@ -106,7 +110,7 @@ export default function InventoryPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredInventory.map((item) => {
+                        {filteredInventory.map(item => {
                             const isLowStock = item.quantity < item.low_stock_threshold
                             return (
                                 <TableRow key={item.id}>

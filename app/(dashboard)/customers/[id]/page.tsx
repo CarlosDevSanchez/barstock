@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -27,11 +27,7 @@ export default function CustomerDetailPage() {
 
     const fetchCustomerDetails = async (id: string) => {
         try {
-            const { data: customerData } = await supabase
-                .from('customers')
-                .select('*')
-                .eq('id', id)
-                .single()
+            const { data: customerData } = await supabase.from('customers').select('*').eq('id', id).single()
 
             const { data: ordersData } = await supabase
                 .from('orders')
@@ -168,7 +164,7 @@ export default function CustomerDetailPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {orders.map((order) => (
+                                {orders.map(order => (
                                     <TableRow
                                         key={order.id}
                                         className="cursor-pointer hover:bg-muted/50"
@@ -177,7 +173,15 @@ export default function CustomerDetailPage() {
                                         <TableCell className="font-mono">{order.order_number}</TableCell>
                                         <TableCell>{format(new Date(order.created_at), 'MMM dd, yyyy')}</TableCell>
                                         <TableCell>
-                                            <Badge variant={order.status === 'completed' ? 'default' : order.status === 'refunded' ? 'destructive' : 'secondary'}>
+                                            <Badge
+                                                variant={
+                                                    order.status === 'completed'
+                                                        ? 'default'
+                                                        : order.status === 'refunded'
+                                                          ? 'destructive'
+                                                          : 'secondary'
+                                                }
+                                            >
                                                 {order.status}
                                             </Badge>
                                         </TableCell>
@@ -188,7 +192,7 @@ export default function CustomerDetailPage() {
                                             <Button
                                                 size="sm"
                                                 variant="ghost"
-                                                onClick={(e) => {
+                                                onClick={e => {
                                                     e.stopPropagation()
                                                     router.push(`/orders/${order.id}`)
                                                 }}

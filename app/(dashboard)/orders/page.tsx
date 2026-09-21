@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
@@ -27,20 +27,25 @@ export default function OrdersPage() {
             .select('*, customer:customers(*)')
             .order('created_at', { ascending: false })
 
-        setOrders(data as any || [])
+        setOrders((data as any) || [])
     }
 
-    const filteredOrders = orders.filter(order =>
-        order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        order.customer?.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const filteredOrders = orders.filter(
+        order =>
+            order.order_number.toLowerCase().includes(searchQuery.toLowerCase()) ||
+            order.customer?.name.toLowerCase().includes(searchQuery.toLowerCase())
     )
 
     const getStatusColor = (status: string) => {
         switch (status) {
-            case 'completed': return 'default'
-            case 'pending': return 'secondary'
-            case 'refunded': return 'destructive'
-            default: return 'outline'
+            case 'completed':
+                return 'default'
+            case 'pending':
+                return 'secondary'
+            case 'refunded':
+                return 'destructive'
+            default:
+                return 'outline'
         }
     }
 
@@ -64,7 +69,7 @@ export default function OrdersPage() {
                         <Input
                             placeholder="Search orders..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
                     </div>
@@ -82,7 +87,7 @@ export default function OrdersPage() {
                         </TableRow>
                     </TableHeader>
                     <TableBody>
-                        {filteredOrders.map((order) => (
+                        {filteredOrders.map(order => (
                             <TableRow
                                 key={order.id}
                                 className="cursor-pointer hover:bg-muted/50"
@@ -93,16 +98,14 @@ export default function OrdersPage() {
                                 <TableCell>{format(new Date(order.created_at), 'MMM dd, yyyy HH:mm')}</TableCell>
                                 <TableCell className="font-bold text-emerald-600">${order.total.toFixed(2)}</TableCell>
                                 <TableCell>
-                                    <Badge variant={getStatusColor(order.status)}>
-                                        {order.status}
-                                    </Badge>
+                                    <Badge variant={getStatusColor(order.status)}>{order.status}</Badge>
                                 </TableCell>
                                 <TableCell className="text-right">
                                     <div className="flex justify-end gap-2">
                                         <Button
                                             size="sm"
                                             variant="ghost"
-                                            onClick={(e) => {
+                                            onClick={e => {
                                                 e.stopPropagation()
                                                 handleViewOrder(order.id)
                                             }}

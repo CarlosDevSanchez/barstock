@@ -1,4 +1,4 @@
-"use client"
+'use client'
 
 import { useEffect, useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
@@ -40,7 +40,7 @@ export default function OrderDetailPage() {
                 .eq('order_id', id)
 
             setOrder(orderData as any)
-            setOrderItems(itemsData as any || [])
+            setOrderItems((itemsData as any) || [])
         } catch (error: any) {
             toast.error('Failed to load order details')
             console.error(error)
@@ -55,10 +55,7 @@ export default function OrderDetailPage() {
         if (!confirm('Are you sure you want to refund this order?')) return
 
         try {
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: 'refunded' })
-                .eq('id', order.id)
+            const { error } = await supabase.from('orders').update({ status: 'refunded' }).eq('id', order.id)
 
             if (error) throw error
 
@@ -151,7 +148,15 @@ export default function OrderDetailPage() {
                         </div>
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Status:</span>
-                            <Badge variant={order.status === 'completed' ? 'default' : order.status === 'refunded' ? 'destructive' : 'secondary'}>
+                            <Badge
+                                variant={
+                                    order.status === 'completed'
+                                        ? 'default'
+                                        : order.status === 'refunded'
+                                          ? 'destructive'
+                                          : 'secondary'
+                                }
+                            >
                                 {order.status}
                             </Badge>
                         </div>
@@ -209,7 +214,7 @@ export default function OrderDetailPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {orderItems.map((item) => (
+                            {orderItems.map(item => (
                                 <TableRow key={item.id}>
                                     <TableCell className="font-medium">{item.product?.name || 'Unknown'}</TableCell>
                                     <TableCell>{item.variant?.name || '-'}</TableCell>
