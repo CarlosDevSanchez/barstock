@@ -1,200 +1,32 @@
-// Database types
-export type UserRole = 'admin' | 'manager' | 'cashier'
-export type PaymentMethod = 'cash' | 'card' | 'ewallet'
-export type OrderStatus = 'draft' | 'pending' | 'completed' | 'refunded'
-export type POStatus = 'draft' | 'pending' | 'received' | 'cancelled'
+// Application types derived from the generated database types (`bun run db:types` -> types/database.ts).
+// Never hand-write a table shape here: regenerate instead. Only relations and API-level shapes are added.
+import type { Enums, Tables } from './database'
 
-export interface Profile {
-    id: string
-    email: string
-    full_name: string | null
-    role: UserRole
-    avatar_url: string | null
-    phone: string | null
-    created_at: string
-    updated_at: string
-}
+export type { Json } from './database'
 
-export interface Category {
-    id: string
-    name: string
-    description: string | null
-    parent_id: string | null
-    created_at: string
-    updated_at: string
-}
+export type UserRole = Enums<'user_role'>
+export type PaymentMethod = Enums<'payment_method'>
+export type OrderStatus = Enums<'order_status'>
+export type POStatus = Enums<'po_status'>
 
-export interface Product {
-    id: string
-    name: string
-    description: string | null
-    sku: string
-    barcode: string | null
-    category_id: string | null
-    cost_price: number
-    selling_price: number
-    tax_rate: number
-    image_url: string | null
-    is_active: boolean
-    created_at: string
-    updated_at: string
-    category?: Category
-}
-
-export interface ProductVariant {
-    id: string
-    product_id: string
-    name: string
-    variant_type: string
-    sku: string
-    barcode: string | null
-    cost_price: number | null
-    selling_price: number | null
-    created_at: string
-}
-
-export interface Inventory {
-    id: string
-    product_id: string
-    variant_id: string | null
-    quantity: number
-    low_stock_threshold: number
-    location: string | null
-    last_restocked_at: string | null
-    created_at: string
-    updated_at: string
-    product?: Product
-    variant?: ProductVariant
-}
-
-export interface InventoryTransaction {
-    id: string
-    inventory_id: string
+export type Profile = Tables<'profiles'>
+export type Category = Tables<'categories'>
+export type Product = Tables<'products'> & { category?: Category }
+export type ProductVariant = Tables<'product_variants'>
+export type Inventory = Tables<'inventory'> & { product?: Product; variant?: ProductVariant }
+// `transaction_type` is TEXT + CHECK in the database, so the generated type is `string`.
+export type InventoryTransaction = Omit<Tables<'inventory_transactions'>, 'transaction_type'> & {
     transaction_type: 'purchase' | 'sale' | 'adjustment' | 'return'
-    quantity: number
-    reference_id: string | null
-    notes: string | null
-    created_by: string | null
-    created_at: string
 }
-
-export interface Supplier {
-    id: string
-    name: string
-    contact_person: string | null
-    email: string | null
-    phone: string | null
-    address: string | null
-    notes: string | null
-    is_active: boolean
-    created_at: string
-    updated_at: string
-}
-
-export interface PurchaseOrder {
-    id: string
-    po_number: string
-    supplier_id: string | null
-    status: POStatus
-    total_amount: number
-    notes: string | null
-    ordered_by: string | null
-    received_by: string | null
-    ordered_at: string | null
-    received_at: string | null
-    created_at: string
-    updated_at: string
-    supplier?: Supplier
-    items?: PurchaseOrderItem[]
-}
-
-export interface PurchaseOrderItem {
-    id: string
-    purchase_order_id: string
-    product_id: string | null
-    variant_id: string | null
-    quantity: number
-    unit_price: number
-    total: number
-    created_at: string
-    product?: Product
-    variant?: ProductVariant
-}
-
-export interface Customer {
-    id: string
-    name: string
-    email: string | null
-    phone: string | null
-    address: string | null
-    loyalty_points: number
-    total_spent: number
-    is_active: boolean
-    created_at: string
-    updated_at: string
-}
-
-export interface Order {
-    id: string
-    order_number: string
-    customer_id: string | null
-    status: OrderStatus
-    subtotal: number
-    discount: number
-    tax: number
-    total: number
-    notes: string | null
-    created_by: string | null
-    created_at: string
-    updated_at: string
-    customer?: Customer
-    items?: OrderItem[]
-    payments?: Payment[]
-}
-
-export interface OrderItem {
-    id: string
-    order_id: string
-    product_id: string | null
-    variant_id: string | null
-    quantity: number
-    unit_price: number
-    discount: number
-    tax: number
-    total: number
-    created_at: string
-    product?: Product
-    variant?: ProductVariant
-}
-
-export interface Payment {
-    id: string
-    order_id: string
-    payment_method: PaymentMethod
-    amount: number
-    reference_number: string | null
-    notes: string | null
-    created_at: string
-}
-
-export interface Expense {
-    id: string
-    category: string
-    description: string
-    amount: number
-    date: string
-    created_by: string | null
-    created_at: string
-    updated_at: string
-}
-
-export interface Settings {
-    id: string
-    key: string
-    value: any
-    created_at: string
-    updated_at: string
-}
+export type Supplier = Tables<'suppliers'>
+export type PurchaseOrder = Tables<'purchase_orders'> & { supplier?: Supplier; items?: PurchaseOrderItem[] }
+export type PurchaseOrderItem = Tables<'purchase_order_items'> & { product?: Product; variant?: ProductVariant }
+export type Customer = Tables<'customers'>
+export type Order = Tables<'orders'> & { customer?: Customer; items?: OrderItem[]; payments?: Payment[] }
+export type OrderItem = Tables<'order_items'> & { product?: Product; variant?: ProductVariant }
+export type Payment = Tables<'payments'>
+export type Expense = Tables<'expenses'>
+export type Settings = Tables<'settings'>
 
 // Cart item for POS
 export interface CartItem {

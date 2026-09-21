@@ -13,3 +13,4 @@ docs
 components/ui
 lib/utils.ts
 bunfig.toml
+types/database.ts

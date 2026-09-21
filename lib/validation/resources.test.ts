@@ -1,5 +1,7 @@
 import { describe, expect, test } from 'bun:test'
+import { Constants } from '@/types/database'
 import {
+    PAYMENT_METHODS,
     customerCreateSchema,
     inventoryAdjustSchema,
     inviteUserSchema,
@@ -126,5 +128,11 @@ describe('settings', () => {
     })
     test('PATCH keeps only the sent keys', () => {
         expect(settingsUpdateSchema.parse({ store_name: 'Shop' })).toEqual({ store_name: 'Shop' })
+    })
+})
+
+describe('enums stay in sync with the database', () => {
+    test('payment_method', () => {
+        expect([...PAYMENT_METHODS]).toEqual([...Constants.public.Enums.payment_method])
     })
 })

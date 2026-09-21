@@ -44,6 +44,7 @@ const eslintConfig = defineConfig([
         'playwright-report/**',
         'test-results/**',
         'supabase/legacy/**',
+        'types/database.ts',
         '.code-review-graph/**',
         'next-env.d.ts'
     ])
