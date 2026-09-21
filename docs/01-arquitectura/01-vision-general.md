@@ -84,7 +84,7 @@ No hay verificación en el servidor ni por rol. Detalle en [autenticación](03-a
 
 - Sin transacciones: las operaciones multi-tabla no son atómicas ([C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md)).
 - Sin validación de entrada ([H2](../04-auditoria/hallazgos/H2-sin-validacion.md)).
-- Sin tests, CI, monitoreo ni migraciones versionadas ([medios y bajos](../04-auditoria/hallazgos/medios-y-bajos.md)).
+- Sin monitoreo. *(Estado anterior: tampoco había tests, CI ni migraciones versionadas; desde la etapa 1 existen: ver [testing](../05-guias/testing.md) y [tooling](07-configuracion-y-tooling.md).)*
 - Sin paginación: cada lista descarga toda la tabla.
 
 Para la dirección propuesta, ver [`06-roadmap/`](../06-roadmap/plan-de-remediacion.md).

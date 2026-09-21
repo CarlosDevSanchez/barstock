@@ -67,7 +67,7 @@ Borrador en [`diseno-objetivo-seguridad.md`](../../06-roadmap/diseno-objetivo-se
 - [ ] El precio cobrado es el de la BD, aunque el cliente envíe otro.
 - [ ] Reembolsar dos veces la misma orden repone el stock **una** vez y devuelve error la segunda.
 - [ ] Un `cashier` no puede insertar en `orders`/`payments` por API directa.
-- [ ] Pruebas automatizadas de los casos anteriores en CI.
+- [x] Pruebas automatizadas de los casos anteriores en CI (`rpc.test.ts` y e2e).
 
 ## Dependencias
 

@@ -24,7 +24,8 @@ export default defineConfig({
     projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
     webServer: {
         // Production build: it is what gets deployed, and it exercises the real CSP and headers.
-        command: 'bun run build && bun run start',
+        // CI builds in its own step (with the build logged and timed); locally build and start in one go.
+        command: process.env.CI ? 'bun run start' : 'bun run build && bun run start',
         url: 'http://localhost:3000/login',
         reuseExistingServer: !process.env.CI,
         timeout: 240_000,

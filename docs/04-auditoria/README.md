@@ -54,12 +54,12 @@ Para poder ejecutar las herramientas se instaló `node_modules` con `npm ci` (ig
 |---|---|---|---|---|---|
 | [C1](hallazgos/C1-rls-permisivo.md) | Crítico | Seguridad | RLS permite todo a cualquier autenticado; escalada de rol; registro abierto | M | Verificado |
 | [C2](hallazgos/C2-checkout-no-atomico.md) | Crítico | Lógica de negocio | Checkout/reembolso no atómicos; stock probablemente sin descontar; totales del cliente | M | Verificado |
-| [C3](hallazgos/C3-dependencias-vulnerables.md) | Crítico | Dependencias | Next.js 16.1.6 y transitivas vulnerables | S | En curso |
+| [C3](hallazgos/C3-dependencias-vulnerables.md) | Crítico | Dependencias | Next.js 16.1.6 y transitivas vulnerables | S | Corregido |
 | [H1](hallazgos/H1-sin-proteccion-servidor.md) | Alto | Seguridad | Sin protección de rutas en servidor; sesión en `localStorage` | M | Verificado |
 | [H2](hallazgos/H2-sin-validacion.md) | Alto | Seguridad/Calidad | Cero validación de entrada; zod instalado sin uso | M | Verificado |
 | [H3](hallazgos/H3-impuestos-y-dinero.md) | Alto | Lógica de negocio | Impuestos inconsistentes; float; `DECIMAL(5,2)` | M | En curso |
 | [H4](hallazgos/H4-flujos-incompletos.md) | Alto | Funcional | Recuperar contraseña roto; ajustes falsos; sin alta de stock; compras/gastos sin UI | M | En curso |
-| [H5](hallazgos/H5-build-sin-env.md) | Alto | DevOps | El build falla sin variables de entorno | S | En curso |
+| [H5](hallazgos/H5-build-sin-env.md) | Alto | DevOps | El build falla sin variables de entorno | S | Corregido |
 | [M1–M18](hallazgos/medios-y-bajos.md) | Medio/Bajo | Varias | 18 hallazgos menores | S–L | Abierto |
 
 Convención de estado: **Abierto → En curso → Corregido → Verificado**. Al cerrar un hallazgo, actualizar

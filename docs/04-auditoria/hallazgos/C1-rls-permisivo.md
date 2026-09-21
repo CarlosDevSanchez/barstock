@@ -65,7 +65,7 @@ Borrador: [`diseno-objetivo-seguridad.md`](../../06-roadmap/diseno-objetivo-segu
 - [ ] Un `manager` no puede modificar `settings` ni roles.
 - [ ] Solo un `admin` puede cambiar roles.
 - [ ] El registro público está cerrado (o requiere aprobación) y no hay selector de rol.
-- [ ] Existen tests automatizados de políticas por rol ejecutados en CI.
+- [x] Existen tests automatizados de políticas por rol ejecutados en CI (`rls.test.ts`, paso `test:coverage`).
 - [ ] `fix_rls_policies.sql` queda archivado como histórico y **no** forma parte del setup.
 
 ## Dependencias

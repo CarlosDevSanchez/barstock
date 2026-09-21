@@ -83,10 +83,10 @@ Objetivo: cerrar C1 y C2 en la base de datos.
 - [ ] Paginación por rango y búsqueda en servidor ([M5](../04-auditoria/hallazgos/medios-y-bajos.md)).
 - [ ] `lib/data/*` y tipos generados (`supabase gen types`) → eliminar `any` ([M7, M10](../04-auditoria/hallazgos/medios-y-bajos.md)).
 - [ ] **Tests:** Vitest (esquemas, cálculos), pruebas de RPC, Playwright del flujo de venta y reembolso ([M13](../04-auditoria/hallazgos/medios-y-bajos.md)).
-- [ ] **CI (GitHub Actions):** `npm ci`, `lint`, `tsc`, `audit`, `build`, tests.
+- [x] **CI (GitHub Actions):** `.github/workflows/ci.yml` (frozen install, format, lint, typecheck, audit, tests con cobertura, build, e2e). Falta la primera ejecución real y la regla de rama protegida.
 - [ ] **Headers de seguridad** en `next.config.ts` ([M9](../04-auditoria/hallazgos/medios-y-bajos.md)).
 - [ ] **Sentry** (o equivalente) y logs estructurados; alertas de errores del checkout.
-- [ ] Dependabot/Renovate.
+- [x] Dependabot (`.github/dependabot.yml`).
 
 **Aceptación:** CI verde y obligatorio; cobertura ≥ 80 % en lógica de negocio crítica; dashboard en 1–2 consultas.
 

@@ -1,6 +1,6 @@
 # Pruebas
 
-> Etapa 1, Paso 6. Confianza: **[Verificado]** (se ejecutan en local; la ejecución en CI llega en el Paso 7).
+> Etapa 1, Pasos 6 y 7. Confianza: **[Verificado]** en local. El CI ejecuta todo esto en cada PR ([workflow](../01-arquitectura/07-configuracion-y-tooling.md#ci-y-actualizaciones-etapa-1-paso-7)); su primera ejecución real en GitHub está pendiente.
 
 ## Qué hay y qué demuestra cada nivel
 
@@ -27,6 +27,14 @@ bun run test:coverage            # unit + integration con cobertura y umbral
 ```
 
 `bun run check` = typecheck → lint → test → build.
+
+## En CI
+
+`.github/workflows/ci.yml` ejecuta, en este orden, lo que aquí se describe: `test:coverage` (unitarias + integración con el umbral), `test:components`, `build` y
+`test:e2e`, contra un Supabase local efímero levantado en el propio job. Para reproducirlo en local sin `.env.local` (que enmascararía variables que falten):
+mover `.env.local`, `supabase stop --no-backup && supabase start -x studio,realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta`,
+exportar `NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY` y `MAILPIT_URL` desde `supabase status -o env`, y lanzar los pasos.
+Con `CI=true`, Playwright no reutiliza un servidor existente y arranca `bun run start` (el build es un paso anterior).
 
 ## Reglas de seguridad de las pruebas
 

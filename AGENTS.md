@@ -31,7 +31,7 @@ bun run dev                             # http://localhost:3000
 bun run typecheck                       # tsc --noEmit (hoy limpio)
 bun run lint                            # limpio (0 errores, 0 warnings)
 bun run format:check                    # Prettier (el reformateo del repo va en un commit aparte)
-bun audit --audit-level=high            # limpio (C3 en curso: falta CI)
+bun audit --audit-level=high            # limpio; el CI (.github/workflows/ci.yml) ejecuta todo esto en cada PR
 bun run build                           # requiere las 4 variables de .env.example; si falta alguna, el error la nombra
 bun run db:start                        # Supabase local (Docker): migraciones + seed; luego `bun run db:types`
 bun run test                            # unit + components + integración (necesita db:start); `test:e2e` para Playwright

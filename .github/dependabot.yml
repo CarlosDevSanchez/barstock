@@ -1,0 +1,45 @@
+version: 2
+
+# Every dependency is pinned to an exact version (bunfig.toml), so updates only ever arrive as reviewed pull requests, which the
+# CI workflow checks. Related packages move together so they are tested together.
+updates:
+    - package-ecosystem: bun
+      directory: /
+      schedule:
+          interval: weekly
+          day: monday
+      open-pull-requests-limit: 5
+      groups:
+          next-react:
+              patterns: [next, eslint-config-next, react, react-dom, '@types/react', '@types/react-dom']
+          radix:
+              patterns: ['@radix-ui/*']
+          tailwind:
+              patterns: [tailwindcss, '@tailwindcss/*', tw-animate-css, tailwind-merge]
+          supabase:
+              patterns: ['@supabase/*']
+          forms-and-validation:
+              patterns: [zod, react-hook-form, '@hookform/*']
+          testing:
+              patterns: ['@playwright/*', '@testing-library/*', '@happy-dom/*', '@types/bun']
+          lint-and-format:
+              patterns: [eslint, typescript-eslint, prettier]
+      ignore:
+          # Major jumps that need their own evaluation (see docs/04-auditoria/dependencias-npm-audit.md).
+          - dependency-name: typescript
+            update-types: ['version-update:semver-major']
+          - dependency-name: eslint
+            update-types: ['version-update:semver-major']
+          - dependency-name: lucide-react
+            update-types: ['version-update:semver-major']
+          - dependency-name: '@types/node'
+            update-types: ['version-update:semver-major']
+
+    - package-ecosystem: github-actions
+      directory: /
+      schedule:
+          interval: weekly
+          day: monday
+      groups:
+          actions:
+              patterns: ['*']

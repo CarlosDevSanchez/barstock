@@ -5,7 +5,7 @@
 | **Severidad** | Alto (DevOps / DX) |
 | **Área** | Configuración y despliegue |
 | **Esfuerzo** | Pequeño |
-| **Estado** | En curso (validación con zod y `.env.example` hechos; falta CI) |
+| **Estado** | Corregido (validación con zod, `.env.example` y build en CI; definido en `.github/workflows/ci.yml` y emulado entero en local; falta la primera ejecución real en GitHub) |
 | **Confianza** | **[Verificado]** ejecutando `next build` |
 
 ## Hallazgo
@@ -52,7 +52,7 @@ Builds de CI/CD rotos hasta configurar secretos, mensajes de error poco útiles,
 
 ## Criterios de aceptación
 
-- [ ] `bun run build` con variables definidas termina correctamente en CI. (Local ✅; el CI llega en el Paso 7.)
+- [x] `bun run build` con variables definidas termina correctamente en CI (paso `Build` de `ci.yml`, con las variables del Supabase local; definido en `.github/workflows/ci.yml` y emulado entero en local; falta la primera ejecución real en GitHub).
 - [x] Sin variables, el error indica cuál falta (`EnvError` desde `next.config.ts`; probado en `lib/env/schema.test.ts`).
 - [ ] `.env.example` está versionado (✅) y el README lo referencia correctamente (pendiente: se reescribe en el Paso 8).
 - [x] La versión de Node está declarada (`engines`, `.nvmrc`).

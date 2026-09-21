@@ -5,7 +5,7 @@
 | **Severidad** | Crítico (según `npm audit`); aplicabilidad real **Media** |
 | **Área** | Seguridad — cadena de suministro |
 | **Esfuerzo** | Pequeño |
-| **Estado** | En curso (Next 16.3.5 aplicado, `bun audit` limpio; falta la auditoría en CI y `lint`) |
+| **Estado** | Corregido (Next 16.3.5, `bun audit` limpio, auditoría y Dependabot en CI; definido en `.github/workflows/ci.yml` y emulado entero en local; falta la primera ejecución real en GitHub) |
 | **Confianza** | **[Verificado]** con `npm audit` sobre `package-lock.json` (2026-09-21) |
 
 ## Impacto
@@ -52,5 +52,5 @@ Además:
 
 - [x] `bun audit --audit-level=high` sin hallazgos (548 paquetes; etapa 1, Paso 2).
 - [x] `next` ≥ 16.3.5 en `package.json` y `bun.lock` (`next@16.3.5`, `react@19.3.0`, resto de minors al día).
-- [ ] CI ejecuta la auditoría en cada PR.
-- [ ] La aplicación pasa `lint`, `tsc` y `build` tras la actualización. (`tsc` y `build` ✅; `lint` sigue fallando por errores de las páginas cliente, ver [lint](../lint-y-tipos.md).)
+- [x] CI ejecuta la auditoría en cada PR (`bun audit --audit-level=high`; Dependabot semanal para `bun` y Actions).
+- [x] La aplicación pasa `lint`, `tsc` y `build` tras la actualización.
