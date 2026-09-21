@@ -1,108 +1,84 @@
 import { create } from 'zustand'
 import { persist } from 'zustand/middleware'
-import type { CartItem, Product, ProductVariant } from '@/types'
+
+/** The cart holds only WHAT is being bought. Prices, taxes and stock are looked up live; the server computes the totals. */
+export interface CartLine {
+    productId: string
+    quantity: number
+    discount: number
+}
 
 interface CartStore {
-    items: CartItem[]
+    items: CartLine[]
+    /** Order-level discount, applied after tax. */
     discount: number
-    taxRate: number
 
-    // Actions
-    addItem: (product: Product, variant?: ProductVariant, quantity?: number) => void
-    removeItem: (productId: string, variantId?: string) => void
-    updateQuantity: (productId: string, variantId: string | undefined, quantity: number) => void
-    updateItemDiscount: (productId: string, variantId: string | undefined, discount: number) => void
+    addItem: (productId: string, quantity?: number) => void
+    removeItem: (productId: string) => void
+    updateQuantity: (productId: string, quantity: number) => void
+    updateItemDiscount: (productId: string, discount: number) => void
     setGlobalDiscount: (discount: number) => void
-    setTaxRate: (rate: number) => void
     clearCart: () => void
-
-    // Computed
-    getSubtotal: () => number
-    getTax: () => number
-    getTotal: () => number
 }
+
+const MAX_QUANTITY = 100_000
 
 export const useCartStore = create<CartStore>()(
     persist(
-        (set, get) => ({
+        set => ({
             items: [],
             discount: 0,
-            taxRate: 0.1,
 
-            addItem: (product, variant, quantity = 1) => {
-                const state = get()
-                const existingIndex = state.items.findIndex(
-                    item => item.product.id === product.id && item.variant?.id === variant?.id
-                )
+            addItem: (productId, quantity = 1) =>
+                set(state => {
+                    const existing = state.items.find(item => item.productId === productId)
+                    if (existing) {
+                        return {
+                            items: state.items.map(item =>
+                                item.productId === productId
+                                    ? { ...item, quantity: Math.min(item.quantity + quantity, MAX_QUANTITY) }
+                                    : item
+                            )
+                        }
+                    }
+                    return {
+                        items: [...state.items, { productId, quantity: Math.min(quantity, MAX_QUANTITY), discount: 0 }]
+                    }
+                }),
 
-                if (existingIndex >= 0) {
-                    const newItems = state.items.map((item, index) =>
-                        index === existingIndex ? { ...item, quantity: item.quantity + quantity } : item
-                    )
-                    set({ items: newItems })
-                } else {
-                    set({
-                        items: [...state.items, { product, variant, quantity, discount: 0 }]
-                    })
-                }
-            },
+            removeItem: productId =>
+                set(state => ({ items: state.items.filter(item => item.productId !== productId) })),
 
-            removeItem: (productId, variantId) => {
+            // A quantity of 0 (or less) removes the line.
+            updateQuantity: (productId, quantity) =>
                 set(state => ({
-                    items: state.items.filter(
-                        item => !(item.product.id === productId && item.variant?.id === variantId)
-                    )
-                }))
-            },
+                    items:
+                        quantity <= 0
+                            ? state.items.filter(item => item.productId !== productId)
+                            : state.items.map(item =>
+                                  item.productId === productId
+                                      ? { ...item, quantity: Math.min(quantity, MAX_QUANTITY) }
+                                      : item
+                              )
+                })),
 
-            updateQuantity: (productId, variantId, quantity) => {
-                set(state => ({
-                    items: state.items.map(item =>
-                        item.product.id === productId && item.variant?.id === variantId
-                            ? { ...item, quantity: Math.max(0, quantity) }
-                            : item
-                    )
-                }))
-            },
-
-            updateItemDiscount: (productId, variantId, discount) => {
+            updateItemDiscount: (productId, discount) =>
                 set(state => ({
                     items: state.items.map(item =>
-                        item.product.id === productId && item.variant?.id === variantId ? { ...item, discount } : item
+                        item.productId === productId ? { ...item, discount: Math.max(0, discount) } : item
                     )
-                }))
-            },
+                })),
 
-            setGlobalDiscount: discount => set({ discount }),
+            setGlobalDiscount: discount => set({ discount: Math.max(0, discount) }),
 
-            setTaxRate: rate => set({ taxRate: rate }),
-
-            clearCart: () => set({ items: [], discount: 0 }),
-
-            getSubtotal: () => {
-                const state = get()
-                return state.items.reduce((sum, item) => {
-                    const price = item.variant?.selling_price ?? item.product.selling_price
-                    return sum + (price * item.quantity - item.discount)
-                }, 0)
-            },
-
-            getTax: () => {
-                const state = get()
-                const subtotal = state.getSubtotal()
-                const afterDiscount = subtotal - state.discount
-                return afterDiscount * state.taxRate
-            },
-
-            getTotal: () => {
-                const state = get()
-                const subtotal = state.getSubtotal()
-                const tax = state.getTax()
-                return subtotal - state.discount + tax
-            }
+            clearCart: () => set({ items: [], discount: 0 })
         }),
         {
-            name: 'pos-cart'
+            name: 'pos-cart',
+            // v1 persisted whole Product objects (stale prices): discard it instead of migrating it.
+            version: 2,
+            migrate: () => ({ items: [], discount: 0 }),
+            partialize: state => ({ items: state.items, discount: state.discount })
         }
     )
 )
