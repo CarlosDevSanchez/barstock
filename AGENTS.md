@@ -34,6 +34,8 @@ bun run format:check                    # Prettier (el reformateo del repo va en
 bun audit --audit-level=high            # limpio (C3 en curso: falta CI)
 bun run build                           # requiere las 4 variables de .env.example; si falta alguna, el error la nombra
 bun run db:start                        # Supabase local (Docker): migraciones + seed; luego `bun run db:types`
+bun run test                            # unit + components + integración (necesita db:start); `test:e2e` para Playwright
+bun run test:coverage                   # ≥ 80 % en lib/server y lib/validation
 ```
 
 Trampas: `npx tsc` sin instalar descarga un paquete falso; **todas** las dependencias están a versión exacta (actualizar con `bun add next@x`);
@@ -140,7 +142,7 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 - [ ] `bun run typecheck` sin errores y `bun run lint` **sin errores ni warnings**.
 - [ ] `bun run build` con variables definidas.
 - [ ] Sin `any` nuevos, sin `.eq(col, null)`, sin cadenas vacías hacia columnas opcionales.
-- [ ] Si toca datos/dinero: la lógica está en una RPC/servidor y tiene prueba; si toca esquema: migración probada en staging.
+- [ ] Si toca datos/dinero: la lógica está en una RPC/servidor y tiene prueba (concurrencia incluida, [testing](docs/05-guias/testing.md)); si toca esquema: migración probada en staging y prueba de RLS.
 - [ ] Documentación actualizada en el mismo cambio (ver §11).
 - [ ] Ningún secreto ni `.env` en el diff.
 

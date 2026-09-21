@@ -5,7 +5,7 @@
 | **Severidad** | Alto |
 | **Área** | Seguridad / calidad de datos |
 | **Esfuerzo** | Medio |
-| **Estado** | Corregido (esquemas zod compartidos cliente/servidor + `CHECK`/`NOT NULL` en la BD). Pendiente de **Verificado**: pruebas del Paso 6 |
+| **Estado** | **Verificado** (`resources.test.ts`, `common.test.ts`, formulario de producto y `rls.test.ts` para los `CHECK`/`NOT NULL`) |
 | **Confianza** | **[Verificado]** |
 
 ## Hallazgo

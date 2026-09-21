@@ -5,7 +5,7 @@
 | **Severidad** | Crítico |
 | **Área** | Seguridad — autenticación y autorización |
 | **Esfuerzo** | Medio |
-| **Estado** | Corregido (RLS por rol, alta por invitación, rol protegido por trigger, verificados en BD y API). Pendiente de **Verificado**: pruebas automáticas de RLS (Paso 6) |
+| **Estado** | **Verificado** (`test/integration/rls.test.ts`, `auth.test.ts` y `proxy.test.ts`: escalada de rol, escrituras directas, matriz de roles, alta cerrada, usuario inactivo; comprobado rompiendo cada protección a propósito). Pendiente: aplicarlo a la BD real (paso controlado) |
 | **Confianza** | Análisis del SQL **[Verificado]**; estado real de la base y configuración de Auth **[Por verificar]** |
 
 ## Impacto

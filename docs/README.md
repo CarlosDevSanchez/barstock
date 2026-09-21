@@ -73,7 +73,8 @@ Las referencias `archivo:línea` apuntan al commit base; si el código cambia, l
 |---|---|
 | [setup-local.md](05-guias/setup-local.md) | Puesta en marcha correcta de cero |
 | [variables-de-entorno.md](05-guias/variables-de-entorno.md) | Variables requeridas y cómo validarlas |
-| [comandos.md](05-guias/comandos.md) | Scripts npm y comandos de verificación |
+| [comandos.md](05-guias/comandos.md) | Scripts y comandos de verificación |
+| [testing.md](05-guias/testing.md) | Niveles de prueba, cómo ejecutarlas, seguridad de las pruebas y concurrencia |
 | [convenciones-de-codigo.md](05-guias/convenciones-de-codigo.md) | Estilo observado y reglas para código nuevo |
 | [verificar-checkout.md](05-guias/verificar-checkout.md) | Prueba manual del descuento de stock (hallazgo C2) |
 

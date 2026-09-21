@@ -20,6 +20,14 @@ const profileSchema = z.object({ role: z.enum(USER_ROLES), is_active: z.boolean(
 
 const matches = (pathname: string, prefix: string) => pathname === prefix || pathname.startsWith(`${prefix}/`)
 
+type ProxySupabase = ReturnType<typeof createServerClient>
+
+async function loadProfile(supabase: ProxySupabase, userId: string) {
+    const { data } = await supabase.from('profiles').select('role, is_active').eq('id', userId).maybeSingle()
+    const profile = profileSchema.safeParse(data)
+    return profile.success && profile.data.is_active ? profile.data : null
+}
+
 export async function proxy(request: NextRequest) {
     let response = NextResponse.next({ request })
 
@@ -66,14 +74,19 @@ export async function proxy(request: NextRequest) {
         return redirectTo('/login', pathname === '/' ? undefined : { next: pathname + request.nextUrl.search })
     }
 
-    if (isPublicPage && !SIGNED_IN_ALLOWED.some(page => matches(pathname, page))) return redirectTo('/dashboard')
+    if (isPublicPage && !SIGNED_IN_ALLOWED.some(page => matches(pathname, page))) {
+        // A valid session is not enough: a disabled account (or one without a profile) would bounce between /login (here) and the
+        // dashboard layout (which sends it back to /login) forever. Such a session is ended instead.
+        if (await loadProfile(supabase, user.id)) return redirectTo('/dashboard')
+        await supabase.auth.signOut() // clears the session cookies onto `response`
+        return response
+    }
 
     const guard = PAGE_ROLE_GUARDS.find(({ prefix }) => matches(pathname, prefix))
     if (guard && !isApi) {
-        const { data } = await supabase.from('profiles').select('role, is_active').eq('id', user.id).maybeSingle()
-        const profile = profileSchema.safeParse(data)
-        if (!profile.success || !profile.data.is_active) return redirectTo('/login')
-        if (!roleAtLeast(profile.data.role, guard.minimum)) return redirectTo('/dashboard')
+        const profile = await loadProfile(supabase, user.id)
+        if (!profile) return redirectTo('/login')
+        if (!roleAtLeast(profile.role, guard.minimum)) return redirectTo('/dashboard')
     }
 
     return response

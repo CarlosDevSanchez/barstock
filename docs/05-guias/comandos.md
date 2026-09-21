@@ -13,7 +13,8 @@
 | `bun run lint` | ESLint (`--max-warnings 0`) | ❌ errores existentes en las páginas cliente, que se eliminan con el refactor a API ([lint](../04-auditoria/lint-y-tipos.md)) |
 | `bun run typecheck` | `tsc --noEmit` con `strict` + `noUncheckedIndexedAccess` | ✅ |
 | `bun run format` / `format:check` | Prettier (4 espacios, sin `;`, comillas simples) | — |
-| `bun run test` · `test:unit` · `test:integration` · `test:e2e` | Tests (`bun test`, Playwright para e2e) | ✅ unitarios de `lib/env`; el resto llega en el Paso 6 |
+| `bun run test` | unit + components + integration | ✅ (integración necesita `db:start`) |
+| `bun run test:unit` · `test:components` · `test:integration` · `test:e2e` · `test:coverage` | Cada nivel por separado; ver [testing](testing.md) | ✅ |
 | `bun run audit` | `bun audit` | ✅ limpio tras Next 16.3.5 ([C3](../04-auditoria/hallazgos/C3-dependencias-vulnerables.md)) |
 | `bun run db:start` · `db:reset` · `db:types` | Supabase CLI local | — (requiere Docker y Supabase CLI) |
 | `bun run check` | typecheck → lint → test → build | — |

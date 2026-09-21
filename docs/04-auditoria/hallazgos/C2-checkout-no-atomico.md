@@ -5,7 +5,7 @@
 | **Severidad** | Crítico |
 | **Área** | Lógica de negocio / integridad de datos |
 | **Esfuerzo** | Medio |
-| **Estado** | Corregido (el POS usa `POST /sales`; `create_sale`/`refund_order` transaccionales, verificados en BD y en navegador). Pendiente de **Verificado**: test de concurrencia (Paso 6) |
+| **Estado** | **Verificado** (`rpc.test.ts`: rollback total ante error, precio y totales de la BD, dos ventas de la última unidad → una sola pasa, ráfaga de 25 ventas sobre 7 unidades vende exactamente 7, sin deadlocks, reembolsos simultáneos idempotentes; e2e `sale-and-refund`). Pendiente: aplicarlo a la BD real |
 | **Confianza** | Defectos de código **[Verificado]**; efecto real sobre el stock **[Por verificar]** con [`verificar-checkout.md`](../../05-guias/verificar-checkout.md) |
 
 ## Impacto

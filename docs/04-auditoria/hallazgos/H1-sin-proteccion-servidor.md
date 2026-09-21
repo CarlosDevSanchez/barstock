@@ -5,7 +5,7 @@
 | **Severidad** | Alto |
 | **Área** | Seguridad — autenticación |
 | **Esfuerzo** | Medio |
-| **Estado** | Corregido (`proxy.ts` + `route()` + RLS; sesión en cookies con `@supabase/ssr`). Pendiente de **Verificado**: pruebas automáticas del Paso 6 |
+| **Estado** | **Verificado** (`proxy.test.ts` y los tests de handlers por rol; e2e de redirecciones y de escalada desde la consola). El bucle de redirecciones con usuarios desactivados se encontró y corrigió con estas pruebas |
 | **Confianza** | **[Verificado]** en código |
 
 ## Hallazgo
