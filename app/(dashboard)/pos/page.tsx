@@ -92,7 +92,16 @@ export default function POSPage() {
     }, [catalog.data, cartProducts.data])
 
     const lines = items.map(item => ({ item, product: products.get(item.productId) }))
-    const hasUnavailable = lines.some(({ product }) => !product || !product.is_active || product.stock === null)
+    // Until the live lookup settles a missing product is just "not loaded yet"; afterwards it means deleted or hidden.
+    const lookupSettled = cartIds === '' || (cartProducts.data !== undefined && !cartProducts.loading)
+    const problemWith = ({ item, product }: (typeof lines)[number]) => {
+        if (!product) return lookupSettled ? 'No longer available' : null
+        if (!product.is_active || product.stock === null) return 'No longer available'
+        if (item.quantity > product.stock) return `Only ${product.stock} in stock`
+        return null
+    }
+    // Checkout stays disabled while any line cannot be sold (or is still loading): the server would refuse it anyway.
+    const blocked = lines.some(line => !line.product || problemWith(line) !== null)
     const totals = previewTotals(
         lines.flatMap(({ item, product }) =>
             product
@@ -280,10 +289,9 @@ export default function POSPage() {
                             </div>
                         ) : (
                             <div className="space-y-3">
-                                {lines.map(({ item, product }) => {
-                                    const unavailable = !!product && (!product.is_active || product.stock === null)
-                                    const overStock =
-                                        !!product && product.stock !== null && item.quantity > product.stock
+                                {lines.map(line => {
+                                    const { item, product } = line
+                                    const problem = problemWith(line)
                                     return (
                                         <div
                                             key={item.productId}
@@ -291,20 +299,14 @@ export default function POSPage() {
                                         >
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-medium text-sm truncate">
-                                                    {product?.name ?? 'Loading…'}
+                                                    {product?.name ?? (lookupSettled ? 'Unknown product' : 'Loading…')}
                                                 </p>
                                                 {product && (
                                                     <p className="text-sm font-bold text-emerald-600">
                                                         {money(product.selling_price)}
                                                     </p>
                                                 )}
-                                                {(unavailable || overStock) && (
-                                                    <p className="text-xs text-red-600">
-                                                        {unavailable
-                                                            ? 'No longer available'
-                                                            : `Only ${product?.stock} in stock`}
-                                                    </p>
-                                                )}
+                                                {problem && <p className="text-xs text-red-600">{problem}</p>}
                                             </div>
                                             <div className="flex items-center gap-2">
                                                 <Button
@@ -386,7 +388,7 @@ export default function POSPage() {
                                     className="w-full"
                                     size="lg"
                                     onClick={() => setShowPaymentDialog(true)}
-                                    disabled={items.length === 0 || hasUnavailable}
+                                    disabled={items.length === 0 || blocked}
                                 >
                                     <CreditCard className="mr-2 h-5 w-5" />
                                     Checkout

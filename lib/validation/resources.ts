@@ -3,6 +3,7 @@ import { USER_ROLES } from '@/lib/auth/roles'
 import {
     blankToNull,
     money,
+    numberField,
     toNumber,
     optionalUuid,
     paginationSchema,
@@ -75,12 +76,11 @@ export const inventoryAdjustSchema = z.object({
     // A number input delivers a string: convert it (and never treat '' as 0).
     delta: z.preprocess(
         toNumber,
-        z
-            .number()
-            .int()
-            .min(-1_000_000)
-            .max(1_000_000)
-            .refine(value => value !== 0, 'Delta must not be 0')
+        numberField()
+            .int('Enter a whole number')
+            .min(-1_000_000, 'Too small')
+            .max(1_000_000, 'Too large')
+            .refine(value => value !== 0, 'Enter a change other than 0')
     ),
     reason: z.string().trim().min(3, 'A reason is required').max(500)
 })
@@ -137,7 +137,10 @@ export const settingsSchema = z.object({
         .regex(/^[A-Z]{3}$/, 'ISO 4217 code')
         .refine(isValidCurrency, 'Unknown currency'),
     timezone: z.string().refine(isValidTimeZone, 'Unknown time zone'),
-    low_stock_threshold: z.preprocess(toNumber, z.number().int().min(0).max(100_000)),
+    low_stock_threshold: z.preprocess(
+        toNumber,
+        numberField().int('Enter a whole number').min(0, 'Must be 0 or more').max(100_000, 'Too large')
+    ),
     tax_rate: taxRate,
     receipt_template: z.object({ header: z.string().trim().max(200), footer: z.string().trim().max(200) })
 })

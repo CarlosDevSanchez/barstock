@@ -9,6 +9,10 @@ export const toNumber = (value: unknown) => {
     return value.trim() === '' ? undefined : Number(value)
 }
 
+/** `z.number()` with messages a person can act on (zod's default is "expected number, received undefined"). */
+export const numberField = () =>
+    z.number({ error: issue => (issue.input === undefined ? 'Required' : 'Enter a valid number') })
+
 const hasAtMostDecimals = (decimals: number) => (value: number) => {
     const scale = 10 ** decimals
     return Math.abs(value * scale - Math.round(value * scale)) < 1e-6
@@ -37,17 +41,19 @@ export const nullableUrl = z.preprocess(blankToNull, z.url().max(2048).nullable(
 // NUMERIC(10,2). Float noise from client arithmetic (0.1 + 0.2) is tolerated and rounded to cents; real extra precision (1.005) is rejected.
 export const money = z.preprocess(
     toNumber,
-    z
-        .number()
-        .min(0)
-        .max(99_999_999.99)
+    numberField()
+        .min(0, 'Must be 0 or more')
+        .max(99_999_999.99, 'Too large')
         .refine(hasAtMostDecimals(2), 'At most 2 decimals')
         .transform(value => Math.round(value * 100) / 100)
 )
 /** Tax rate as a fraction (0.10 = 10 %), NUMERIC(6,4). */
 export const taxRate = z.preprocess(
     toNumber,
-    z.number().min(0).max(1).refine(hasAtMostDecimals(4), 'At most 4 decimals')
+    numberField()
+        .min(0, 'Must be 0 or more')
+        .max(1, 'Must be at most 1')
+        .refine(hasAtMostDecimals(4), 'At most 4 decimals')
 )
 /**
  * Tax rate typed as a percentage in a form ("7.25") and converted to the fraction the API stores (0.0725).
@@ -58,9 +64,13 @@ export const taxRatePercent = z.preprocess(
         const number = toNumber(value)
         return typeof number === 'number' && Number.isFinite(number) ? Math.round(number * 100) / 10000 : number
     },
-    z.number().min(0).max(1).refine(hasAtMostDecimals(4), 'At most 2 decimals')
+    numberField()
+        .min(0, 'Must be 0 or more')
+        .max(1, 'Must be at most 100 %')
+        .refine(hasAtMostDecimals(4), 'At most 2 decimals')
 )
-export const positiveInt = (max: number) => z.preprocess(toNumber, z.number().int().min(1).max(max))
+export const positiveInt = (max: number) =>
+    z.preprocess(toNumber, numberField().int('Enter a whole number').min(1, 'Must be at least 1').max(max, 'Too large'))
 
 export const paginationSchema = z.object({
     page: positiveInt(100_000).default(1),
