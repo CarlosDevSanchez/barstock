@@ -36,8 +36,9 @@ export const useCartStore = create<CartStore>()(
                 )
 
                 if (existingIndex >= 0) {
-                    const newItems = [...state.items]
-                    newItems[existingIndex].quantity += quantity
+                    const newItems = state.items.map((item, index) =>
+                        index === existingIndex ? { ...item, quantity: item.quantity + quantity } : item
+                    )
                     set({ items: newItems })
                 } else {
                     set({
