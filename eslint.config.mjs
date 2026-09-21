@@ -36,6 +36,13 @@ const eslintConfig = defineConfig([
             'no-restricted-imports': ['error', { patterns: supabaseAndServerOnly }]
         }
     },
+    {
+        // The dashboard layout is a Server Component: it reads the session and settings on the server.
+        files: ['app/(dashboard)/layout.tsx'],
+        rules: {
+            'no-restricted-imports': ['error', { patterns: [supabaseAndServerOnly[0]] }]
+        }
+    },
     globalIgnores([
         '.next/**',
         'out/**',
