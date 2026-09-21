@@ -31,6 +31,7 @@ Las referencias `archivo:línea` apuntan al commit base; si el código cambia, l
 | [05-capa-de-datos.md](01-arquitectura/05-capa-de-datos.md) | Cómo se accede a Supabase, queries por página, manejo de errores |
 | [06-ui-y-diseno.md](01-arquitectura/06-ui-y-diseno.md) | shadcn/ui, Tailwind 4, tema, patrones de pantalla |
 | [07-configuracion-y-tooling.md](01-arquitectura/07-configuracion-y-tooling.md) | tsconfig, ESLint, Next config, scripts, `.claude/` |
+| [08-api.md](01-arquitectura/08-api.md) | API `/api/v1`, `route()`, errores, `proxy.ts` (**en construcción**) |
 
 ### 02 · Base de datos — [`02-base-de-datos/`](02-base-de-datos/)
 | Archivo | Contenido |

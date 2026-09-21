@@ -58,7 +58,9 @@ app/(auth)/            login, register, forgot-password (públicas)
 app/(dashboard)/       layout (guarda + nav) y 12 pantallas: dashboard, pos, products, categories, inventory,
                        orders(+[id]), customers(+[id]), suppliers, reports, settings
 components/ui/         shadcn (16; form.tsx y tabs.tsx sin uso) · components/theme-provider.tsx
-lib/                   supabase/client.ts (singleton), utils.ts (cn), constants.ts (SIN uso)
+lib/                   env/ (zod), server/ (route, auth, errores; solo servidor), validation/ (zod compartido), api/ (fetch del navegador),
+                       auth/roles.ts, money.ts, utils.ts (cn); supabase/client.ts (se elimina al terminar el refactor), constants.ts (SIN uso)
+proxy.ts               sesión + guarda de rutas y de roles (ver docs/01-arquitectura/08-api.md)
 stores/                auth.ts, cart.ts, settings.ts (SIN uso)
 types/index.ts         tipos escritos a mano (no generados)
 supabase/              schema.sql → fix_rls_policies.sql → seed.sql (a mano; sin migraciones)
@@ -119,6 +121,7 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 
 | Si vas a… | Lee primero |
 |---|---|
+| Añadir o cambiar un endpoint | [08-api](docs/01-arquitectura/08-api.md) |
 | Modificar el cobro, carrito o stock | [pos-checkout](docs/03-modulos/pos-checkout.md), [estado cliente](docs/01-arquitectura/04-estado-cliente.md), [C2](docs/04-auditoria/hallazgos/C2-checkout-no-atomico.md) |
 | Reembolsos u órdenes | [ordenes-y-reembolsos](docs/03-modulos/ordenes-y-reembolsos.md) |
 | Cambiar tablas, políticas o triggers | [`docs/02-base-de-datos/`](docs/02-base-de-datos/) completo y [diseño objetivo](docs/06-roadmap/diseno-objetivo-seguridad.md) |
