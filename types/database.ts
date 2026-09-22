@@ -245,6 +245,7 @@ export type Database = {
           product_id: string
           quantity: number
           tax: number
+          tax_rate: number | null
           total: number
           unit_price: number
           variant_id: string | null
@@ -257,6 +258,7 @@ export type Database = {
           product_id: string
           quantity: number
           tax?: number
+          tax_rate?: number | null
           total: number
           unit_price: number
           variant_id?: string | null
@@ -269,6 +271,7 @@ export type Database = {
           product_id?: string
           quantity?: number
           tax?: number
+          tax_rate?: number | null
           total?: number
           unit_price?: number
           variant_id?: string | null

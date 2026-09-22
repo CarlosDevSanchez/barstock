@@ -85,6 +85,11 @@ export default function SettingsPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <TextField name="store_name" label={t('storeName')} />
+                                <TextField
+                                    name="store_tax_id"
+                                    label={t('storeTaxId')}
+                                    description={t('storeTaxIdHint')}
+                                />
                                 <TextField name="store_address" label={t('address')} />
                                 <TextField name="store_phone" label={t('phone')} />
                                 <TextField name="store_email" label={t('email')} type="email" />

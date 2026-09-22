@@ -11,6 +11,8 @@ export const SETTINGS_DEFAULTS: SettingsInput = {
     store_address: '',
     store_phone: '',
     store_email: '',
+    store_tax_id: '',
+    store_logo_key: '',
     currency: DEFAULT_CURRENCY,
     timezone: 'America/Bogota',
     low_stock_threshold: 10,

@@ -56,8 +56,11 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 6. **Formularios de autenticación:** `method="post"` y botón deshabilitado hasta hidratar (ver [autenticación](03-autenticacion-y-sesion.md)).
 
 ## Impresión
-Solo el detalle de orden usa `window.print()` (con `print:hidden`/`print:space-y-4` para ocultar controles). **No hay plantilla de recibo**; `receipt_template` de Ajustes se guarda
-pero no se imprime (D15). El POS ya no llama a `window.print()`.
+El detalle de orden usa `window.print()`. Desde la Fase 5 (etapa 3) imprime un **ticket térmico no fiscal de 80 mm**
+(`components/orders/receipt-ticket.tsx`, `hidden print:block`): la vista normal y el `AppShell` (sidebar/header) se
+ocultan con `print:hidden` y `app/globals.css` fija `@page { size: 80mm auto; margin: 0 }`. Detalle en
+[órdenes y reembolsos](../03-modulos/ordenes-y-reembolsos.md) y la decisión D21 (no es factura electrónica) en
+[decisiones pendientes](../06-roadmap/decisiones-pendientes.md). El POS no llama a `window.print()`.
 
 ## Accesibilidad y responsive
 - Etiquetas y errores de formulario asociados a su control por `FormControl`; los botones de solo icono llevan `aria-label` (cantidad +/−, quitar, editar, borrar, volver, página anterior/siguiente).

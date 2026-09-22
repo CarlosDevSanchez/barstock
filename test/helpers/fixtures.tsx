@@ -15,6 +15,8 @@ export const settings: SettingsInput = {
     store_address: '',
     store_phone: '',
     store_email: '',
+    store_tax_id: '',
+    store_logo_key: '',
     currency: 'USD',
     timezone: 'UTC',
     low_stock_threshold: 10,

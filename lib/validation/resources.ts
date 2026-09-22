@@ -132,6 +132,11 @@ export const settingsSchema = z.object({
     store_address: z.string().trim().max(300),
     store_phone: z.string().trim().max(40),
     store_email: z.union([z.literal(''), z.email().max(254)]),
+    // Colombia: NIT (tax id) printed on the receipt. Optional: not every store has entered it yet.
+    store_tax_id: z.string().trim().max(30),
+    // Storage key for the receipt/sidebar logo (Phase 6 uploads it; this phase only reserves the field, so it is
+    // usually empty).
+    store_logo_key: z.string().trim().max(200),
     currency: z
         .string()
         .regex(/^[A-Z]{3}$/, 'validation.currencyCode')
