@@ -25,8 +25,7 @@ import { roleAtLeast } from '@/lib/auth/roles'
 import { categoryCreateSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-
-const PAGE_SIZE = 25
+import { usePagination } from '@/hooks/use-pagination'
 
 interface CategoryDialogProps {
     category: CategoryListItem | null
@@ -92,14 +91,14 @@ export default function CategoriesPage() {
     const canManage = roleAtLeast(user.role, 'manager')
 
     const [searchQuery, setSearchQuery] = useState('')
-    const [page, setPage] = useState(1)
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const search = useDebouncedValue(searchQuery)
     const [editing, setEditing] = useState<CategoryListItem | null | undefined>(undefined)
     const [toDelete, setToDelete] = useState<CategoryListItem | null>(null)
 
     const categories = useApiQuery(
-        signal => categoriesApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
-        JSON.stringify({ page, search })
+        signal => categoriesApi.list({ page, pageSize, q: search }, signal),
+        JSON.stringify({ page, pageSize, search })
     )
 
     return (
@@ -126,7 +125,7 @@ export default function CategoriesPage() {
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
-                                setPage(1)
+                                reset()
                             }}
                             className="pl-10"
                         />
@@ -199,9 +198,10 @@ export default function CategoriesPage() {
                         )}
                         <Pagination
                             page={page}
-                            pageSize={PAGE_SIZE}
+                            pageSize={pageSize}
                             total={categories.data.total}
                             onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
                         />
                     </>
                 )}

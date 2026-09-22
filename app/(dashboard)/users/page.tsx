@@ -35,8 +35,7 @@ import { USER_ROLES, type UserRole } from '@/lib/auth/roles'
 import { inviteUserSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-
-const PAGE_SIZE = 25
+import { usePagination } from '@/hooks/use-pagination'
 
 function InviteDialog({ onClose, onInvited }: { onClose: () => void; onInvited: () => void }) {
     const t = useTranslations('users')
@@ -99,15 +98,15 @@ export default function UsersPage() {
     const dateLocale = locale === 'es' ? es : enUS
     const { user: me } = useSession()
     const [searchQuery, setSearchQuery] = useState('')
-    const [page, setPage] = useState(1)
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const [inviting, setInviting] = useState(false)
     const [toToggle, setToToggle] = useState<UserListItem | null>(null)
     const search = useDebouncedValue(searchQuery)
     const roleOptions = USER_ROLES.map(role => ({ value: role, label: tc(`role.${role}`) }))
 
     const users = useApiQuery(
-        signal => usersApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
-        JSON.stringify({ page, search })
+        signal => usersApi.list({ page, pageSize, q: search }, signal),
+        JSON.stringify({ page, pageSize, search })
     )
 
     const changeRole = async (target: UserListItem, role: UserRole) => {
@@ -142,7 +141,7 @@ export default function UsersPage() {
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
-                                setPage(1)
+                                reset()
                             }}
                             className="pl-10"
                         />
@@ -244,7 +243,13 @@ export default function UsersPage() {
                         {users.data.data.length === 0 && (
                             <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
                         )}
-                        <Pagination page={page} pageSize={PAGE_SIZE} total={users.data.total} onPageChange={setPage} />
+                        <Pagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={users.data.total}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                        />
                     </>
                 )}
             </Card>

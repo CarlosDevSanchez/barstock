@@ -539,5 +539,15 @@
       "closed": "Closed",
       "voided": "Voided"
     }
+  },
+  "pagination": {
+    "showing": "Showing {from}–{to} of {total}",
+    "rowsPerPage": "Rows per page",
+    "rowsPerPageAria": "Rows per page",
+    "firstPage": "First page",
+    "previousPage": "Previous page",
+    "nextPage": "Next page",
+    "lastPage": "Last page",
+    "pageAria": "Page {page}"
   }
 }

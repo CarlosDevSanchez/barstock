@@ -21,8 +21,7 @@ import { suppliersApi } from '@/lib/api/suppliers'
 import { supplierCreateSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-
-const PAGE_SIZE = 25
+import { usePagination } from '@/hooks/use-pagination'
 
 function SupplierDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
     const t = useTranslations('suppliers')
@@ -76,13 +75,13 @@ function SupplierDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 export default function SuppliersPage() {
     const t = useTranslations('suppliers')
     const [searchQuery, setSearchQuery] = useState('')
-    const [page, setPage] = useState(1)
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const [showDialog, setShowDialog] = useState(false)
     const search = useDebouncedValue(searchQuery)
 
     const suppliers = useApiQuery(
-        signal => suppliersApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
-        JSON.stringify({ page, search })
+        signal => suppliersApi.list({ page, pageSize, q: search }, signal),
+        JSON.stringify({ page, pageSize, search })
     )
 
     return (
@@ -123,7 +122,7 @@ export default function SuppliersPage() {
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
-                                setPage(1)
+                                reset()
                             }}
                             className="pl-10"
                         />
@@ -163,9 +162,10 @@ export default function SuppliersPage() {
                         )}
                         <Pagination
                             page={page}
-                            pageSize={PAGE_SIZE}
+                            pageSize={pageSize}
                             total={suppliers.data.total}
                             onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
                         />
                     </>
                 )}

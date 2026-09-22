@@ -24,8 +24,7 @@ import { customersApi } from '@/lib/api/customers'
 import { customerCreateSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-
-const PAGE_SIZE = 25
+import { usePagination } from '@/hooks/use-pagination'
 
 function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
     const t = useTranslations('customers')
@@ -81,13 +80,13 @@ export default function CustomersPage() {
     const router = useRouter()
     const money = useMoney()
     const [searchQuery, setSearchQuery] = useState('')
-    const [page, setPage] = useState(1)
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const [showDialog, setShowDialog] = useState(false)
     const search = useDebouncedValue(searchQuery)
 
     const customers = useApiQuery(
-        signal => customersApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
-        JSON.stringify({ page, search })
+        signal => customersApi.list({ page, pageSize, q: search }, signal),
+        JSON.stringify({ page, pageSize, search })
     )
 
     return (
@@ -128,7 +127,7 @@ export default function CustomersPage() {
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
-                                setPage(1)
+                                reset()
                             }}
                             className="pl-10"
                         />
@@ -184,9 +183,10 @@ export default function CustomersPage() {
                         )}
                         <Pagination
                             page={page}
-                            pageSize={PAGE_SIZE}
+                            pageSize={pageSize}
                             total={customers.data.total}
                             onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
                         />
                     </>
                 )}

@@ -36,8 +36,7 @@ import { taxRatePercent } from '@/lib/validation/common'
 import { productCreateSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-
-const PAGE_SIZE = 25
+import { usePagination } from '@/hooks/use-pagination'
 
 // The API stores the tax rate as a fraction (0.10); people type a percentage (10).
 const productFormSchema = productCreateSchema.extend({
@@ -171,15 +170,15 @@ export default function ProductsPage() {
     const canManage = roleAtLeast(user.role, 'manager')
 
     const [searchQuery, setSearchQuery] = useState('')
-    const [page, setPage] = useState(1)
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const search = useDebouncedValue(searchQuery)
     // undefined = closed, null = creating, product = editing
     const [editing, setEditing] = useState<ProductListItem | null | undefined>(undefined)
     const [toDelete, setToDelete] = useState<ProductListItem | null>(null)
 
     const products = useApiQuery(
-        signal => productsApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
-        JSON.stringify({ page, search })
+        signal => productsApi.list({ page, pageSize, q: search }, signal),
+        JSON.stringify({ page, pageSize, search })
     )
     const categories = useApiQuery(signal => categoriesApi.list({ pageSize: 100 }, signal), 'categories')
     const categoryOptions = (categories.data?.data ?? []).map(category => ({
@@ -211,7 +210,7 @@ export default function ProductsPage() {
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
-                                setPage(1)
+                                reset()
                             }}
                             className="pl-10"
                         />
@@ -297,9 +296,10 @@ export default function ProductsPage() {
                         )}
                         <Pagination
                             page={page}
-                            pageSize={PAGE_SIZE}
+                            pageSize={pageSize}
                             total={products.data.total}
                             onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
                         />
                     </>
                 )}

@@ -33,7 +33,7 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 | `AppShell` | Navegación lateral/móvil **filtrada por rol**, menú de usuario (tema, idioma ES/EN, logout que vacía el carrito) |
 | `ConfirmDialog` | Sustituye a `window.confirm()`: `AlertDialog` accesible que muestra progreso y no se cierra si falla |
 | `TextField`, `SelectField` | Campos de `react-hook-form` con etiqueta y mensaje de error asociados (`htmlFor`/`aria-describedby` por `FormControl`) |
-| `Pagination` | Anterior/siguiente con "Page x of y · N results"; oculta si cabe en una página |
+| `Pagination` (`lib/pagination.ts`, `hooks/use-pagination.ts`) | "Mostrando X–Y de N" + `Select` de tamaño (10/25/50, namespace `pagination` de next-intl) + primera/anterior/números/siguiente/última; **siempre visible** (ya no se oculta con una sola página); los números se ocultan en pantallas estrechas |
 | `QueryError`, `PageSpinner` | Error con "Try again" y spinner (antes copiado en 5 archivos) |
 
 ## Layout del dashboard

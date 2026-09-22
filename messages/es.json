@@ -539,5 +539,15 @@
       "closed": "Cerrada",
       "voided": "Anulada"
     }
+  },
+  "pagination": {
+    "showing": "Mostrando {from}–{to} de {total}",
+    "rowsPerPage": "Filas por página",
+    "rowsPerPageAria": "Filas por página",
+    "firstPage": "Primera página",
+    "previousPage": "Página anterior",
+    "nextPage": "Página siguiente",
+    "lastPage": "Última página",
+    "pageAria": "Página {page}"
   }
 }
