@@ -1,0 +1,16 @@
+.next
+.code-review-graph
+.claude
+node_modules
+bun.lock
+coverage
+playwright-report
+test-results
+supabase/legacy
+next-env.d.ts
+docs
+*.md
+components/ui
+lib/utils.ts
+bunfig.toml
+types/database.ts

@@ -1,61 +1,88 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { toast } from 'sonner'
+import { Plus, Search, Users } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { supabase } from '@/lib/supabase/client'
-import { toast } from 'sonner'
-import { Plus, Search, Edit, Users } from 'lucide-react'
-import type { Customer } from '@/types'
+import { Form } from '@/components/ui/form'
+import { TextField } from '@/components/form-fields'
+import { Pagination } from '@/components/pagination'
+import { QueryError } from '@/components/query-error'
+import { PageSpinner } from '@/components/page-spinner'
+import { useMoney } from '@/components/session-provider'
+import { errorMessage } from '@/lib/api/client'
+import { customersApi } from '@/lib/api/customers'
+import { customerCreateSchema } from '@/lib/validation/resources'
+import { useApiQuery } from '@/hooks/use-api-query'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
+
+const PAGE_SIZE = 25
+
+function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+    const form = useForm({
+        resolver: zodResolver(customerCreateSchema),
+        defaultValues: { name: '', email: '', phone: '', address: '' }
+    })
+    const submitting = form.formState.isSubmitting
+
+    const onSubmit = form.handleSubmit(async values => {
+        try {
+            await customersApi.create(values)
+            toast.success('Customer added successfully')
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, 'Failed to add customer'))
+        }
+    })
+
+    return (
+        <Dialog open onOpenChange={open => !open && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Add New Customer</DialogTitle>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={onSubmit} noValidate>
+                        <div className="space-y-4 py-4">
+                            <TextField name="name" label="Name *" />
+                            <TextField name="email" label="Email" type="email" />
+                            <TextField name="phone" label="Phone" />
+                            <TextField name="address" label="Address" />
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting ? 'Saving…' : 'Add Customer'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
 
 export default function CustomersPage() {
     const router = useRouter()
-    const [customers, setCustomers] = useState<Customer[]>([])
+    const money = useMoney()
     const [searchQuery, setSearchQuery] = useState('')
+    const [page, setPage] = useState(1)
     const [showDialog, setShowDialog] = useState(false)
-    const [formData, setFormData] = useState({
-        name: '',
-        email: '',
-        phone: '',
-        address: '',
-    })
+    const search = useDebouncedValue(searchQuery)
 
-    useEffect(() => {
-        fetchCustomers()
-    }, [])
-
-    const fetchCustomers = async () => {
-        const { data } = await supabase
-            .from('customers')
-            .select('*')
-            .order('created_at', { ascending: false })
-        setCustomers(data || [])
-    }
-
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        try {
-            const { error } = await supabase.from('customers').insert(formData)
-            if (error) throw error
-            toast.success('Customer added successfully')
-            setShowDialog(false)
-            setFormData({ name: '', email: '', phone: '', address: '' })
-            fetchCustomers()
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to add customer')
-        }
-    }
-
-    const filteredCustomers = customers.filter(c =>
-        c.name.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.email?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        c.phone?.toLowerCase().includes(searchQuery.toLowerCase())
+    const customers = useApiQuery(
+        signal => customersApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
+        JSON.stringify({ page, search })
     )
 
     return (
@@ -78,8 +105,10 @@ export default function CustomersPage() {
                             <Users className="h-6 w-6 text-emerald-600" />
                         </div>
                         <div>
-                            <p className="text-sm text-muted-foreground">Total Customers</p>
-                            <p className="text-2xl font-bold">{customers.length}</p>
+                            <p className="text-sm text-muted-foreground">
+                                {search ? 'Matching Customers' : 'Total Customers'}
+                            </p>
+                            <p className="text-2xl font-bold">{customers.data?.total ?? '-'}</p>
                         </div>
                     </div>
                 </Card>
@@ -90,97 +119,81 @@ export default function CustomersPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search customers..."
+                            placeholder="Search by name, email or phone..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => {
+                                setSearchQuery(e.target.value)
+                                setPage(1)
+                            }}
                             className="pl-10"
                         />
                     </div>
                 </div>
 
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead>Loyalty Points</TableHead>
-                            <TableHead>Total Spent</TableHead>
-                            <TableHead>Status</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredCustomers.map((customer) => (
-                            <TableRow
-                                key={customer.id}
-                                className="cursor-pointer hover:bg-muted/50"
-                                onClick={() => router.push(`/customers/${customer.id}`)}
-                            >
-                                <TableCell className="font-medium">{customer.name}</TableCell>
-                                <TableCell>{customer.email || '-'}</TableCell>
-                                <TableCell>{customer.phone || '-'}</TableCell>
-                                <TableCell>
-                                    <Badge variant="secondary">{customer.loyalty_points} pts</Badge>
-                                </TableCell>
-                                <TableCell className="font-semibold text-emerald-600">
-                                    ${customer.total_spent.toFixed(2)}
-                                </TableCell>
-                                <TableCell>
-                                    <Badge variant={customer.is_active ? 'default' : 'secondary'}>
-                                        {customer.is_active ? 'Active' : 'Inactive'}
-                                    </Badge>
-                                </TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                {customers.error ? (
+                    <QueryError error={customers.error} onRetry={customers.reload} />
+                ) : !customers.data ? (
+                    <PageSpinner />
+                ) : (
+                    <>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>Email</TableHead>
+                                    <TableHead>Phone</TableHead>
+                                    <TableHead>Loyalty Points</TableHead>
+                                    <TableHead>Total Spent</TableHead>
+                                    <TableHead>Status</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {customers.data.data.map(customer => (
+                                    <TableRow
+                                        key={customer.id}
+                                        className="cursor-pointer hover:bg-muted/50"
+                                        onClick={() => router.push(`/customers/${customer.id}`)}
+                                    >
+                                        <TableCell className="font-medium">{customer.name}</TableCell>
+                                        <TableCell>{customer.email || '-'}</TableCell>
+                                        <TableCell>{customer.phone || '-'}</TableCell>
+                                        <TableCell>
+                                            <Badge variant="secondary">{customer.loyalty_points} pts</Badge>
+                                        </TableCell>
+                                        <TableCell className="font-semibold text-emerald-600">
+                                            {money(customer.total_spent)}
+                                        </TableCell>
+                                        <TableCell>
+                                            <Badge variant={customer.is_active ? 'default' : 'secondary'}>
+                                                {customer.is_active ? 'Active' : 'Inactive'}
+                                            </Badge>
+                                        </TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                        {customers.data.data.length === 0 && (
+                            <p className="py-8 text-center text-muted-foreground">No customers found</p>
+                        )}
+                        <Pagination
+                            page={page}
+                            pageSize={PAGE_SIZE}
+                            total={customers.data.total}
+                            onPageChange={setPage}
+                        />
+                    </>
+                )}
             </Card>
 
-            <Dialog open={showDialog} onOpenChange={setShowDialog}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Add New Customer</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleSubmit}>
-                        <div className="space-y-4 py-4">
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Name *</Label>
-                                <Input
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Email</Label>
-                                <Input
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Phone</Label>
-                                <Input
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Address</Label>
-                                <Input
-                                    value={formData.address}
-                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-                            <Button type="submit">Add Customer</Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+            {showDialog && (
+                <CustomerDialog
+                    onClose={() => setShowDialog(false)}
+                    onSaved={() => {
+                        setShowDialog(false)
+                        customers.reload()
+                    }}
+                />
+            )}
         </div>
     )
 }

@@ -1,54 +1,84 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { toast } from 'sonner'
+import { Plus, Search, Truck } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
-import { supabase } from '@/lib/supabase/client'
-import { toast } from 'sonner'
-import { Plus, Search, Truck } from 'lucide-react'
-import type { Supplier } from '@/types'
+import { Form } from '@/components/ui/form'
+import { TextField } from '@/components/form-fields'
+import { Pagination } from '@/components/pagination'
+import { QueryError } from '@/components/query-error'
+import { PageSpinner } from '@/components/page-spinner'
+import { errorMessage } from '@/lib/api/client'
+import { suppliersApi } from '@/lib/api/suppliers'
+import { supplierCreateSchema } from '@/lib/validation/resources'
+import { useApiQuery } from '@/hooks/use-api-query'
+import { useDebouncedValue } from '@/hooks/use-debounced-value'
 
-export default function SuppliersPage() {
-    const [suppliers, setSuppliers] = useState<Supplier[]>([])
-    const [searchQuery, setSearchQuery] = useState('')
-    const [showDialog, setShowDialog] = useState(false)
-    const [formData, setFormData] = useState({
-        name: '',
-        contact_person: '',
-        email: '',
-        phone: '',
-        address: '',
+const PAGE_SIZE = 25
+
+function SupplierDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+    const form = useForm({
+        resolver: zodResolver(supplierCreateSchema),
+        defaultValues: { name: '', contact_person: '', email: '', phone: '', address: '' }
+    })
+    const submitting = form.formState.isSubmitting
+
+    const onSubmit = form.handleSubmit(async values => {
+        try {
+            await suppliersApi.create(values)
+            toast.success('Supplier added successfully')
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, 'Failed to add supplier'))
+        }
     })
 
-    useEffect(() => {
-        fetchSuppliers()
-    }, [])
+    return (
+        <Dialog open onOpenChange={open => !open && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Add New Supplier</DialogTitle>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={onSubmit} noValidate>
+                        <div className="space-y-4 py-4">
+                            <TextField name="name" label="Supplier Name *" />
+                            <TextField name="contact_person" label="Contact Person" />
+                            <TextField name="email" label="Email" type="email" />
+                            <TextField name="phone" label="Phone" />
+                            <TextField name="address" label="Address" />
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting ? 'Saving…' : 'Add Supplier'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
 
-    const fetchSuppliers = async () => {
-        const { data } = await supabase.from('suppliers').select('*').order('created_at', { ascending: false })
-        setSuppliers(data || [])
-    }
+export default function SuppliersPage() {
+    const [searchQuery, setSearchQuery] = useState('')
+    const [page, setPage] = useState(1)
+    const [showDialog, setShowDialog] = useState(false)
+    const search = useDebouncedValue(searchQuery)
 
-    const handleSubmit = async (e: React.FormEvent) => {
-        e.preventDefault()
-        try {
-            const { error } = await supabase.from('suppliers').insert(formData)
-            if (error) throw error
-            toast.success('Supplier added successfully')
-            setShowDialog(false)
-            setFormData({ name: '', contact_person: '', email: '', phone: '', address: '' })
-            fetchSuppliers()
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to add supplier')
-        }
-    }
-
-    const filteredSuppliers = suppliers.filter(s =>
-        s.name.toLowerCase().includes(searchQuery.toLowerCase())
+    const suppliers = useApiQuery(
+        signal => suppliersApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
+        JSON.stringify({ page, search })
     )
 
     return (
@@ -71,8 +101,10 @@ export default function SuppliersPage() {
                             <Truck className="h-6 w-6 text-emerald-600" />
                         </div>
                         <div>
-                            <p className="text-sm text-muted-foreground">Total Suppliers</p>
-                            <p className="text-2xl font-bold">{suppliers.length}</p>
+                            <p className="text-sm text-muted-foreground">
+                                {search ? 'Matching Suppliers' : 'Total Suppliers'}
+                            </p>
+                            <p className="text-2xl font-bold">{suppliers.data?.total ?? '-'}</p>
                         </div>
                     </div>
                 </Card>
@@ -85,88 +117,65 @@ export default function SuppliersPage() {
                         <Input
                             placeholder="Search suppliers..."
                             value={searchQuery}
-                            onChange={(e) => setSearchQuery(e.target.value)}
+                            onChange={e => {
+                                setSearchQuery(e.target.value)
+                                setPage(1)
+                            }}
                             className="pl-10"
                         />
                     </div>
                 </div>
 
-                <Table>
-                    <TableHeader>
-                        <TableRow>
-                            <TableHead>Name</TableHead>
-                            <TableHead>Contact Person</TableHead>
-                            <TableHead>Email</TableHead>
-                            <TableHead>Phone</TableHead>
-                            <TableHead>Address</TableHead>
-                        </TableRow>
-                    </TableHeader>
-                    <TableBody>
-                        {filteredSuppliers.map((supplier) => (
-                            <TableRow key={supplier.id}>
-                                <TableCell className="font-medium">{supplier.name}</TableCell>
-                                <TableCell>{supplier.contact_person || '-'}</TableCell>
-                                <TableCell>{supplier.email || '-'}</TableCell>
-                                <TableCell>{supplier.phone || '-'}</TableCell>
-                                <TableCell>{supplier.address || '-'}</TableCell>
-                            </TableRow>
-                        ))}
-                    </TableBody>
-                </Table>
+                {suppliers.error ? (
+                    <QueryError error={suppliers.error} onRetry={suppliers.reload} />
+                ) : !suppliers.data ? (
+                    <PageSpinner />
+                ) : (
+                    <>
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead>Name</TableHead>
+                                    <TableHead>Contact Person</TableHead>
+                                    <TableHead>Email</TableHead>
+                                    <TableHead>Phone</TableHead>
+                                    <TableHead>Address</TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {suppliers.data.data.map(supplier => (
+                                    <TableRow key={supplier.id}>
+                                        <TableCell className="font-medium">{supplier.name}</TableCell>
+                                        <TableCell>{supplier.contact_person || '-'}</TableCell>
+                                        <TableCell>{supplier.email || '-'}</TableCell>
+                                        <TableCell>{supplier.phone || '-'}</TableCell>
+                                        <TableCell>{supplier.address || '-'}</TableCell>
+                                    </TableRow>
+                                ))}
+                            </TableBody>
+                        </Table>
+                        {suppliers.data.data.length === 0 && (
+                            <p className="py-8 text-center text-muted-foreground">No suppliers found</p>
+                        )}
+                        <Pagination
+                            page={page}
+                            pageSize={PAGE_SIZE}
+                            total={suppliers.data.total}
+                            onPageChange={setPage}
+                        />
+                    </>
+                )}
             </Card>
 
-            <Dialog open={showDialog} onOpenChange={setShowDialog}>
-                <DialogContent>
-                    <DialogHeader>
-                        <DialogTitle>Add New Supplier</DialogTitle>
-                    </DialogHeader>
-                    <form onSubmit={handleSubmit}>
-                        <div className="space-y-4 py-4">
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Company Name *</Label>
-                                <Input
-                                    value={formData.name}
-                                    onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                                    required
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Contact Person</Label>
-                                <Input
-                                    value={formData.contact_person}
-                                    onChange={(e) => setFormData({ ...formData, contact_person: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Email</Label>
-                                <Input
-                                    type="email"
-                                    value={formData.email}
-                                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Phone</Label>
-                                <Input
-                                    value={formData.phone}
-                                    onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-                                />
-                            </div>
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">Address</Label>
-                                <Input
-                                    value={formData.address}
-                                    onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-                                />
-                            </div>
-                        </div>
-                        <DialogFooter>
-                            <Button type="button" variant="outline" onClick={() => setShowDialog(false)}>Cancel</Button>
-                            <Button type="submit">Add Supplier</Button>
-                        </DialogFooter>
-                    </form>
-                </DialogContent>
-            </Dialog>
+            {showDialog && (
+                <SupplierDialog
+                    onClose={() => setShowDialog(false)}
+                    onSaved={() => {
+                        setShowDialog(false)
+                        suppliers.reload()
+                    }}
+                />
+            )}
         </div>
     )
 }

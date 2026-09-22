@@ -1,119 +1,126 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
+import { useForm } from 'react-hook-form'
+import { zodResolver } from '@hookform/resolvers/zod'
+import { format } from 'date-fns'
+import { toast } from 'sonner'
+import { ArrowLeft, Receipt, RotateCcw, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { Separator } from '@/components/ui/separator'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { supabase } from '@/lib/supabase/client'
-import { toast } from 'sonner'
-import { ArrowLeft, Receipt, RotateCcw, Printer } from 'lucide-react'
-import { format } from 'date-fns'
-import type { Order, OrderItem } from '@/types'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from '@/components/ui/dialog'
+import { Form } from '@/components/ui/form'
+import { TextField } from '@/components/form-fields'
+import { QueryError } from '@/components/query-error'
+import { PageSpinner } from '@/components/page-spinner'
+import { useMoney, useSession } from '@/components/session-provider'
+import { ApiError, errorMessage } from '@/lib/api/client'
+import { ordersApi, type OrderDetail } from '@/lib/api/orders'
+import { roleAtLeast } from '@/lib/auth/roles'
+import { refundSchema } from '@/lib/validation/resources'
+import { useApiQuery } from '@/hooks/use-api-query'
+
+interface RefundDialogProps {
+    order: OrderDetail
+    onClose: () => void
+    onRefunded: () => void
+}
+
+// Refunding is done by the `refund_order` database function: one transaction that marks the order, restocks every line and
+// logs the movement. It is safe to retry (a second refund of the same order changes nothing).
+function RefundDialog({ order, onClose, onRefunded }: RefundDialogProps) {
+    const money = useMoney()
+    const form = useForm({ resolver: zodResolver(refundSchema), defaultValues: { reason: '' } })
+    const submitting = form.formState.isSubmitting
+
+    const onSubmit = form.handleSubmit(async values => {
+        try {
+            await ordersApi.refund(order.id, values.reason)
+            toast.success('Order refunded and stock restored')
+            onRefunded()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, 'Failed to refund order'))
+        }
+    })
+
+    return (
+        <Dialog open onOpenChange={open => !open && !submitting && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>Refund order {order.order_number}?</DialogTitle>
+                    <DialogDescription>
+                        The full amount ({money(order.total)}) is refunded and every item goes back into stock. This
+                        cannot be undone.
+                    </DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={onSubmit} noValidate>
+                        <div className="py-4">
+                            <TextField name="reason" label="Reason *" placeholder="e.g. Customer returned the goods" />
+                        </div>
+                        <DialogFooter>
+                            <Button type="button" variant="outline" disabled={submitting} onClick={onClose}>
+                                Cancel
+                            </Button>
+                            <Button type="submit" variant="destructive" disabled={submitting}>
+                                {submitting ? 'Refunding…' : 'Refund order'}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
 
 export default function OrderDetailPage() {
-    const params = useParams()
+    const params = useParams<{ id: string }>()
     const router = useRouter()
-    const [order, setOrder] = useState<Order | null>(null)
-    const [orderItems, setOrderItems] = useState<OrderItem[]>([])
-    const [loading, setLoading] = useState(true)
+    const { user } = useSession()
+    const money = useMoney()
+    const [refunding, setRefunding] = useState(false)
 
-    useEffect(() => {
-        if (params.id) {
-            fetchOrderDetails(params.id as string)
+    const orderQuery = useApiQuery(signal => ordersApi.get(params.id, signal), `order:${params.id}`)
+
+    if (orderQuery.error) {
+        if (orderQuery.error instanceof ApiError && orderQuery.error.status === 404) {
+            return (
+                <div className="text-center py-12">
+                    <p className="text-muted-foreground">Order not found</p>
+                    <Button onClick={() => router.push('/orders')} className="mt-4">
+                        Back to Orders
+                    </Button>
+                </div>
+            )
         }
-    }, [params.id])
-
-    const fetchOrderDetails = async (id: string) => {
-        try {
-            const { data: orderData } = await supabase
-                .from('orders')
-                .select('*, customer:customers(*), created_by_user:profiles!orders_created_by_fkey(*)')
-                .eq('id', id)
-                .single()
-
-            const { data: itemsData } = await supabase
-                .from('order_items')
-                .select('*, product:products(*), variant:product_variants(*)')
-                .eq('order_id', id)
-
-            setOrder(orderData as any)
-            setOrderItems(itemsData as any || [])
-        } catch (error: any) {
-            toast.error('Failed to load order details')
-            console.error(error)
-        } finally {
-            setLoading(false)
-        }
+        return <QueryError error={orderQuery.error} onRetry={orderQuery.reload} />
     }
+    if (!orderQuery.data) return <PageSpinner />
 
-    const handleRefund = async () => {
-        if (!order) return
-
-        if (!confirm('Are you sure you want to refund this order?')) return
-
-        try {
-            const { error } = await supabase
-                .from('orders')
-                .update({ status: 'refunded' })
-                .eq('id', order.id)
-
-            if (error) throw error
-
-            // Restore inventory
-            for (const item of orderItems) {
-                const { data: inventory } = await supabase
-                    .from('inventory')
-                    .select('*')
-                    .eq('product_id', item.product_id)
-                    .eq('variant_id', item.variant_id || null)
-                    .single()
-
-                if (inventory) {
-                    await supabase
-                        .from('inventory')
-                        .update({ quantity: inventory.quantity + item.quantity })
-                        .eq('id', inventory.id)
-                }
-            }
-
-            toast.success('Order refunded successfully')
-            fetchOrderDetails(order.id)
-        } catch (error: any) {
-            toast.error(error.message || 'Failed to refund order')
-        }
-    }
-
-    const handlePrint = () => {
-        window.print()
-    }
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
-            </div>
-        )
-    }
-
-    if (!order) {
-        return (
-            <div className="text-center py-12">
-                <p className="text-muted-foreground">Order not found</p>
-                <Button onClick={() => router.push('/orders')} className="mt-4">
-                    Back to Orders
-                </Button>
-            </div>
-        )
-    }
+    const order = orderQuery.data
+    const canRefund = order.status === 'completed' && roleAtLeast(user.role, 'manager')
 
     return (
         <div className="space-y-6 print:space-y-4">
             <div className="flex items-center justify-between print:hidden">
                 <div className="flex items-center gap-4">
-                    <Button variant="ghost" size="icon" onClick={() => router.push('/orders')}>
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label="Back to orders"
+                        onClick={() => router.push('/orders')}
+                    >
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
                     <div>
@@ -122,12 +129,12 @@ export default function OrderDetailPage() {
                     </div>
                 </div>
                 <div className="flex gap-2">
-                    <Button variant="outline" onClick={handlePrint}>
+                    <Button variant="outline" onClick={() => window.print()}>
                         <Printer className="mr-2 h-4 w-4" />
                         Print
                     </Button>
-                    {order.status === 'completed' && (
-                        <Button variant="destructive" onClick={handleRefund}>
+                    {canRefund && (
+                        <Button variant="destructive" onClick={() => setRefunding(true)}>
                             <RotateCcw className="mr-2 h-4 w-4" />
                             Refund
                         </Button>
@@ -151,14 +158,43 @@ export default function OrderDetailPage() {
                         </div>
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Status:</span>
-                            <Badge variant={order.status === 'completed' ? 'default' : order.status === 'refunded' ? 'destructive' : 'secondary'}>
+                            <Badge
+                                variant={
+                                    order.status === 'completed'
+                                        ? 'default'
+                                        : order.status === 'refunded'
+                                          ? 'destructive'
+                                          : 'secondary'
+                                }
+                            >
                                 {order.status}
                             </Badge>
                         </div>
                         <div className="flex justify-between">
                             <span className="text-muted-foreground">Created By:</span>
-                            <span>{order.created_by || 'System'}</span>
+                            <span>{order.created_by_name || 'System'}</span>
                         </div>
+                        {order.payments.length > 0 && (
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">Payment:</span>
+                                <span className="capitalize">
+                                    {order.payments.map(p => `${p.payment_method} (${money(p.amount)})`).join(', ')}
+                                </span>
+                            </div>
+                        )}
+                        {order.status === 'refunded' && (
+                            <div className="flex justify-between gap-4">
+                                <span className="text-muted-foreground">Refund:</span>
+                                <span className="text-right">
+                                    {order.refunded_at && format(new Date(order.refunded_at), 'PPp')}
+                                    {order.refund_reason && (
+                                        <span className="block text-sm text-muted-foreground">
+                                            {order.refund_reason}
+                                        </span>
+                                    )}
+                                </span>
+                            </div>
+                        )}
                     </CardContent>
                 </Card>
 
@@ -209,15 +245,15 @@ export default function OrderDetailPage() {
                             </TableRow>
                         </TableHeader>
                         <TableBody>
-                            {orderItems.map((item) => (
+                            {order.items.map(item => (
                                 <TableRow key={item.id}>
-                                    <TableCell className="font-medium">{item.product?.name || 'Unknown'}</TableCell>
+                                    <TableCell className="font-medium">{item.product.name}</TableCell>
                                     <TableCell>{item.variant?.name || '-'}</TableCell>
                                     <TableCell className="text-right">{item.quantity}</TableCell>
-                                    <TableCell className="text-right">${item.unit_price.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">${item.discount.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right">${item.tax.toFixed(2)}</TableCell>
-                                    <TableCell className="text-right font-semibold">${item.total.toFixed(2)}</TableCell>
+                                    <TableCell className="text-right">{money(item.unit_price)}</TableCell>
+                                    <TableCell className="text-right">{money(item.discount)}</TableCell>
+                                    <TableCell className="text-right">{money(item.tax)}</TableCell>
+                                    <TableCell className="text-right font-semibold">{money(item.total)}</TableCell>
                                 </TableRow>
                             ))}
                         </TableBody>
@@ -229,24 +265,35 @@ export default function OrderDetailPage() {
                     <div className="space-y-2 max-w-sm ml-auto">
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Subtotal:</span>
-                            <span>${order.subtotal.toFixed(2)}</span>
-                        </div>
-                        <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Discount:</span>
-                            <span className="text-red-600">-${order.discount.toFixed(2)}</span>
+                            <span>{money(order.subtotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
                             <span className="text-muted-foreground">Tax:</span>
-                            <span>${order.tax.toFixed(2)}</span>
+                            <span>{money(order.tax)}</span>
+                        </div>
+                        <div className="flex justify-between text-sm">
+                            <span className="text-muted-foreground">Discount:</span>
+                            <span className="text-red-600">-{money(order.discount)}</span>
                         </div>
                         <Separator />
                         <div className="flex justify-between text-lg font-bold">
                             <span>Total:</span>
-                            <span className="text-emerald-600">${order.total.toFixed(2)}</span>
+                            <span className="text-emerald-600">{money(order.total)}</span>
                         </div>
                     </div>
                 </CardContent>
             </Card>
+
+            {refunding && (
+                <RefundDialog
+                    order={order}
+                    onClose={() => setRefunding(false)}
+                    onRefunded={() => {
+                        setRefunding(false)
+                        orderQuery.reload()
+                    }}
+                />
+            )}
         </div>
     )
 }

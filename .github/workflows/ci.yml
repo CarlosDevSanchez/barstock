@@ -1,0 +1,104 @@
+name: CI
+
+on:
+    pull_request:
+    push:
+        branches: [main]
+
+# A newer push to the same branch/PR makes the running check obsolete.
+concurrency:
+    group: ci-${{ github.workflow }}-${{ github.ref }}
+    cancel-in-progress: true
+
+# The job only reads the repository. It uses no secrets: the database is a throwaway local Supabase started inside the job,
+# so the demo keys it prints are public and never protect anything.
+permissions:
+    contents: read
+
+jobs:
+    check:
+        runs-on: ubuntu-latest
+        timeout-minutes: 25
+        env:
+            CI: 'true'
+            APP_URL: http://localhost:3000
+        steps:
+            # Third-party actions are pinned to a commit (a moved tag cannot change what runs); Dependabot keeps them current.
+            - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+            - uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+              with:
+                  bun-version: 1.4.1 # keep in sync with "packageManager" in package.json
+
+            # Node runs Next.js and Playwright; the version comes from .nvmrc like everywhere else.
+            - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+              with:
+                  node-version-file: .nvmrc
+
+            - uses: actions/cache@0057852bfaa89a56745cba8c7296529d2fc39830 # v4
+              with:
+                  path: ~/.bun/install/cache
+                  key: bun-${{ runner.os }}-${{ hashFiles('bun.lock') }}
+                  restore-keys: bun-${{ runner.os }}-
+
+            # `--frozen-lockfile` fails if package.json and bun.lock disagree. Bun skips dependency lifecycle scripts by default.
+            - name: Install dependencies
+              run: bun install --frozen-lockfile
+
+            - name: Format
+              run: bun run format:check
+
+            - name: Lint
+              run: bun run lint
+
+            - name: Typecheck
+              run: bun run typecheck
+
+            - name: Audit dependencies
+              run: bun audit --audit-level=high
+
+            # Only what the tests need: database, auth, API gateway and the mail catcher (invitation and recovery emails).
+            - uses: supabase/setup-cli@46f7f98c7f948ad727d22c1e67fab04c223a0520 # v3
+              with:
+                  version: 2.117.0
+
+            # Applies every migration and the seed from scratch, so this step also proves the schema can be rebuilt.
+            - name: Start local Supabase
+              run: supabase start -x studio,realtime,storage-api,imgproxy,edge-runtime,logflare,vector,supavisor,postgres-meta
+
+            - name: Export the local Supabase configuration
+              run: |
+                  eval "$(supabase status -o env)"
+                  {
+                    echo "NEXT_PUBLIC_SUPABASE_URL=$API_URL"
+                    echo "NEXT_PUBLIC_SUPABASE_ANON_KEY=$ANON_KEY"
+                    echo "SUPABASE_SERVICE_ROLE_KEY=$SERVICE_ROLE_KEY"
+                    echo "MAILPIT_URL=$MAILPIT_URL"
+                  } >> "$GITHUB_ENV"
+
+            - name: Unit and integration tests with coverage
+              run: bun run test:coverage
+
+            - name: Component tests
+              run: bun run test:components
+
+            - name: Build
+              run: bun run build
+
+            - name: Install the browser
+              run: bunx playwright install --with-deps chromium
+
+            - name: End-to-end tests
+              run: bun run test:e2e
+
+            - name: Keep the reports of a failed run
+              if: failure()
+              uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+              with:
+                  name: failure-reports
+                  path: |
+                      playwright-report/
+                      test-results/
+                      coverage/
+                  if-no-files-found: ignore
+                  retention-days: 7

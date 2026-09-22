@@ -9,6 +9,7 @@ INSERT INTO public.settings (key, value) VALUES
   ('store_email', '"info@posystem.com"'),
   ('tax_rate', '0.10'),
   ('currency', '"USD"'),
+  ('timezone', '"UTC"'),
   ('low_stock_threshold', '10'),
   ('receipt_template', '{"header": "Thank you for your purchase!", "footer": "Visit us again!"}');
 
@@ -38,13 +39,18 @@ INSERT INTO public.product_variants (product_id, name, variant_type, sku, barcod
   ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'Blue', 'color', 'CLTH-001-BLU', '1234567890107', 8.00, 19.99),
   ('cccccccc-cccc-cccc-cccc-cccccccccccc', 'Black', 'color', 'CLTH-001-BLK', '1234567890108', 8.00, 19.99);
 
--- Insert inventory records
-INSERT INTO public.inventory (product_id, variant_id, quantity, low_stock_threshold) VALUES
-  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa', NULL, 50, 10),
-  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb', NULL, 100, 20),
-  ('dddddddd-dddd-dddd-dddd-dddddddddddd', NULL, 30, 10),
-  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee', NULL, 25, 5),
-  ('ffffffff-ffff-ffff-ffff-ffffffffffff', NULL, 15, 5);
+-- Inventory rows are created by a trigger when a product is inserted (quantity 0); set the initial stock.
+UPDATE public.inventory AS i
+SET quantity = v.quantity, low_stock_threshold = v.threshold
+FROM (VALUES
+  ('aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa'::uuid, 50, 10),
+  ('bbbbbbbb-bbbb-bbbb-bbbb-bbbbbbbbbbbb'::uuid, 100, 20),
+  ('cccccccc-cccc-cccc-cccc-cccccccccccc'::uuid, 60, 10),
+  ('dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid, 30, 10),
+  ('eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid, 25, 5),
+  ('ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid, 15, 5)
+) AS v(product_id, quantity, threshold)
+WHERE i.product_id = v.product_id AND i.variant_id IS NULL;
 
 -- Insert sample suppliers
 INSERT INTO public.suppliers (id, name, contact_person, email, phone, address) VALUES
@@ -53,10 +59,11 @@ INSERT INTO public.suppliers (id, name, contact_person, email, phone, address) V
   ('99999999-9999-9999-9999-999999999993', 'Food Distributors', 'Bob Wilson', 'bob@fooddist.com', '+1234567892', '321 Food St, Chicago');
 
 -- Insert sample customers
-INSERT INTO public.customers (id, name, email, phone, loyalty_points, total_spent) VALUES
-  ('88888888-8888-8888-8888-888888888881', 'Alice Johnson', 'alice@example.com', '+1111111111', 150, 450.00),
-  ('88888888-8888-8888-8888-888888888882', 'Bob Williams', 'bob@example.com', '+2222222222', 200, 600.00),
-  ('88888888-8888-8888-8888-888888888883', 'Carol Davis', 'carol@example.com', '+3333333333', 75, 225.00);
+-- total_spent and loyalty_points are derived from completed orders (trigger), so they are not seeded.
+INSERT INTO public.customers (id, name, email, phone) VALUES
+  ('88888888-8888-8888-8888-888888888881', 'Alice Johnson', 'alice@example.com', '+1111111111'),
+  ('88888888-8888-8888-8888-888888888882', 'Bob Williams', 'bob@example.com', '+2222222222'),
+  ('88888888-8888-8888-8888-888888888883', 'Carol Davis', 'carol@example.com', '+3333333333');
 
 -- Note: Orders and purchase orders will be created through the application
 -- This seed data provides the foundation for testing

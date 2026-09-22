@@ -1,169 +1,111 @@
-"use client"
+'use client'
 
-import { useEffect, useState } from 'react'
+import { useState } from 'react'
+import { format } from 'date-fns'
+import { BarChart3, TrendingUp, Package, Users, DollarSign } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
-import { supabase } from '@/lib/supabase/client'
-import { BarChart3, TrendingUp, Package, Users, DollarSign } from 'lucide-react'
-import { format, subDays, startOfDay, endOfDay } from 'date-fns'
-
-type SalesData = {
-    date: string
-    revenue: number
-    orders: number
-}
-
-type ProductSales = {
-    product_name: string
-    total_quantity: number
-    total_revenue: number
-}
-
-type CustomerData = {
-    customer_name: string
-    total_spent: number
-    order_count: number
-}
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
+import { QueryError } from '@/components/query-error'
+import { PageSpinner } from '@/components/page-spinner'
+import { useMoney, useSession } from '@/components/session-provider'
+import { reportsApi } from '@/lib/api/reports'
+import { calendarDate, dateInZone } from '@/lib/dates'
+import { useApiQuery } from '@/hooks/use-api-query'
 
 export default function ReportsPage() {
-    const [salesData, setSalesData] = useState<SalesData[]>([])
-    const [topProducts, setTopProducts] = useState<ProductSales[]>([])
-    const [topCustomers, setTopCustomers] = useState<CustomerData[]>([])
-    const [totalRevenue, setTotalRevenue] = useState(0)
-    const [totalOrders, setTotalOrders] = useState(0)
-    const [loading, setLoading] = useState(true)
+    const money = useMoney()
+    const { settings } = useSession()
+    const [range, setRange] = useState(() => ({
+        from: dateInZone(settings.timezone, -6),
+        to: dateInZone(settings.timezone)
+    }))
+    const validRange = range.from !== '' && range.to !== '' && range.from <= range.to
 
-    useEffect(() => {
-        fetchReportsData()
-    }, [])
+    // Aggregated by the database: refunded orders are excluded, days are bucketed in the store time zone.
+    const report = useApiQuery(
+        signal => reportsApi.get(range, signal),
+        validRange ? JSON.stringify(range) : 'invalid-range'
+    )
 
-    const fetchReportsData = async () => {
-        try {
-            // Fetch last 7 days sales
-            const last7Days = Array.from({ length: 7 }, (_, i) => {
-                const date = subDays(new Date(), 6 - i)
-                return {
-                    date: format(date, 'yyyy-MM-dd'),
-                    start: startOfDay(date).toISOString(),
-                    end: endOfDay(date).toISOString()
-                }
-            })
-
-            const salesPromises = last7Days.map(async ({ date, start, end }) => {
-                const { data: orders } = await supabase
-                    .from('orders')
-                    .select('total')
-                    .gte('created_at', start)
-                    .lte('created_at', end)
-                    .eq('status', 'completed')
-
-                return {
-                    date: format(new Date(date), 'MMM dd'),
-                    revenue: orders?.reduce((sum, o) => sum + o.total, 0) || 0,
-                    orders: orders?.length || 0
-                }
-            })
-
-            const sales = await Promise.all(salesPromises)
-            setSalesData(sales)
-
-            const totalRev = sales.reduce((sum, s) => sum + s.revenue, 0)
-            const totalOrd = sales.reduce((sum, s) => sum + s.orders, 0)
-            setTotalRevenue(totalRev)
-            setTotalOrders(totalOrd)
-
-            // Fetch top selling products
-            const { data: orderItems } = await supabase
-                .from('order_items')
-                .select('product_id, quantity, total, product:products(name)')
-                .limit(1000)
-
-            if (orderItems) {
-                const productMap = new Map<string, { name: string, quantity: number, revenue: number }>()
-
-                orderItems.forEach((item: any) => {
-                    if (item.product && item.product.name) {
-                        const name = item.product.name as string
-                        const existing = productMap.get(name) || { name, quantity: 0, revenue: 0 }
-                        existing.quantity += item.quantity
-                        existing.revenue += item.total
-                        productMap.set(name, existing)
-                    }
-                })
-
-                const sorted = Array.from(productMap.values())
-                    .sort((a, b) => b.revenue - a.revenue)
-                    .slice(0, 5)
-                    .map(p => ({
-                        product_name: p.name,
-                        total_quantity: p.quantity,
-                        total_revenue: p.revenue
-                    }))
-
-                setTopProducts(sorted)
-            }
-
-            // Fetch top customers
-            const { data: customers } = await supabase
-                .from('customers')
-                .select('id, name, total_spent')
-                .order('total_spent', { ascending: false })
-                .limit(5)
-
-            if (customers) {
-                const { data: orders } = await supabase
-                    .from('orders')
-                    .select('customer_id')
-                    .eq('status', 'completed')
-
-                const customerOrderCount = orders?.reduce((acc, o) => {
-                    if (o.customer_id) {
-                        acc[o.customer_id] = (acc[o.customer_id] || 0) + 1
-                    }
-                    return acc
-                }, {} as Record<string, number>) || {}
-
-                const topCust = customers.map(c => ({
-                    customer_name: c.name,
-                    total_spent: c.total_spent,
-                    order_count: customerOrderCount[c.id] || 0
-                }))
-
-                setTopCustomers(topCust)
-            }
-
-        } catch (error) {
-            console.error('Error fetching reports:', error)
-        } finally {
-            setLoading(false)
-        }
-    }
-
-    if (loading) {
-        return (
-            <div className="flex items-center justify-center h-full">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-emerald-600"></div>
+    const dateInputs = (
+        <div className="flex flex-wrap items-end gap-4">
+            <div className="space-y-1">
+                <Label htmlFor="report-from">From</Label>
+                <Input
+                    id="report-from"
+                    type="date"
+                    value={range.from}
+                    max={range.to || undefined}
+                    onChange={e => setRange(current => ({ ...current, from: e.target.value }))}
+                />
             </div>
-        )
-    }
+            <div className="space-y-1">
+                <Label htmlFor="report-to">To</Label>
+                <Input
+                    id="report-to"
+                    type="date"
+                    value={range.to}
+                    min={range.from || undefined}
+                    onChange={e => setRange(current => ({ ...current, to: e.target.value }))}
+                />
+            </div>
+        </div>
+    )
 
-    return (
-        <div className="space-y-6">
+    const header = (
+        <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
                 <h1 className="text-3xl font-bold">Reports & Analytics</h1>
                 <p className="text-muted-foreground">View detailed business insights and reports</p>
             </div>
+            {dateInputs}
+        </div>
+    )
+
+    if (!validRange) {
+        return (
+            <div className="space-y-6">
+                {header}
+                <p className="text-sm text-muted-foreground">Pick a valid date range (at most 366 days).</p>
+            </div>
+        )
+    }
+    if (report.error) {
+        return (
+            <div className="space-y-6">
+                {header}
+                <QueryError error={report.error} onRetry={report.reload} />
+            </div>
+        )
+    }
+    if (!report.data) {
+        return (
+            <div className="space-y-6">
+                {header}
+                <PageSpinner />
+            </div>
+        )
+    }
+
+    const data = report.data
+
+    return (
+        <div className="space-y-6">
+            {header}
 
             {/* Summary Cards */}
             <div className="grid gap-4 md:grid-cols-4">
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Last 7 Days Revenue</CardTitle>
+                        <CardTitle className="text-sm font-medium">Revenue</CardTitle>
                         <DollarSign className="h-4 w-4 text-emerald-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold text-emerald-600">${totalRevenue.toFixed(2)}</div>
+                        <div className="text-2xl font-bold text-emerald-600">{money(data.total_revenue)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Tax included: {money(data.total_tax)}</p>
                     </CardContent>
                 </Card>
 
@@ -173,7 +115,8 @@ export default function ReportsPage() {
                         <BarChart3 className="h-4 w-4 text-blue-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{totalOrders}</div>
+                        <div className="text-2xl font-bold">{data.total_orders}</div>
+                        <p className="text-xs text-muted-foreground mt-1">Refunded orders excluded</p>
                     </CardContent>
                 </Card>
 
@@ -183,19 +126,17 @@ export default function ReportsPage() {
                         <TrendingUp className="h-4 w-4 text-purple-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">
-                            ${totalOrders > 0 ? (totalRevenue / totalOrders).toFixed(2) : '0.00'}
-                        </div>
+                        <div className="text-2xl font-bold">{money(data.average_order)}</div>
                     </CardContent>
                 </Card>
 
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Active Customers</CardTitle>
+                        <CardTitle className="text-sm font-medium">Discounts Given</CardTitle>
                         <Users className="h-4 w-4 text-orange-600" />
                     </CardHeader>
                     <CardContent>
-                        <div className="text-2xl font-bold">{topCustomers.length}</div>
+                        <div className="text-2xl font-bold">{money(data.total_discount)}</div>
                     </CardContent>
                 </Card>
             </div>
@@ -206,19 +147,22 @@ export default function ReportsPage() {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <BarChart3 className="h-5 w-5 text-emerald-600" />
-                            Daily Sales (Last 7 Days)
+                            Daily Sales
                         </CardTitle>
-                        <CardDescription>Revenue and order trends</CardDescription>
+                        <CardDescription>Revenue and order trends ({data.time_zone})</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        <div className="space-y-2">
-                            {salesData.map((day, i) => (
-                                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-muted">
+                        <div className="space-y-2 max-h-96 overflow-y-auto">
+                            {data.daily.map(day => (
+                                <div
+                                    key={day.date}
+                                    className="flex items-center justify-between p-3 rounded-lg bg-muted"
+                                >
                                     <div>
-                                        <p className="font-medium">{day.date}</p>
+                                        <p className="font-medium">{format(calendarDate(day.date), 'MMM dd')}</p>
                                         <p className="text-sm text-muted-foreground">{day.orders} orders</p>
                                     </div>
-                                    <p className="text-lg font-bold text-emerald-600">${day.revenue.toFixed(2)}</p>
+                                    <p className="text-lg font-bold text-emerald-600">{money(day.revenue)}</p>
                                 </div>
                             ))}
                         </div>
@@ -230,12 +174,12 @@ export default function ReportsPage() {
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Package className="h-5 w-5 text-purple-600" />
-                            Top 5 Best Sellers
+                            Top Best Sellers
                         </CardTitle>
                         <CardDescription>Highest revenue products</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {topProducts.length === 0 ? (
+                        {data.top_products.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-8">No sales data available</p>
                         ) : (
                             <Table>
@@ -247,14 +191,14 @@ export default function ReportsPage() {
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {topProducts.map((product, i) => (
-                                        <TableRow key={i}>
-                                            <TableCell className="font-medium">{product.product_name}</TableCell>
+                                    {data.top_products.map(product => (
+                                        <TableRow key={product.product_id}>
+                                            <TableCell className="font-medium">{product.name}</TableCell>
                                             <TableCell className="text-right">
-                                                <Badge variant="secondary">{product.total_quantity}</Badge>
+                                                <Badge variant="secondary">{product.quantity}</Badge>
                                             </TableCell>
                                             <TableCell className="text-right font-semibold text-emerald-600">
-                                                ${product.total_revenue.toFixed(2)}
+                                                {money(product.revenue)}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -265,35 +209,72 @@ export default function ReportsPage() {
                 </Card>
 
                 {/* Top Customers */}
-                <Card className="rounded-2xl md:col-span-2">
+                <Card className="rounded-2xl">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Users className="h-5 w-5 text-orange-600" />
-                            Top 5 Customers
+                            Top Customers
                         </CardTitle>
-                        <CardDescription>Highest spending customers</CardDescription>
+                        <CardDescription>Highest spending customers in this period</CardDescription>
                     </CardHeader>
                     <CardContent>
-                        {topCustomers.length === 0 ? (
+                        {data.top_customers.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-8">No customer data available</p>
                         ) : (
                             <Table>
                                 <TableHeader>
                                     <TableRow>
                                         <TableHead>Customer</TableHead>
-                                        <TableHead className="text-right">Total Spent</TableHead>
-                                        <TableHead className="text-right">Loyalty Points</TableHead>
+                                        <TableHead className="text-right">Orders</TableHead>
+                                        <TableHead className="text-right">Spent</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
-                                    {topCustomers.map((customer, i) => (
-                                        <TableRow key={i}>
-                                            <TableCell className="font-medium">{customer.customer_name}</TableCell>
-                                            <TableCell className="text-right font-semibold text-emerald-600">
-                                                ${customer.total_spent.toFixed(2)}
-                                            </TableCell>
+                                    {data.top_customers.map(customer => (
+                                        <TableRow key={customer.customer_id}>
+                                            <TableCell className="font-medium">{customer.name}</TableCell>
                                             <TableCell className="text-right">
-                                                <Badge variant="secondary">{Math.floor(customer.total_spent)}</Badge>
+                                                <Badge variant="secondary">{customer.orders}</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right font-semibold text-emerald-600">
+                                                {money(customer.spent)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
+
+                {/* Payment methods */}
+                <Card className="rounded-2xl">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <DollarSign className="h-5 w-5 text-emerald-600" />
+                            Payment Methods
+                        </CardTitle>
+                        <CardDescription>How customers paid</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {data.by_payment_method.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-8">No payments in this period</p>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>Method</TableHead>
+                                        <TableHead className="text-right">Orders</TableHead>
+                                        <TableHead className="text-right">Amount</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {data.by_payment_method.map(payment => (
+                                        <TableRow key={payment.method}>
+                                            <TableCell className="font-medium capitalize">{payment.method}</TableCell>
+                                            <TableCell className="text-right">{payment.orders}</TableCell>
+                                            <TableCell className="text-right font-semibold text-emerald-600">
+                                                {money(payment.amount)}
                                             </TableCell>
                                         </TableRow>
                                     ))}

@@ -1,0 +1,6 @@
+[install]
+# Versiones exactas al añadir dependencias (sin ^ ni ~).
+exact = true
+
+[test]
+preload = ["./test/setup.ts"]
