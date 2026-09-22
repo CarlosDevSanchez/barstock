@@ -32,8 +32,7 @@ import { roleAtLeast } from '@/lib/auth/roles'
 import { inventoryAdjustSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-
-const PAGE_SIZE = 25
+import { usePagination } from '@/hooks/use-pagination'
 
 type AdjustInput = z.input<typeof inventoryAdjustSchema>
 type AdjustOutput = z.output<typeof inventoryAdjustSchema>
@@ -110,13 +109,13 @@ export default function InventoryPage() {
 
     const [searchQuery, setSearchQuery] = useState('')
     const [lowOnly, setLowOnly] = useState(false)
-    const [page, setPage] = useState(1)
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const [adjusting, setAdjusting] = useState<InventoryListItem | null>(null)
     const search = useDebouncedValue(searchQuery)
 
     const inventory = useApiQuery(
-        signal => inventoryApi.list({ page, pageSize: PAGE_SIZE, q: search, low: lowOnly }, signal),
-        JSON.stringify({ page, search, lowOnly })
+        signal => inventoryApi.list({ page, pageSize, q: search, low: lowOnly }, signal),
+        JSON.stringify({ page, pageSize, search, lowOnly })
     )
     const summary = inventory.data?.summary
 
@@ -173,7 +172,7 @@ export default function InventoryPage() {
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
-                                setPage(1)
+                                reset()
                             }}
                             className="pl-10"
                         />
@@ -183,7 +182,7 @@ export default function InventoryPage() {
                         aria-pressed={lowOnly}
                         onClick={() => {
                             setLowOnly(value => !value)
-                            setPage(1)
+                            reset()
                         }}
                     >
                         <AlertTriangle className="mr-2 h-4 w-4" />
@@ -260,9 +259,10 @@ export default function InventoryPage() {
                         )}
                         <Pagination
                             page={page}
-                            pageSize={PAGE_SIZE}
+                            pageSize={pageSize}
                             total={inventory.data.total}
                             onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
                         />
                     </>
                 )}

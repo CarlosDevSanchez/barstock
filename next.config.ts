@@ -6,14 +6,21 @@ import { parseEnv, serverEnvSchema } from './lib/env/schema'
 parseEnv(serverEnvSchema, process.env)
 const isDev = process.env.NODE_ENV === 'development'
 
+// Product/logo images are signed R2 URLs, fetched directly from Cloudflare (never proxied through this origin):
+// img-src needs that host. It is the fixed R2 endpoint pattern, NOT derived from R2_ACCOUNT_ID: this file (and so
+// the CSP) is evaluated at BUILD time, and the Docker image is built without the R2 secrets (they arrive at
+// container start). Deriving it from the env would ship a CSP without R2 and the browser would silently block
+// every image while uploads still work. The bucket stays private: only signed URLs load.
+const r2ImageOrigin = ' https://*.r2.cloudflarestorage.com'
+
 // Everything is self-hosted (fonts come from next/font). Next.js needs inline scripts/styles for hydration;
 // a nonce-based CSP would force dynamic rendering of every page, so 'unsafe-inline' stays for now.
-// The browser only talks to this origin (/api/v1); Supabase is reached from the server.
+// The browser only talks to this origin (/api/v1) and, for product/logo images, directly to R2.
 const contentSecurityPolicy = [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    `img-src 'self' data: blob:${r2ImageOrigin}`,
     "font-src 'self' data:",
     `connect-src 'self'${isDev ? ' ws://localhost:* ws://127.0.0.1:*' : ''}`,
     "object-src 'none'",

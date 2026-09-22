@@ -15,7 +15,7 @@ La página quedó como orquestadora (estado, queries, `handleCheckout`) sobre co
 1. El cajero busca (nombre, SKU o código de barras) o filtra por categoría y pulsa un producto: se añade **solo el id** al carrito. Los sin stock (o sin fila de inventario) no se pueden añadir.
 2. El POS pide `GET /products?ids=…` con los productos del carrito para tener su **precio, tasa y stock actuales** y muestra una **vista previa** (subtotal, impuesto, descuento, total) en la burbuja y en el `Sheet`.
 3. *Checkout* → método de pago (efectivo, tarjeta, e-wallet) → *Complete Order* → `POST /api/v1/sales`.
-4. El servidor ejecuta `create_sale` en **una transacción** y devuelve la orden con **los totales que calculó la base de datos**. El `toast` muestra ese total con un enlace a la orden; el carrito se vacía y la burbuja se oculta.
+4. El servidor ejecuta `create_sale` en **una transacción** y devuelve la orden con **los totales que calculó la base de datos**. El `toast` muestra ese total con un enlace a la orden; el carrito se vacía (la burbuja sigue visible, con «0»).
 5. Si falla (p. ej. stock insuficiente) el carrito **se conserva**, se recargan catálogo y stock y el `toast` explica el motivo.
 
 En vez de cobrar de inmediato, el botón **"Añadir a cuenta"** (junto a *Checkout*) envía el carrito a una cuenta abierta (o crea una nueva): ver [cuentas-abiertas](cuentas-abiertas.md) para el flujo completo de pagos parciales.

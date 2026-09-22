@@ -50,4 +50,50 @@ describe('ProductCard', () => {
         fireEvent.click(card)
         expect(onAdd).not.toHaveBeenCalled()
     })
+
+    test('the image box keeps a fixed aspect ratio and lazy-loads with async decoding', () => {
+        renderCard({ name: 'Framed', image_url: 'https://example.com/framed.jpg' })
+        const img = screen.getByAltText('')
+        expect(img.closest('div')?.className).toContain('aspect-[4/3]')
+        expect(img.getAttribute('loading')).toBe('lazy')
+        expect(img.getAttribute('decoding')).toBe('async')
+    })
+
+    test('falls back to the reserve icon, in the same fixed-ratio box, when the image fails to load', () => {
+        renderCard({ name: 'Broken Image', image_url: 'https://example.com/broken.jpg' })
+        const img = screen.getByAltText('')
+        const box = img.closest('div')
+        fireEvent.error(img)
+        expect(screen.queryByAltText('')).toBeNull()
+        expect(box?.className).toContain('aspect-[4/3]')
+        expect(box?.querySelector('svg')).toBeTruthy()
+    })
+
+    test('a fresh URL after a failed (e.g. expired signed) one shows the image again on the same mounted card', () => {
+        const view = (image_url: string) => (
+            <IntlProvider>
+                <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
+                    <ProductCard product={product({ name: 'Refetched', image_url })} onAdd={() => {}} />
+                </SessionProvider>
+            </IntlProvider>
+        )
+        const { rerender } = render(view('https://example.com/p.jpg?X-Amz-Signature=old'))
+        fireEvent.error(screen.getByAltText(''))
+        expect(screen.queryByAltText('')).toBeNull()
+
+        // Same URL again (no refetch yet): still the fallback, no retry loop.
+        rerender(view('https://example.com/p.jpg?X-Amz-Signature=old'))
+        expect(screen.queryByAltText('')).toBeNull()
+
+        rerender(view('https://example.com/p.jpg?X-Amz-Signature=new'))
+        expect(screen.getByAltText('').getAttribute('src')).toBe('https://example.com/p.jpg?X-Amz-Signature=new')
+    })
+
+    test('without an image, the placeholder box has the same fixed aspect ratio as a filled one', () => {
+        renderCard({ name: 'No Image', image_url: null })
+        const card = screen.getByRole('button', { name: 'Add No Image to cart' })
+        const box = card.firstElementChild
+        expect(box?.className).toContain('aspect-[4/3]')
+        expect(box?.querySelector('svg')).toBeTruthy()
+    })
 })

@@ -20,7 +20,7 @@ import { apiPatch, apiPost, errorMessage } from '@/lib/api/client'
 import { roleAtLeast, type UserRole } from '@/lib/auth/roles'
 import { APP_LOCALES, type AppLocale } from '@/lib/i18n/config'
 import { useCartStore } from '@/stores/cart'
-import type { SettingsInput } from '@/lib/validation/resources'
+import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 import { SessionProvider, type SessionUser } from '@/components/session-provider'
 import { useTheme } from 'next-themes'
 import {
@@ -74,7 +74,7 @@ const navItems: Array<{
 
 interface AppShellProps {
     user: SessionUser
-    settings: SettingsInput
+    settings: SettingsWithLogoUrl
     children: ReactNode
 }
 
@@ -164,8 +164,8 @@ export function AppShell({ user, settings, children }: AppShellProps) {
 
     return (
         <SessionProvider value={{ user, settings }}>
-            <div className="flex h-screen overflow-hidden">
-                <aside className="hidden lg:flex w-64 flex-col border-r bg-card">
+            <div className="flex h-screen overflow-hidden print:block print:h-auto print:overflow-visible">
+                <aside className="hidden lg:flex w-64 flex-col border-r bg-card print:hidden">
                     <div className="p-6">
                         <h1 className="text-2xl font-bold text-emerald-600">{settings.store_name}</h1>
                     </div>
@@ -190,8 +190,8 @@ export function AppShell({ user, settings, children }: AppShellProps) {
                     </div>
                 </aside>
 
-                <div className="flex-1 flex flex-col overflow-hidden">
-                    <header className="lg:hidden flex items-center justify-between p-4 border-b bg-card">
+                <div className="flex-1 flex flex-col overflow-hidden print:block print:overflow-visible">
+                    <header className="lg:hidden flex items-center justify-between p-4 border-b bg-card print:hidden">
                         <Sheet>
                             <SheetTrigger asChild>
                                 <Button variant="ghost" size="icon">
@@ -220,7 +220,9 @@ export function AppShell({ user, settings, children }: AppShellProps) {
                         </DropdownMenu>
                     </header>
 
-                    <main className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900">{children}</main>
+                    <main className="flex-1 overflow-y-auto p-6 bg-slate-50 dark:bg-slate-900 print:overflow-visible print:p-0 print:bg-white">
+                        {children}
+                    </main>
                 </div>
             </div>
         </SessionProvider>

@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useEffect, useState } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
@@ -24,20 +24,23 @@ import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { SelectField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
+import { ProductImageField } from '@/components/product-image-field'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
 import { useMoney, useSession } from '@/components/session-provider'
 import { moneyStep } from '@/lib/money'
 import { categoriesApi } from '@/lib/api/categories'
-import { errorMessage } from '@/lib/api/client'
+import { ApiError, errorMessage } from '@/lib/api/client'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
 import { roleAtLeast } from '@/lib/auth/roles'
+import { suggestSku } from '@/lib/sku'
 import { taxRatePercent } from '@/lib/validation/common'
 import { productCreateSchema } from '@/lib/validation/resources'
+import type { Tables } from '@/types/database'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
-
-const PAGE_SIZE = 25
+import { useImageFallback } from '@/hooks/use-image-fallback'
+import { usePagination } from '@/hooks/use-pagination'
 
 // The API stores the tax rate as a fraction (0.10); people type a percentage (10).
 const productFormSchema = productCreateSchema.extend({
@@ -89,19 +92,62 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
     })
     const submitting = form.formState.isSubmitting
 
+    // The image is uploaded/removed only after the product itself is saved (it needs an id): see onSubmit below.
+    const [imageFile, setImageFile] = useState<File | null>(null)
+    const [imageRemoved, setImageRemoved] = useState(false)
+
+    // Autofill the SKU from the name while creating a product, but only until the user edits the SKU by
+    // hand: `resetField` both sets the value and keeps `isDirty` false (its default `keepDirty: false`),
+    // so it keeps following the name; a real edit through the input marks the field dirty and this stops.
+    // Never touches the SKU of an existing product.
+    const name = useWatch({ control: form.control, name: 'name' })
+    useEffect(() => {
+        if (product) return
+        if (form.getFieldState('sku').isDirty) return
+        form.resetField('sku', { defaultValue: suggestSku(name) })
+    }, [name, product, form])
+
+    const regenerateSku = () => {
+        form.resetField('sku', { defaultValue: suggestSku(form.getValues('name')) })
+    }
+
     const onSubmit = form.handleSubmit(async values => {
+        let saved: Tables<'products'>
         try {
             if (product) {
-                await productsApi.update(product.id, values)
+                saved = await productsApi.update(product.id, values)
                 toast.success(t('updated'))
             } else {
-                await productsApi.create(values)
+                saved = await productsApi.create(values)
                 toast.success(t('created'))
             }
-            onSaved()
         } catch (error: unknown) {
+            // A duplicate SKU or barcode (Postgres 23505) is a 409 whose details name the field
+            // (lib/server/errors.ts). Pin it on that field (with a ready-to-use alternative for the SKU); any
+            // other conflict falls through to the generic toast.
+            const conflictField = error instanceof ApiError && error.status === 409 ? conflictFieldOf(error) : null
+            if (conflictField === 'sku') {
+                const suggestion = `${form.getValues('sku')}-2`
+                form.setError('sku', { type: 'conflict', message: t('skuConflict', { suggestion }) })
+                return
+            }
+            if (conflictField === 'barcode') {
+                form.setError('barcode', { type: 'conflict', message: t('barcodeConflict') })
+                return
+            }
             toast.error(errorMessage(error, t('saveFailed')))
+            return
         }
+
+        // The product is already saved at this point: an image failure is reported but never blocks onSaved().
+        try {
+            if (imageFile) await productsApi.uploadImage(saved.id, imageFile)
+            else if (imageRemoved) await productsApi.deleteImage(saved.id)
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('imageSaveFailed')))
+        }
+
+        onSaved()
     })
 
     return (
@@ -114,9 +160,45 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate className="flex flex-col flex-1 overflow-hidden">
                         <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
+                            {settings.storage_configured && (
+                                <ProductImageField
+                                    label={t('image')}
+                                    existingUrl={product?.image_url ?? null}
+                                    file={imageFile}
+                                    removed={imageRemoved}
+                                    onSelect={file => {
+                                        setImageFile(file)
+                                        setImageRemoved(false)
+                                    }}
+                                    onRemove={() => {
+                                        setImageFile(null)
+                                        setImageRemoved(true)
+                                    }}
+                                    onUndo={() => setImageFile(null)}
+                                    disabled={submitting}
+                                    addLabel={t('addImage')}
+                                    changeLabel={t('changeImage')}
+                                    removeLabel={t('removeImage')}
+                                    resizeErrorLabel={t('imageResizeFailed')}
+                                />
+                            )}
                             <TextField name="name" label={t('name')} className="col-span-2" />
                             <TextField name="description" label={t('description')} className="col-span-2" />
-                            <TextField name="sku" label={t('sku')} />
+                            {product ? (
+                                <TextField name="sku" label={t('sku')} />
+                            ) : (
+                                <div className="flex items-end gap-2">
+                                    <TextField
+                                        name="sku"
+                                        label={t('sku')}
+                                        description={t('skuHelp')}
+                                        className="flex-1"
+                                    />
+                                    <Button type="button" variant="outline" size="sm" onClick={regenerateSku}>
+                                        {t('regenerateSku')}
+                                    </Button>
+                                </div>
+                            )}
                             <TextField name="barcode" label={t('barcode')} />
                             <SelectField
                                 name="category_id"
@@ -163,6 +245,36 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
     )
 }
 
+/** The form field a 409 unique-violation points at (`details.field`, set by lib/server/errors.ts), if any. */
+function conflictFieldOf(error: ApiError): string | null {
+    const details = error.details
+    if (typeof details !== 'object' || details === null || !('field' in details)) return null
+    return typeof details.field === 'string' ? details.field : null
+}
+
+/** 40px thumbnail for the products table: falls back to the reserve icon when there is no image, or it fails to load. */
+function ProductThumbnail({ product }: { product: ProductListItem }) {
+    const { showImage, onError } = useImageFallback(product.image_url)
+
+    return (
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+            {showImage ? (
+                // eslint-disable-next-line @next/next/no-img-element -- signed, arbitrary-sized R2 thumbnail
+                <img
+                    src={product.image_url ?? undefined}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                    onError={onError}
+                />
+            ) : (
+                <Package className="h-4 w-4 text-emerald-600" />
+            )}
+        </div>
+    )
+}
+
 export default function ProductsPage() {
     const t = useTranslations('products')
     const tc = useTranslations('common')
@@ -171,15 +283,15 @@ export default function ProductsPage() {
     const canManage = roleAtLeast(user.role, 'manager')
 
     const [searchQuery, setSearchQuery] = useState('')
-    const [page, setPage] = useState(1)
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const search = useDebouncedValue(searchQuery)
     // undefined = closed, null = creating, product = editing
     const [editing, setEditing] = useState<ProductListItem | null | undefined>(undefined)
     const [toDelete, setToDelete] = useState<ProductListItem | null>(null)
 
     const products = useApiQuery(
-        signal => productsApi.list({ page, pageSize: PAGE_SIZE, q: search }, signal),
-        JSON.stringify({ page, search })
+        signal => productsApi.list({ page, pageSize, q: search }, signal),
+        JSON.stringify({ page, pageSize, search })
     )
     const categories = useApiQuery(signal => categoriesApi.list({ pageSize: 100 }, signal), 'categories')
     const categoryOptions = (categories.data?.data ?? []).map(category => ({
@@ -211,7 +323,7 @@ export default function ProductsPage() {
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
-                                setPage(1)
+                                reset()
                             }}
                             className="pl-10"
                         />
@@ -242,9 +354,7 @@ export default function ProductsPage() {
                                     <TableRow key={product.id}>
                                         <TableCell>
                                             <div className="flex items-center gap-3">
-                                                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
-                                                    <Package className="h-4 w-4 text-emerald-600" />
-                                                </div>
+                                                <ProductThumbnail product={product} />
                                                 <div>
                                                     <p className="font-medium">{product.name}</p>
                                                     <p className="text-sm text-muted-foreground">
@@ -297,9 +407,10 @@ export default function ProductsPage() {
                         )}
                         <Pagination
                             page={page}
-                            pageSize={PAGE_SIZE}
+                            pageSize={pageSize}
                             total={products.data.total}
                             onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
                         />
                     </>
                 )}

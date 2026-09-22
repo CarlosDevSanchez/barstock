@@ -28,6 +28,7 @@
 | D18 | Backups: RPO/RTO aceptables; quién restaura | [migraciones](../02-base-de-datos/06-seed-y-migraciones.md) | PITR si el negocio no tolera perder ventas | Pendiente |
 | D19 | Política de rotación de claves y accesos | [variables de entorno](../05-guias/variables-de-entorno.md) | Rotación tras salida de personal y ante sospecha | Pendiente |
 | D20 | Licencia del proyecto (el README declara MIT; no hay `LICENSE`) | Legal | Definir con el cliente/propietario; añadir `LICENSE` acorde | Pendiente |
+| D21 | Ticket POS de 80 mm: ¿comprobante interno o factura electrónica (CUFE, QR, resolución DIAN)? | `receipt-ticket.tsx`, ventas al por menor | Comprobante **no fiscal** para esta fase; factura electrónica es un proyecto aparte (DIAN, numeración autorizada, firma) | **Decidido (2026-09-22, propietario)**: no es factura electrónica |
 
 ## Supuestos aplicados en la etapa 1 (a validar con el negocio)
 
@@ -62,6 +63,18 @@ Impacto: migración `20260921000006_locale_and_money.sql`, `lib/money.ts`, `crea
 Decisión: UI en **español por defecto** con inglés como alternativa; idioma **por usuario** en `profiles.locale` (`es` \| `en`), sin segmento `[locale]` en la URL (`next-intl`).
 Motivo: el personal puede preferir EN; la tienda es ES.
 Impacto: `next-intl`, `PATCH /api/v1/me`, cookie `NEXT_LOCALE`, diccionarios `messages/{es,en}.json`.
+
+### D21 — Decidido 2026-09-22
+Decisión: el ticket de 80 mm que imprime `orders/[id]` (`components/orders/receipt-ticket.tsx`) es un **comprobante de
+venta no fiscal** («COMPROBANTE DE VENTA — No es factura electrónica»). No incluye CUFE, código QR, resolución de
+numeración DIAN, ni «recibido/cambio» (el efectivo entregado por el cliente no se guarda).
+Motivo: emitir factura electrónica válida ante la DIAN requiere numeración autorizada, firma y un proveedor
+tecnológico homologado — fuera del alcance de esta fase (Fase 5 del plan de UI).
+Alternativas descartadas: integrar un PSE/facturador electrónico ahora mismo (se pospone a una fase futura si el
+negocio lo requiere).
+Impacto en el código/BD: migración `20260923000002_receipt.sql` (`order_items.tax_rate`, snapshot vía trigger;
+`settings.store_tax_id`/`store_logo_key`), `lib/receipt.ts`, `components/orders/receipt-ticket.tsx`,
+`app/(dashboard)/orders/[id]/page.tsx`, `app/globals.css`, `components/app-shell.tsx`.
 
 ## Detalle de las decisiones de mayor impacto
 

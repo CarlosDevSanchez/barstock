@@ -73,6 +73,7 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          deleted_at: string | null
           email: string | null
           id: string
           is_active: boolean
@@ -85,6 +86,7 @@ export type Database = {
         Insert: {
           address?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -97,6 +99,7 @@ export type Database = {
         Update: {
           address?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -242,6 +245,7 @@ export type Database = {
           product_id: string
           quantity: number
           tax: number
+          tax_rate: number | null
           total: number
           unit_price: number
           variant_id: string | null
@@ -254,6 +258,7 @@ export type Database = {
           product_id: string
           quantity: number
           tax?: number
+          tax_rate?: number | null
           total: number
           unit_price: number
           variant_id?: string | null
@@ -266,6 +271,7 @@ export type Database = {
           product_id?: string
           quantity?: number
           tax?: number
+          tax_rate?: number | null
           total?: number
           unit_price?: number
           variant_id?: string | null
@@ -457,6 +463,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          image_key: string | null
           image_url: string | null
           is_active: boolean
           name: string
@@ -473,6 +480,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          image_key?: string | null
           image_url?: string | null
           is_active?: boolean
           name: string
@@ -489,6 +497,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          image_key?: string | null
           image_url?: string | null
           is_active?: boolean
           name?: string
@@ -683,6 +692,7 @@ export type Database = {
           address: string | null
           contact_person: string | null
           created_at: string
+          deleted_at: string | null
           email: string | null
           id: string
           is_active: boolean
@@ -695,6 +705,7 @@ export type Database = {
           address?: string | null
           contact_person?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -707,6 +718,7 @@ export type Database = {
           address?: string | null
           contact_person?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           id?: string
           is_active?: boolean

@@ -17,7 +17,7 @@ const GRID_CLASSES = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-col
 function CardSkeleton() {
     return (
         <div className="min-w-0 rounded-xl overflow-hidden border animate-pulse">
-            <div className="h-14 bg-muted" />
+            <div className="aspect-[4/3] w-full bg-muted" />
             <div className="p-2.5 space-y-2">
                 <div className="h-3 bg-muted rounded w-3/4" />
                 <div className="h-4 bg-muted rounded w-1/2" />

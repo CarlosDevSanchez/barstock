@@ -75,6 +75,23 @@ export function toResponse(result: ApiResult | Response): Response {
     return Response.json(result.body, { status: result.status, headers: NO_STORE })
 }
 
+/**
+ * Reads a single uploaded file from a `multipart/form-data` body (the product/logo image endpoints, which cannot
+ * use `route()`'s JSON `body` schema). Never trusts the field's filename or the browser-supplied Content-Type:
+ * callers must still run the bytes through `validateImage` (lib/server/storage.ts).
+ */
+export async function readUploadedFile(request: Request, field = 'file'): Promise<Uint8Array> {
+    let form: FormData
+    try {
+        form = await request.formData()
+    } catch {
+        throw badRequest('Malformed multipart body')
+    }
+    const file = form.get(field)
+    if (!(file instanceof File)) throw badRequest('Missing file')
+    return new Uint8Array(await file.arrayBuffer())
+}
+
 const SAFE_METHODS = new Set(['GET', 'HEAD', 'OPTIONS'])
 
 /**

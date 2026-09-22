@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
@@ -11,6 +12,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { Button } from '@/components/ui/button'
 import { Form } from '@/components/ui/form'
 import { SelectField, TextField } from '@/components/form-fields'
+import { ProductImageField } from '@/components/product-image-field'
 import { useSession } from '@/components/session-provider'
 import { errorMessage } from '@/lib/api/client'
 import { settingsApi } from '@/lib/api/settings'
@@ -46,6 +48,9 @@ export default function SettingsPage() {
     })
     const submitting = form.formState.isSubmitting
 
+    const [logoFile, setLogoFile] = useState<File | null>(null)
+    const [logoRemoved, setLogoRemoved] = useState(false)
+
     // Keep the stored currency selectable even when it is not one of the common ones.
     const currencies = [...new Set([...COMMON_CURRENCIES, settings.currency])].map(code => ({
         value: code,
@@ -57,12 +62,24 @@ export default function SettingsPage() {
         try {
             const saved = await settingsApi.update(values)
             form.reset(toFormValues(saved))
-            toast.success(t('saved'))
-            // Re-runs the server layout so the new store name and currency apply everywhere.
-            router.refresh()
         } catch (error: unknown) {
             toast.error(errorMessage(error, t('saveFailed')))
+            return
         }
+
+        // Settings are already saved at this point: a logo failure is reported but never blocks the rest.
+        try {
+            if (logoFile) await settingsApi.uploadLogo(logoFile)
+            else if (logoRemoved) await settingsApi.removeLogo()
+            setLogoFile(null)
+            setLogoRemoved(false)
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('logoSaveFailed')))
+        }
+
+        toast.success(t('saved'))
+        // Re-runs the server layout so the new store name, currency and logo apply everywhere.
+        router.refresh()
     })
 
     return (
@@ -85,9 +102,36 @@ export default function SettingsPage() {
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <TextField name="store_name" label={t('storeName')} />
+                                <TextField
+                                    name="store_tax_id"
+                                    label={t('storeTaxId')}
+                                    description={t('storeTaxIdHint')}
+                                />
                                 <TextField name="store_address" label={t('address')} />
                                 <TextField name="store_phone" label={t('phone')} />
                                 <TextField name="store_email" label={t('email')} type="email" />
+                                {settings.storage_configured && (
+                                    <ProductImageField
+                                        label={t('logo')}
+                                        existingUrl={settings.store_logo_url}
+                                        file={logoFile}
+                                        removed={logoRemoved}
+                                        onSelect={file => {
+                                            setLogoFile(file)
+                                            setLogoRemoved(false)
+                                        }}
+                                        onRemove={() => {
+                                            setLogoFile(null)
+                                            setLogoRemoved(true)
+                                        }}
+                                        onUndo={() => setLogoFile(null)}
+                                        disabled={submitting}
+                                        addLabel={t('addLogo')}
+                                        changeLabel={t('changeLogo')}
+                                        removeLabel={t('removeLogo')}
+                                        resizeErrorLabel={t('logoResizeFailed')}
+                                    />
+                                )}
                             </CardContent>
                         </Card>
 

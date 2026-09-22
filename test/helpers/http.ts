@@ -42,6 +42,8 @@ interface CallOptions {
     body?: unknown
     /** Raw body (e.g. malformed JSON). */
     rawBody?: string
+    /** Multipart body (image upload endpoints): the `Request` sets its own boundary Content-Type. */
+    formData?: FormData
     params?: Record<string, string>
     headers?: Record<string, string>
     /** Sent as `Origin`; null omits it. Defaults to the app's own origin. */
@@ -60,9 +62,9 @@ export class TestClient {
         const headers: Record<string, string> = { host: 'localhost:3000', ...options.headers }
         if (options.origin !== null) headers.origin = options.origin ?? ORIGIN
         const raw = options.rawBody ?? (options.body === undefined ? undefined : JSON.stringify(options.body))
-        if (raw !== undefined) headers['content-type'] = 'application/json'
+        if (options.formData === undefined && raw !== undefined) headers['content-type'] = 'application/json'
 
-        const request = new Request(`${ORIGIN}/api/v1/${path}`, { method, headers, body: raw })
+        const request = new Request(`${ORIGIN}/api/v1/${path}`, { method, headers, body: options.formData ?? raw })
         const context = options.params ? { params: Promise.resolve(options.params) } : undefined
         const response = await jars.run(this.jar, () => handler(request, context))
         const text = await response.text()

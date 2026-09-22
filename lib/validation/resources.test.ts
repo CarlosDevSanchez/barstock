@@ -20,12 +20,12 @@ const id = '11111111-1111-4111-8111-111111111111'
 describe('products', () => {
     const base = { name: 'Beer', sku: 'BEER-1', selling_price: '3.50' }
 
-    test("normalizes '' to null for barcode, category and image", () => {
+    test("normalizes '' to null for barcode and category; image_url is not a client-writable field", () => {
         const parsed = productCreateSchema.parse({ ...base, barcode: '', category_id: '', image_url: '' })
         expect(parsed.barcode).toBeNull()
         expect(parsed.category_id).toBeNull()
-        expect(parsed.image_url).toBeNull()
         expect(parsed.selling_price).toBe(3.5)
+        expect('image_url' in parsed).toBe(false) // stripped like any other unknown key (see setProductImage)
     })
     test('does not invent defaults for columns the DB defaults', () => {
         const parsed = productCreateSchema.parse(base)

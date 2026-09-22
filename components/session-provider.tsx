@@ -1,11 +1,11 @@
 'use client'
 
 import { createContext, useContext, type ReactNode } from 'react'
+import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 import type { UserRole } from '@/lib/auth/roles'
 import type { AppLocale } from '@/lib/i18n/config'
 import { moneyLocale } from '@/lib/i18n/config'
 import { formatMoney } from '@/lib/money'
-import type { SettingsInput } from '@/lib/validation/resources'
 
 export interface SessionUser {
     id: string
@@ -17,7 +17,7 @@ export interface SessionUser {
 
 interface SessionValue {
     user: SessionUser
-    settings: SettingsInput
+    settings: SettingsWithLogoUrl
 }
 
 const SessionContext = createContext<SessionValue | null>(null)

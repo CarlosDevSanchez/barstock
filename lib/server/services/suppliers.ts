@@ -10,7 +10,11 @@ export async function listSuppliers(
     supabase: AppSupabaseClient,
     { page, pageSize, q }: Pagination
 ): Promise<Page<Tables<'suppliers'>>> {
-    let query = supabase.from('suppliers').select('*', { count: 'exact' }).order('created_at', { ascending: false })
+    let query = supabase
+        .from('suppliers')
+        .select('*', { count: 'exact' })
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
     const filter = searchFilter(q, ['name', 'contact_person', 'email'])
     if (filter) query = query.or(filter)
 
@@ -21,7 +25,12 @@ export async function listSuppliers(
 }
 
 export async function getSupplier(supabase: AppSupabaseClient, id: string): Promise<Tables<'suppliers'>> {
-    const { data, error } = await supabase.from('suppliers').select('*').eq('id', id).maybeSingle()
+    const { data, error } = await supabase
+        .from('suppliers')
+        .select('*')
+        .eq('id', id)
+        .is('deleted_at', null)
+        .maybeSingle()
     assertNoError(error)
     if (!data) throw notFound('Supplier not found')
     return data
@@ -38,8 +47,27 @@ export async function updateSupplier(
     id: string,
     patch: SupplierUpdate
 ): Promise<Tables<'suppliers'>> {
-    const { data, error } = await supabase.from('suppliers').update(patch).eq('id', id).select().maybeSingle()
+    const { data, error } = await supabase
+        .from('suppliers')
+        .update(patch)
+        .eq('id', id)
+        .is('deleted_at', null)
+        .select()
+        .maybeSingle()
     assertNoError(error)
     if (!data) throw notFound('Supplier not found')
     return data
+}
+
+/** Soft delete: purchase history keeps pointing at the supplier. Admin only (RLS trigger guard_soft_delete). */
+export async function deleteSupplier(supabase: AppSupabaseClient, id: string): Promise<void> {
+    const { data, error } = await supabase
+        .from('suppliers')
+        .update({ deleted_at: new Date().toISOString(), is_active: false })
+        .eq('id', id)
+        .is('deleted_at', null)
+        .select('id')
+        .maybeSingle()
+    assertNoError(error)
+    if (!data) throw notFound('Supplier not found')
 }

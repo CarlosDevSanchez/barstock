@@ -83,8 +83,8 @@ describe('POS cart', () => {
 
         addToCart('Sold Out Thing')
         expect(useCartStore.getState().items).toEqual([])
-        // Nothing was added: the cart bubble stays hidden (it only shows once there is something to check out).
-        expect(screen.queryByRole('button', { name: /^Cart:/ })).toBeNull()
+        // Nothing was added: the cart bubble stays visible but still reports an empty cart.
+        expect(screen.getByRole('button', { name: 'Cart: 0 items, total $0.00' })).toBeTruthy()
     })
 
     test('adds products, merges repeats into one line and shows a preview of the totals', async () => {

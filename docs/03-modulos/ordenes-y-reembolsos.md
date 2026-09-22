@@ -1,6 +1,6 @@
 # Módulo: Órdenes y reembolsos
 
-> Actualizado tras la etapa 1 · `app/(dashboard)/orders/page.tsx`, `orders/[id]/page.tsx` · API `orders`, `orders/[id]`, `orders/[id]/refund` · RPC `refund_order` · Confianza: **[Verificado]** (`sales.test.ts`, `rpc.test.ts`, `rls.test.ts`, e2e).
+> Actualizado en la etapa 3 (Fase 5, ticket de 80 mm) · `app/(dashboard)/orders/page.tsx`, `orders/[id]/page.tsx`, `components/orders/receipt-ticket.tsx` · API `orders`, `orders/[id]`, `orders/[id]/refund` · RPC `refund_order` · Confianza: **[Verificado]** (`sales.test.ts`, `rpc.test.ts`, `rls.test.ts`, `receipt.test.ts`, `receipt-ticket.test.tsx`, e2e).
 
 ## Quién ve qué
 | Rol | Lista y detalle | Reembolsar |
@@ -15,7 +15,23 @@ Paginada (25), ordenada por fecha; búsqueda por **número de orden** (`ORD-YYMM
 
 ## Detalle
 Datos de la orden, quién la creó (nombre o email), cliente (o "Walk-in"), método y monto del pago, líneas con precio, descuento, impuesto y total, y el resumen (subtotal, impuesto, descuento, total).
-"Print" usa `window.print()` (no hay plantilla de recibo). Una orden reembolsada muestra fecha y **motivo** del reembolso.
+Una orden reembolsada muestra fecha y **motivo** del reembolso.
+
+## Ticket de 80 mm (Fase 5, `components/orders/receipt-ticket.tsx`)
+"Print" (`window.print()`) oculta la vista normal y el `AppShell` (`print:hidden`) e imprime en su lugar un ticket
+térmico de 80 mm: logo de la tienda si hay uno subido (`store_logo_url`, ≤ 48 mm de ancho), nombre y NIT de la tienda, dirección y teléfono, «COMPROBANTE DE VENTA — No es factura
+electrónica», número de orden, fecha y hora en `settings.timezone`, cliente (o "Walk-in Customer"), forma de pago,
+vendedor, tabla de líneas (cantidad/detalle/IVA %/total), subtotal/IVA/descuento/total, cantidad de ítems, **detalle
+de impuestos agrupado por tasa** (`taxBreakdown` en `lib/receipt.ts`, tomando la instantánea `order_items.tax_rate`),
+pagos, sello **REEMBOLSADA** si aplica, y `receipt_template.header/footer`.
+**No es una factura electrónica** (D21, [decisiones pendientes](../06-roadmap/decisiones-pendientes.md)): sin CUFE,
+código QR, resolución DIAN ni recibido/cambio (el efectivo entregado no se guarda). `order_items.tax_rate` es una
+instantánea de la tasa **realmente cobrada** — **no** interviene en el cálculo (sigue siendo precio × tasa por línea,
+redondeado). `create_sale` escribe la tasa que usó para la línea y `_close_tab` la de `tab_items` (congelada al añadir el
+producto a la cuenta, no la actual del producto); ambas desde `20260923000004_fix_cross_task_integration.sql`, que
+además corrigió las órdenes ya cerradas desde una cuenta. El trigger `before insert` que copia `products.tax_rate`
+queda solo como respaldo si alguien inserta sin tasa. Filas anteriores a la migración
+`20260923000002_receipt.sql` se rellenaron con `round(tax / nullif(unit_price*quantity - discount, 0), 4)`.
 
 ## Reembolso
 Botón **Refund** (solo si la orden está `completed` y el rol es gerente+) → diálogo con **motivo obligatorio** (≥ 3 caracteres) → `POST /orders/{id}/refund { reason }` → RPC `refund_order`:
@@ -39,4 +55,4 @@ Estados: `completed` y `refunded` los produce la aplicación; `draft` y `pending
 - La búsqueda es por número de orden, no por nombre de cliente.
 - Sin filtro por rango de fechas en la pantalla (la API acepta `from`/`to`), sin exportación.
 
-Relacionados: [POS](pos-checkout.md), [Inventario](inventario.md), [Clientes](clientes.md), [C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md).
+Relacionados: [POS](pos-checkout.md), [Inventario](inventario.md), [Clientes](clientes.md), [Ajustes](ajustes.md), [C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md).

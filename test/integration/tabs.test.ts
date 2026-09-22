@@ -7,7 +7,16 @@ import { POST as payTab } from '@/app/api/v1/tabs/[id]/payments/route'
 import { POST as voidTab } from '@/app/api/v1/tabs/[id]/void/route'
 import { GET as getOrder } from '@/app/api/v1/orders/[id]/route'
 import { POST as refund } from '@/app/api/v1/orders/[id]/refund/route'
-import { createProduct, ensureTestUsers, pinStoreCurrency, signedInClient, stockOf, uniq } from '../helpers/integration'
+import {
+    adminClient,
+    createCustomer,
+    createProduct,
+    ensureTestUsers,
+    pinStoreCurrency,
+    signedInClient,
+    stockOf,
+    uniq
+} from '../helpers/integration'
 import { dataOf, errorOf, loginAs, TestClient } from '../helpers/http'
 
 let cashier: TestClient
@@ -73,6 +82,15 @@ describe('POST /tabs (open_tab)', () => {
 
         const list = (await cashier.get(getTab, 'tabs?status=open')).json<{ data: Array<{ id: string }> }>()
         expect(list.data.some(row => row.id === tab.id)).toBe(true)
+    })
+
+    test('rejects a soft-deleted customer the same way it rejects an inactive one', async () => {
+        const customer = await createCustomer()
+        await adminClient().from('customers').update({ deleted_at: new Date().toISOString() }).eq('id', customer.id)
+
+        const response = await open(cashier, { label: uniq('Table'), customer_id: customer.id })
+        expect(response.status).toBe(422)
+        expect(errorOf(response).message).toBe('Customer not available')
     })
 })
 
@@ -229,6 +247,31 @@ describe('a closed tab becomes a normal, refundable order', () => {
         })
         expect(response.status).toBe(200)
         expect(await stockOf(product.id)).toBe(10)
+    })
+})
+
+describe('the order closed from a tab records the rate that was actually charged', () => {
+    test('order_items.tax_rate is the rate frozen on the tab line, not the product rate at close time', async () => {
+        const product = await createProduct({ selling_price: 100, tax_rate: 0.19, stock: 10 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('Rate') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+
+        // A manager changes the product's rate while the tab is still open.
+        const { error: updateError } = await adminClient()
+            .from('products')
+            .update({ tax_rate: 0.05 })
+            .eq('id', product.id)
+        expect(updateError).toBeNull()
+
+        const closed = dataOf<Tab>(await pay(cashier, tab.id, { payment_method: 'cash', amount: 119 }))
+        expect(closed.status).toBe('closed')
+
+        const { data: lines, error } = await adminClient()
+            .from('order_items')
+            .select('tax_rate, tax')
+            .eq('order_id', closed.order_id!)
+        expect(error).toBeNull()
+        expect(lines).toEqual([{ tax_rate: 0.19, tax: 19 }])
     })
 })
 

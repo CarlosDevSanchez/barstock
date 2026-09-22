@@ -1,16 +1,25 @@
 import 'server-only'
 import { assertNoError, notFound } from '@/lib/server/errors'
+import { trySignedGetUrl } from '@/lib/server/storage'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import { pageRange } from '@/lib/validation/common'
 import type { ProductCreate, ProductsQuery, ProductUpdate } from '@/lib/validation/resources'
 import type { Tables } from '@/types/database'
 import { assertMoneyScale, searchFilter, type Page } from './_shared'
 
-export type ProductListItem = Tables<'products'> & {
+// `image_url` is the legacy, unused column (kept in the DB, never written again); `image_key` is never sent to the
+// client (lib/server/storage.ts: "don't let the client see or choose an object key") — only the signed URL is.
+export type ProductListItem = Omit<Tables<'products'>, 'image_url' | 'image_key'> & {
     category: Pick<Tables<'categories'>, 'id' | 'name'> | null
     /** Units in stock (product-level inventory row); null when the product has no inventory row. */
     stock: number | null
+    /** Signed R2 URL for image_key (1h TTL), or null when there is no image or storage is not configured. */
+    image_url: string | null
 }
+
+/** Return shape of `getProduct`: same `image_url` mapping as the list, but `image_key` stays (the image upload/
+ * delete route needs it to find the previous object to replace). */
+export type ProductDetail = Omit<Tables<'products'>, 'image_url'> & { image_url: string | null }
 
 const LIST_SELECT = '*, category:categories(id, name), inventory(quantity, variant_id)'
 
@@ -36,10 +45,13 @@ export async function listProducts(
     const { data, count, error } = await query.range(from, to)
     assertNoError(error)
 
-    const rows = data.map(({ inventory, ...product }) => ({
-        ...product,
-        stock: inventory.find(row => row.variant_id === null)?.quantity ?? null
-    }))
+    const rows = await Promise.all(
+        data.map(async ({ inventory, image_url: _legacy, image_key, ...product }) => ({
+            ...product,
+            stock: inventory.find(row => row.variant_id === null)?.quantity ?? null,
+            image_url: await trySignedGetUrl(image_key)
+        }))
+    )
     return { rows, total: count ?? 0 }
 }
 
@@ -61,7 +73,7 @@ export async function listTopProducts(supabase: AppSupabaseClient, days = 30, li
     return data
 }
 
-export async function getProduct(supabase: AppSupabaseClient, id: string): Promise<Tables<'products'>> {
+export async function getProduct(supabase: AppSupabaseClient, id: string): Promise<ProductDetail> {
     const { data, error } = await supabase
         .from('products')
         .select('*')
@@ -70,7 +82,8 @@ export async function getProduct(supabase: AppSupabaseClient, id: string): Promi
         .maybeSingle()
     assertNoError(error)
     if (!data) throw notFound('Product not found')
-    return data
+    const { image_url: _legacy, ...product } = data
+    return { ...product, image_url: await trySignedGetUrl(data.image_key) }
 }
 
 export async function createProduct(supabase: AppSupabaseClient, input: ProductCreate): Promise<Tables<'products'>> {
@@ -90,6 +103,28 @@ export async function updateProduct(
     const { data, error } = await supabase
         .from('products')
         .update(patch)
+        .eq('id', id)
+        .is('deleted_at', null)
+        .select()
+        .maybeSingle()
+    assertNoError(error)
+    if (!data) throw notFound('Product not found')
+    return data
+}
+
+/**
+ * Sets or clears `image_key`. Only called from app/api/v1/products/[id]/image/route.ts, after the file has already
+ * been validated and uploaded: the key never comes from a client-supplied body (productUpdateSchema has no such
+ * field).
+ */
+export async function setProductImage(
+    supabase: AppSupabaseClient,
+    id: string,
+    imageKey: string | null
+): Promise<Tables<'products'>> {
+    const { data, error } = await supabase
+        .from('products')
+        .update({ image_key: imageKey })
         .eq('id', id)
         .is('deleted_at', null)
         .select()

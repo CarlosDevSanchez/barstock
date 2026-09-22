@@ -24,7 +24,8 @@ interface CartBubbleProps {
 }
 
 /** Floating cart button (replaces the fixed side column): a bounce on add, a hover preview of the last lines, and a
- * click opens the full cart sheet. Hidden entirely when there is nothing to show. */
+ * click opens the full cart sheet. Always rendered — shows a "0" badge when the cart is empty — so the button is a
+ * stable, discoverable affordance instead of appearing/disappearing as items are added. */
 export function CartBubble({ itemCount, total, lines, hasProblem, openTabsLabel, onClick }: CartBubbleProps) {
     const t = useTranslations('pos')
     const money = useMoney()
@@ -36,8 +37,6 @@ export function CartBubble({ itemCount, total, lines, hasProblem, openTabsLabel,
         if (itemCount > previousCount) setBump(true)
         setPreviousCount(itemCount)
     }
-
-    if (itemCount === 0 && !openTabsLabel) return null
 
     return (
         <div className="fixed bottom-6 right-6 z-40 group">
@@ -71,11 +70,9 @@ export function CartBubble({ itemCount, total, lines, hasProblem, openTabsLabel,
             >
                 <span className="relative">
                     <ShoppingCart className="h-6 w-6" />
-                    {itemCount > 0 && (
-                        <span className="absolute -top-2 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-xs font-bold text-emerald-700">
-                            {itemCount}
-                        </span>
-                    )}
+                    <span className="absolute -top-2 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-xs font-bold text-emerald-700">
+                        {itemCount}
+                    </span>
                 </span>
                 {itemCount > 0 && <span className="font-semibold">{money(total)}</span>}
                 {openTabsLabel && (

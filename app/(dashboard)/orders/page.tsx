@@ -20,8 +20,8 @@ import { ordersApi } from '@/lib/api/orders'
 import { roleAtLeast } from '@/lib/auth/roles'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { usePagination } from '@/hooks/use-pagination'
 
-const PAGE_SIZE = 25
 const ALL = 'all'
 
 const getStatusColor = (status: string) => {
@@ -47,16 +47,12 @@ export default function OrdersPage() {
     const money = useMoney()
     const [searchQuery, setSearchQuery] = useState('')
     const [status, setStatus] = useState(ALL)
-    const [page, setPage] = useState(1)
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const search = useDebouncedValue(searchQuery)
 
     const orders = useApiQuery(
-        signal =>
-            ordersApi.list(
-                { page, pageSize: PAGE_SIZE, q: search, status: status === ALL ? undefined : status },
-                signal
-            ),
-        JSON.stringify({ page, search, status })
+        signal => ordersApi.list({ page, pageSize, q: search, status: status === ALL ? undefined : status }, signal),
+        JSON.stringify({ page, pageSize, search, status })
     )
 
     const statusLabel = (value: string) => {
@@ -86,7 +82,7 @@ export default function OrdersPage() {
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
-                                setPage(1)
+                                reset()
                             }}
                             className="pl-10"
                         />
@@ -95,7 +91,7 @@ export default function OrdersPage() {
                         value={status}
                         onValueChange={value => {
                             setStatus(value)
-                            setPage(1)
+                            reset()
                         }}
                     >
                         <SelectTrigger className="w-44" aria-label={t('filterStatusAria')}>
@@ -170,7 +166,13 @@ export default function OrdersPage() {
                         {orders.data.data.length === 0 && (
                             <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
                         )}
-                        <Pagination page={page} pageSize={PAGE_SIZE} total={orders.data.total} onPageChange={setPage} />
+                        <Pagination
+                            page={page}
+                            pageSize={pageSize}
+                            total={orders.data.total}
+                            onPageChange={setPage}
+                            onPageSizeChange={setPageSize}
+                        />
                     </>
                 )}
             </Card>
