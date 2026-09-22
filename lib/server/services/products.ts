@@ -4,7 +4,7 @@ import type { AppSupabaseClient } from '@/lib/server/supabase'
 import { pageRange } from '@/lib/validation/common'
 import type { ProductCreate, ProductsQuery, ProductUpdate } from '@/lib/validation/resources'
 import type { Tables } from '@/types/database'
-import { searchFilter, type Page } from './_shared'
+import { assertMoneyScale, searchFilter, type Page } from './_shared'
 
 export type ProductListItem = Tables<'products'> & {
     category: Pick<Tables<'categories'>, 'id' | 'name'> | null
@@ -49,6 +49,7 @@ export async function getProduct(supabase: AppSupabaseClient, id: string): Promi
 }
 
 export async function createProduct(supabase: AppSupabaseClient, input: ProductCreate): Promise<Tables<'products'>> {
+    await assertMoneyScale(supabase, { cost_price: input.cost_price, selling_price: input.selling_price })
     const { data, error } = await supabase.from('products').insert(input).select().single()
     assertNoError(error)
     return data
@@ -59,6 +60,7 @@ export async function updateProduct(
     id: string,
     patch: ProductUpdate
 ): Promise<Tables<'products'>> {
+    await assertMoneyScale(supabase, { cost_price: patch.cost_price, selling_price: patch.selling_price })
     // RLS turns a forbidden or missing row into "0 rows", not an error: maybeSingle + notFound covers both.
     const { data, error } = await supabase
         .from('products')

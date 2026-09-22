@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus, Search, Edit, Trash2, FolderTree } from 'lucide-react'
 import { Card } from '@/components/ui/card'
@@ -34,6 +35,8 @@ interface CategoryDialogProps {
 }
 
 function CategoryDialog({ category, onClose, onSaved }: CategoryDialogProps) {
+    const t = useTranslations('categories')
+    const tc = useTranslations('common')
     const form = useForm({
         resolver: zodResolver(categoryCreateSchema),
         defaultValues: { name: category?.name ?? '', description: category?.description ?? '' }
@@ -44,14 +47,14 @@ function CategoryDialog({ category, onClose, onSaved }: CategoryDialogProps) {
         try {
             if (category) {
                 await categoriesApi.update(category.id, values)
-                toast.success('Category updated successfully')
+                toast.success(t('updated'))
             } else {
                 await categoriesApi.create(values)
-                toast.success('Category created successfully')
+                toast.success(t('created'))
             }
             onSaved()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Failed to save category'))
+            toast.error(errorMessage(error, t('saveFailed')))
         }
     })
 
@@ -59,20 +62,20 @@ function CategoryDialog({ category, onClose, onSaved }: CategoryDialogProps) {
         <Dialog open onOpenChange={open => !open && onClose()}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>{category ? 'Edit Category' : 'Add New Category'}</DialogTitle>
+                    <DialogTitle>{category ? t('editTitle') : t('addTitle')}</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate>
                         <div className="space-y-4 py-4">
-                            <TextField name="name" label="Category Name *" />
-                            <TextField name="description" label="Description" />
+                            <TextField name="name" label={t('name')} />
+                            <TextField name="description" label={t('description')} />
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={onClose}>
-                                Cancel
+                                {tc('cancel')}
                             </Button>
                             <Button type="submit" disabled={submitting}>
-                                {submitting ? 'Saving…' : category ? 'Update Category' : 'Create Category'}
+                                {submitting ? tc('saving') : category ? t('updateCategory') : t('createCategory')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -84,12 +87,13 @@ function CategoryDialog({ category, onClose, onSaved }: CategoryDialogProps) {
 
 export default function CategoriesPage() {
     const { user } = useSession()
+    const t = useTranslations('categories')
+    const tc = useTranslations('common')
     const canManage = roleAtLeast(user.role, 'manager')
 
     const [searchQuery, setSearchQuery] = useState('')
     const [page, setPage] = useState(1)
     const search = useDebouncedValue(searchQuery)
-    // undefined = closed, null = creating, category = editing
     const [editing, setEditing] = useState<CategoryListItem | null | undefined>(undefined)
     const [toDelete, setToDelete] = useState<CategoryListItem | null>(null)
 
@@ -102,13 +106,13 @@ export default function CategoriesPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold">Categories</h1>
-                    <p className="text-muted-foreground">Organize your products with categories</p>
+                    <h1 className="text-3xl font-bold">{t('title')}</h1>
+                    <p className="text-muted-foreground">{t('subtitle')}</p>
                 </div>
                 {canManage && (
                     <Button onClick={() => setEditing(null)}>
                         <Plus className="mr-2 h-4 w-4" />
-                        Add Category
+                        {t('addCategory')}
                     </Button>
                 )}
             </div>
@@ -118,7 +122,7 @@ export default function CategoriesPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search categories..."
+                            placeholder={t('searchPlaceholder')}
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
@@ -138,10 +142,10 @@ export default function CategoriesPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Category</TableHead>
-                                    <TableHead>Description</TableHead>
-                                    <TableHead>Products</TableHead>
-                                    {canManage && <TableHead className="text-right">Actions</TableHead>}
+                                    <TableHead>{t('colCategory')}</TableHead>
+                                    <TableHead>{t('colDescription')}</TableHead>
+                                    <TableHead>{t('colProducts')}</TableHead>
+                                    {canManage && <TableHead className="text-right">{tc('actions')}</TableHead>}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -159,7 +163,9 @@ export default function CategoriesPage() {
                                             {category.description || '-'}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant="secondary">{category.product_count} products</Badge>
+                                            <Badge variant="secondary">
+                                                {t('productCount', { count: category.product_count })}
+                                            </Badge>
                                         </TableCell>
                                         {canManage && (
                                             <TableCell className="text-right">
@@ -167,7 +173,7 @@ export default function CategoriesPage() {
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
-                                                        aria-label={`Edit ${category.name}`}
+                                                        aria-label={t('editAria', { name: category.name })}
                                                         onClick={() => setEditing(category)}
                                                     >
                                                         <Edit className="h-4 w-4" />
@@ -176,7 +182,7 @@ export default function CategoriesPage() {
                                                         size="sm"
                                                         variant="ghost"
                                                         className="text-red-600 hover:text-red-700"
-                                                        aria-label={`Delete ${category.name}`}
+                                                        aria-label={t('deleteAria', { name: category.name })}
                                                         onClick={() => setToDelete(category)}
                                                     >
                                                         <Trash2 className="h-4 w-4" />
@@ -189,7 +195,7 @@ export default function CategoriesPage() {
                             </TableBody>
                         </Table>
                         {categories.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">No categories found</p>
+                            <p className="py-8 text-center text-muted-foreground">{t('noCategories')}</p>
                         )}
                         <Pagination
                             page={page}
@@ -216,22 +222,21 @@ export default function CategoriesPage() {
             <ConfirmDialog
                 open={toDelete !== null}
                 onOpenChange={open => !open && setToDelete(null)}
-                title="Delete category?"
+                title={t('deleteTitle')}
                 description={
                     <>
-                        <strong>{toDelete?.name}</strong> will be removed. A category that still has products cannot be
-                        deleted.
+                        <strong>{toDelete?.name}</strong> {t('deleteBody')}
                     </>
                 }
-                confirmLabel="Delete"
+                confirmLabel={tc('delete')}
                 onConfirm={async () => {
                     if (!toDelete) return
                     try {
                         await categoriesApi.remove(toDelete.id)
-                        toast.success('Category deleted successfully')
+                        toast.success(t('deleted'))
                         categories.reload()
                     } catch (error: unknown) {
-                        toast.error(errorMessage(error, 'Failed to delete category'))
+                        toast.error(errorMessage(error, t('deleteFailed')))
                         throw error
                     }
                 }}

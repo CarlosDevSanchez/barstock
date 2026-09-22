@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { confirmLinkIn, uniq, waitForEmail } from '../test/helpers/integration'
-import { navLinks, newSession, signInWith } from './helpers'
+import { navLinks, newSession, pinEnglish, signInWith, forceEnglishUi } from './helpers'
 
 test('an admin invites a cashier, who accepts by email, chooses a password and lands with the right access', async ({
     browser
@@ -20,6 +20,8 @@ test('an admin invites a cashier, who accepts by email, chooses a password and l
     const invitee = await (await browser.newContext()).newPage()
     await invitee.goto(link.toString())
     await invitee.waitForURL('**/reset-password')
+    // New profiles default to es; e2e asserts English labels.
+    await forceEnglishUi(invitee)
 
     await invitee.getByLabel('New password').fill('a-good-passphrase-1')
     await invitee.getByLabel('Confirm password').fill('a-different-one-2')
@@ -34,6 +36,7 @@ test('an admin invites a cashier, who accepts by email, chooses a password and l
 
     // The link works once.
     const again = await (await browser.newContext()).newPage()
+    await pinEnglish(again)
     await again.goto(link.toString())
     await again.waitForURL('**/login?error=invalid_link')
     await expect(again.getByText('invalid or has expired')).toBeVisible()
@@ -56,6 +59,7 @@ test('an admin can disable a user, who loses access immediately, and re-enable t
     const user = await (await browser.newContext()).newPage()
     await user.goto(link.toString())
     await user.waitForURL('**/reset-password')
+    await forceEnglishUi(user)
     await user.getByLabel('New password').fill('a-good-passphrase-1')
     await user.getByLabel('Confirm password').fill('a-good-passphrase-1')
     await user.getByRole('button', { name: 'Save password' }).click()
@@ -89,12 +93,15 @@ test('forgot password: request, email, new password, sign in with it', async ({ 
     const invite = confirmLinkIn((await waitForEmail(email)).html)
     const first = await (await browser.newContext()).newPage()
     await first.goto(invite.toString())
+    await first.waitForURL('**/reset-password')
+    await forceEnglishUi(first)
     await first.getByLabel('New password').fill('the-first-password-1')
     await first.getByLabel('Confirm password').fill('the-first-password-1')
     await first.getByRole('button', { name: 'Save password' }).click()
     await first.waitForURL('**/dashboard')
 
     const page = await (await browser.newContext()).newPage()
+    await pinEnglish(page)
     await page.goto('/forgot-password')
     await expect(page.getByRole('button', { name: 'Send reset link' })).toBeEnabled()
     await page.getByLabel('Email').fill(email)
@@ -106,6 +113,7 @@ test('forgot password: request, email, new password, sign in with it', async ({ 
     expect(recovery.searchParams.get('type')).toBe('recovery')
     await page.goto(recovery.toString())
     await page.waitForURL('**/reset-password')
+    await forceEnglishUi(page)
     await page.getByLabel('New password').fill('the-second-password-2')
     await page.getByLabel('Confirm password').fill('the-second-password-2')
     await page.getByRole('button', { name: 'Save password' }).click()
@@ -121,12 +129,14 @@ test('forgot password: request, email, new password, sign in with it', async ({ 
 async function waitForLatestRecovery(address: string) {
     const deadline = Date.now() + 10_000
     const base = process.env.MAILPIT_URL ?? 'http://127.0.0.1:54324'
+    // Local stacks started before the ES templates still use the English subject.
+    const recoverySubjects = new Set(['Reset your password', 'Restablece tu contraseña'])
     while (Date.now() < deadline) {
         const list = (await (await fetch(`${base}/api/v1/messages`)).json()) as {
             messages: Array<{ ID: string; Subject: string; To: Array<{ Address: string }> }>
         }
         const match = list.messages.find(
-            message => message.Subject === 'Reset your password' && message.To.some(to => to.Address === address)
+            message => recoverySubjects.has(message.Subject) && message.To.some(to => to.Address === address)
         )
         if (match) {
             const full = (await (await fetch(`${base}/api/v1/message/${match.ID}`)).json()) as { HTML: string }

@@ -1,4 +1,5 @@
 import 'server-only'
+import { DEFAULT_CURRENCY } from '@/lib/money'
 import { assertNoError } from '@/lib/server/errors'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import { settingsSchema, type SettingKey, type SettingsInput } from '@/lib/validation/resources'
@@ -10,11 +11,11 @@ export const SETTINGS_DEFAULTS: SettingsInput = {
     store_address: '',
     store_phone: '',
     store_email: '',
-    currency: 'USD',
-    timezone: 'UTC',
+    currency: DEFAULT_CURRENCY,
+    timezone: 'America/Bogota',
     low_stock_threshold: 10,
-    tax_rate: 0.1,
-    receipt_template: { header: 'Thank you for your purchase!', footer: 'Visit us again!' }
+    tax_rate: 0.19, // IVA general de Colombia: supuesto D3, sin validar
+    receipt_template: { header: '¡Gracias por su compra!', footer: '¡Vuelva pronto!' }
 }
 
 const KEYS = Object.keys(settingsSchema.shape) as SettingKey[]

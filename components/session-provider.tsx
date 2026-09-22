@@ -2,6 +2,8 @@
 
 import { createContext, useContext, type ReactNode } from 'react'
 import type { UserRole } from '@/lib/auth/roles'
+import type { AppLocale } from '@/lib/i18n/config'
+import { moneyLocale } from '@/lib/i18n/config'
 import { formatMoney } from '@/lib/money'
 import type { SettingsInput } from '@/lib/validation/resources'
 
@@ -10,6 +12,7 @@ export interface SessionUser {
     email: string
     fullName: string | null
     role: UserRole
+    locale: AppLocale
 }
 
 interface SessionValue {
@@ -30,8 +33,8 @@ export function useSession(): SessionValue {
     return value
 }
 
-/** `money(12.5)` -> "$12.50", using the currency from the store settings. */
+/** Formats with the store currency and the signed-in user's UI language. */
 export function useMoney() {
-    const { settings } = useSession()
-    return (amount: number) => formatMoney(amount, settings.currency)
+    const { settings, user } = useSession()
+    return (amount: number) => formatMoney(amount, settings.currency, moneyLocale(user.locale))
 }

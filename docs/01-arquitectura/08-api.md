@@ -46,7 +46,7 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | `auth/logout` | POST | público | Idempotente |
 | `auth/password/forgot` | POST | público | **Siempre 204** (no revela si el email existe) |
 | `auth/password/reset` | POST | cajero | Requiere la sesión creada por `/auth/confirm` |
-| `me` | GET | cajero | |
+| `me` | GET · PATCH | cajero | GET: sesión actual. PATCH `{ locale: 'es' \| 'en' }` → `profiles.locale` + cookie `NEXT_LOCALE` |
 | `products`, `products/[id]` | GET · POST/PATCH/DELETE | cajero · gerente | `?category_id&active&ids`; DELETE = borrado lógico. Lista con `stock` |
 | `categories`, `categories/[id]` | GET · POST/PATCH/DELETE | cajero · gerente | Lista con `product_count`; DELETE falla con 409 si tiene productos |
 | `customers`, `customers/[id]` | GET/POST/PATCH | cajero | `total_spent`/`loyalty_points` no son escribibles |
@@ -100,7 +100,7 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | Asignación masiva | Los esquemas solo listan columnas escribibles; zod descarta el resto |
 | `''` hacia columnas opcionales/`UNIQUE` | Normalizado a `null` |
 | Inputs numéricos | `<input type="number">` entrega **string**: los esquemas de dinero, cantidad y `delta` convierten (`toNumber`) y **nunca** interpretan `''` como 0 |
-| Dinero | Redondeo a centavos y rechazo de precisión real; tasa de impuesto como fracción `0–1` en la API y como porcentaje en los formularios (`taxRatePercent`) |
+| Dinero | Redondeo a la escala de la moneda (`money_scale` / `currencyDecimals`: 0 en COP, 2 en USD) y rechazo de más precisión; tasa de impuesto como fracción `0–1` en la API y como porcentaje en los formularios (`taxRatePercent`) |
 | Inyección en filtros PostgREST | `sanitizeSearch()` elimina `, ( ) " \ % * _` antes de armar `.or()`/`ilike` |
 | UUID | `z.guid()`, no `z.uuid()`: zod 4 exige bits de versión RFC y rechaza los ids del seed (`aaaaaaaa-…`) que Postgres acepta |
 | Tipos de `select` | supabase-js infiere el resultado del **literal** del `select`; concatenar strings (`+`) lo degrada a `string` |

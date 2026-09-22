@@ -1,5 +1,5 @@
 import { afterEach, beforeAll, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { product, page, settings, userWithRole } from '../helpers/fixtures'
+import { product, page, settings, userWithRole, IntlProvider } from '../helpers/fixtures'
 import { setupDom } from '../helpers/dom'
 
 setupDom()
@@ -46,9 +46,11 @@ const { useCartStore } = await import('@/stores/cart')
 
 const renderPos = () =>
     render(
-        <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
-            <POSPage />
-        </SessionProvider>
+        <IntlProvider>
+            <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
+                <POSPage />
+            </SessionProvider>
+        </IntlProvider>
     )
 
 const addToCart = (name: string) => fireEvent.click(screen.getByRole('button', { name: `Add ${name} to cart` }))

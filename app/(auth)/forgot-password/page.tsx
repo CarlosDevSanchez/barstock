@@ -2,22 +2,28 @@
 
 import { useState } from 'react'
 import Link from 'next/link'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowLeft, Mail } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
-import { Form, FormControl, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import { Form, FormControl, FormField, FormItem, FormLabel } from '@/components/ui/form'
+import { TranslatedFormMessage } from '@/components/translated-form-message'
 import { useHydrated } from '@/hooks/use-hydrated'
 import { authApi } from '@/lib/api/auth'
 import { errorMessage } from '@/lib/api/client'
+import { APP_LOCALES, LOCALE_COOKIE, type AppLocale } from '@/lib/i18n/config'
 import { forgotPasswordSchema } from '@/lib/validation/resources'
 
 export default function ForgotPasswordPage() {
+    const router = useRouter()
     const [sent, setSent] = useState(false)
     const hydrated = useHydrated()
+    const t = useTranslations('auth')
     const form = useForm({ resolver: zodResolver(forgotPasswordSchema), defaultValues: { email: '' } })
 
     const onSubmit = form.handleSubmit(async values => {
@@ -25,7 +31,7 @@ export default function ForgotPasswordPage() {
             await authApi.forgotPassword(values.email)
             setSent(true)
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Could not send the reset email'))
+            toast.error(errorMessage(error, t('resetFailed')))
         }
     })
 
@@ -40,11 +46,9 @@ export default function ForgotPasswordPage() {
                             <Mail className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
                         </div>
                     </div>
-                    <CardTitle className="text-2xl text-center font-bold">Forgot password?</CardTitle>
+                    <CardTitle className="text-2xl text-center font-bold">{t('forgotTitle')}</CardTitle>
                     <CardDescription className="text-center">
-                        {sent
-                            ? 'If that email belongs to an account, a reset link is on its way. It may take a minute.'
-                            : "Enter your email and we'll send you a link to reset your password"}
+                        {sent ? t('forgotSent') : t('forgotSubtitle')}
                     </CardDescription>
                 </CardHeader>
                 {!sent && (
@@ -56,7 +60,7 @@ export default function ForgotPasswordPage() {
                                     name="email"
                                     render={({ field }) => (
                                         <FormItem>
-                                            <FormLabel>Email</FormLabel>
+                                            <FormLabel>{t('email')}</FormLabel>
                                             <FormControl>
                                                 <Input
                                                     type="email"
@@ -66,15 +70,30 @@ export default function ForgotPasswordPage() {
                                                     {...field}
                                                 />
                                             </FormControl>
-                                            <FormMessage />
+                                            <TranslatedFormMessage />
                                         </FormItem>
                                     )}
                                 />
                             </CardContent>
                             <CardFooter className="flex flex-col space-y-4">
                                 <Button type="submit" className="w-full" size="lg" disabled={submitting || !hydrated}>
-                                    {submitting ? 'Sending...' : 'Send reset link'}
+                                    {submitting ? t('sending') : t('sendReset')}
                                 </Button>
+                                <div className="flex justify-center gap-3 text-sm">
+                                    {APP_LOCALES.map(locale => (
+                                        <button
+                                            key={locale}
+                                            type="button"
+                                            className="text-muted-foreground hover:text-emerald-600 underline-offset-4 hover:underline"
+                                            onClick={() => {
+                                                document.cookie = `${LOCALE_COOKIE}=${locale as AppLocale};path=/;max-age=${60 * 60 * 24 * 365};samesite=lax`
+                                                router.refresh()
+                                            }}
+                                        >
+                                            {locale === 'es' ? 'Español' : 'English'}
+                                        </button>
+                                    ))}
+                                </div>
                             </CardFooter>
                         </form>
                     </Form>
@@ -85,7 +104,7 @@ export default function ForgotPasswordPage() {
                         className="flex items-center text-sm text-emerald-600 hover:text-emerald-700 dark:text-emerald-400"
                     >
                         <ArrowLeft className="w-4 h-4 mr-1" />
-                        Back to login
+                        {t('backToLogin')}
                     </Link>
                 </CardFooter>
             </Card>

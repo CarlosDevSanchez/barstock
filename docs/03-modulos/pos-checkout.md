@@ -22,7 +22,7 @@ POST /api/v1/sales
 
 ## Reglas de cálculo (D3, supuesto aplicado, **sin validar** con el negocio)
 - Impuesto **por producto** (`products.tax_rate`, fracción); precios **sin** impuesto.
-- Por línea: `base = precio × cantidad − descuento de línea`; `impuesto = round(base × tasa, 2)` (**redondeo por línea**, mitad hacia arriba).
+- Por línea: `base = precio × cantidad − descuento de línea`; `impuesto = round(base × tasa, money_scale)` (**redondeo por línea**, mitad hacia arriba; escala 0 en COP, 2 en USD).
 - `total = Σ base + Σ impuesto − descuento global` (el descuento global se aplica **después** del impuesto).
 - Ejemplo verificado: 2 × 29,99 + 1 × 12,99 al 10 % → subtotal 72,97; impuesto 6,00 + 1,30 = 7,30; **total 80,27**.
 - Se crea la orden `completed`, sus líneas, **un pago por el total** y un movimiento `sale` por línea. `orders_total_matches` y `order_items_total_matches` vigilan la aritmética.

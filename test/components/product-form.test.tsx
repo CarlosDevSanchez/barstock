@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
-import { page, product, settings, userWithRole } from '../helpers/fixtures'
+import { page, product, settings, userWithRole, IntlProvider } from '../helpers/fixtures'
 import { setupDom } from '../helpers/dom'
 
 setupDom()
@@ -33,9 +33,11 @@ const { SessionProvider } = await import('@/components/session-provider')
 
 const renderPage = (role: 'cashier' | 'manager', storeSettings = settings) =>
     render(
-        <SessionProvider value={{ user: userWithRole(role), settings: storeSettings }}>
-            <ProductsPage />
-        </SessionProvider>
+        <IntlProvider>
+            <SessionProvider value={{ user: userWithRole(role), settings: storeSettings }}>
+                <ProductsPage />
+            </SessionProvider>
+        </IntlProvider>
     )
 
 const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })

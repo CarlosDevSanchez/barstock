@@ -1,7 +1,13 @@
 import type { ReactNode } from 'react'
+import { NextIntlClientProvider } from 'next-intl'
 import type { SessionUser } from '@/components/session-provider'
+import type { AppLocale } from '@/lib/i18n/config'
 import type { ProductListItem } from '@/lib/api/products'
 import type { SettingsInput } from '@/lib/validation/resources'
+import en from '@/messages/en.json'
+import es from '@/messages/es.json'
+
+const messages = { en, es } as const
 
 export const settings: SettingsInput = {
     store_name: 'Test Store',
@@ -15,12 +21,22 @@ export const settings: SettingsInput = {
     receipt_template: { header: '', footer: '' }
 }
 
-export const userWithRole = (role: SessionUser['role']): SessionUser => ({
+export const userWithRole = (role: SessionUser['role'], locale: AppLocale = 'en'): SessionUser => ({
     id: `user-${role}`,
     email: `${role}@test.dev`,
     fullName: null,
-    role
+    role,
+    locale
 })
+
+/** Component tests stay on English messages so existing assertions keep working. */
+export function IntlProvider({ children, locale = 'en' }: { children: ReactNode; locale?: AppLocale }) {
+    return (
+        <NextIntlClientProvider locale={locale} messages={messages[locale]} timeZone="UTC">
+            {children}
+        </NextIntlClientProvider>
+    )
+}
 
 export function product(overrides: Partial<ProductListItem> = {}): ProductListItem {
     return {

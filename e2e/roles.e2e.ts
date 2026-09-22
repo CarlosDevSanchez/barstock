@@ -83,7 +83,7 @@ test('a wrong password and a disabled account show clear errors, and never put t
 test('signing out ends the session', async ({ browser }) => {
     const page = await newSession(browser, 'cashier')
     await page.locator('aside button', { hasText: 'cashier@barstock.test' }).click()
-    await page.getByRole('menuitem', { name: 'Logout' }).click()
+    await page.getByRole('menuitem', { name: 'Sign out' }).click()
     await page.waitForURL('**/login')
     await page.goto('/dashboard')
     await page.waitForURL('**/login**')

@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus, Search, Edit, Trash2, Package } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -26,6 +27,7 @@ import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
 import { useMoney, useSession } from '@/components/session-provider'
+import { moneyStep } from '@/lib/money'
 import { categoriesApi } from '@/lib/api/categories'
 import { errorMessage } from '@/lib/api/client'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
@@ -77,7 +79,10 @@ interface ProductDialogProps {
 }
 
 function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogProps) {
+    const t = useTranslations('products')
+    const tc = useTranslations('common')
     const { settings } = useSession()
+    const priceStep = moneyStep(settings.currency)
     const form = useForm<z.input<typeof productFormSchema>, unknown, z.output<typeof productFormSchema>>({
         resolver: zodResolver(productFormSchema),
         defaultValues: valuesFor(product, String(Math.round(settings.tax_rate * 10_000) / 100))
@@ -88,14 +93,14 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
         try {
             if (product) {
                 await productsApi.update(product.id, values)
-                toast.success('Product updated successfully')
+                toast.success(t('updated'))
             } else {
                 await productsApi.create(values)
-                toast.success('Product created successfully')
+                toast.success(t('created'))
             }
             onSaved()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Failed to save product'))
+            toast.error(errorMessage(error, t('saveFailed')))
         }
     })
 
@@ -103,42 +108,52 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
         <Dialog open onOpenChange={open => !open && onClose()}>
             <DialogContent className="sm:max-w-2xl max-h-[90vh] overflow-hidden flex flex-col">
                 <DialogHeader>
-                    <DialogTitle>{product ? 'Edit Product' : 'Add New Product'}</DialogTitle>
-                    <DialogDescription>
-                        {product ? 'Update product details' : 'Fill in the product information'}
-                    </DialogDescription>
+                    <DialogTitle>{product ? t('editTitle') : t('addTitle')}</DialogTitle>
+                    <DialogDescription>{product ? t('editDescription') : t('addDescription')}</DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate className="flex flex-col flex-1 overflow-hidden">
                         <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
-                            <TextField name="name" label="Product Name *" className="col-span-2" />
-                            <TextField name="description" label="Description" className="col-span-2" />
-                            <TextField name="sku" label="SKU *" />
-                            <TextField name="barcode" label="Barcode" />
+                            <TextField name="name" label={t('name')} className="col-span-2" />
+                            <TextField name="description" label={t('description')} className="col-span-2" />
+                            <TextField name="sku" label={t('sku')} />
+                            <TextField name="barcode" label={t('barcode')} />
                             <SelectField
                                 name="category_id"
-                                label="Category"
-                                placeholder="Select category"
-                                noneLabel="No category"
+                                label={t('category')}
+                                placeholder={t('selectCategory')}
+                                noneLabel={t('noCategory')}
                                 options={categories}
                             />
                             <TextField
                                 name="tax_rate"
-                                label="Tax Rate (%)"
+                                label={t('taxRate')}
                                 type="number"
                                 step="0.01"
                                 min="0"
                                 max="100"
                             />
-                            <TextField name="cost_price" label="Cost Price *" type="number" step="0.01" min="0" />
-                            <TextField name="selling_price" label="Selling Price *" type="number" step="0.01" min="0" />
+                            <TextField
+                                name="cost_price"
+                                label={t('costPrice')}
+                                type="number"
+                                step={priceStep}
+                                min="0"
+                            />
+                            <TextField
+                                name="selling_price"
+                                label={t('sellingPrice')}
+                                type="number"
+                                step={priceStep}
+                                min="0"
+                            />
                         </div>
                         <DialogFooter className="mt-4">
                             <Button type="button" variant="outline" onClick={onClose}>
-                                Cancel
+                                {tc('cancel')}
                             </Button>
                             <Button type="submit" disabled={submitting}>
-                                {submitting ? 'Saving…' : product ? 'Update Product' : 'Create Product'}
+                                {submitting ? tc('saving') : product ? t('updateProduct') : t('createProduct')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -149,6 +164,8 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
 }
 
 export default function ProductsPage() {
+    const t = useTranslations('products')
+    const tc = useTranslations('common')
     const { user } = useSession()
     const money = useMoney()
     const canManage = roleAtLeast(user.role, 'manager')
@@ -174,15 +191,13 @@ export default function ProductsPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold">Products</h1>
-                    <p className="text-muted-foreground">
-                        {canManage ? 'Manage your product catalog' : 'Browse the product catalog'}
-                    </p>
+                    <h1 className="text-3xl font-bold">{t('title')}</h1>
+                    <p className="text-muted-foreground">{canManage ? t('subtitleManage') : t('subtitleBrowse')}</p>
                 </div>
                 {canManage && (
                     <Button onClick={() => setEditing(null)}>
                         <Plus className="mr-2 h-4 w-4" />
-                        Add Product
+                        {t('addProduct')}
                     </Button>
                 )}
             </div>
@@ -192,7 +207,7 @@ export default function ProductsPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by name, SKU or barcode..."
+                            placeholder={t('searchPlaceholder')}
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
@@ -212,14 +227,14 @@ export default function ProductsPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Product</TableHead>
-                                    <TableHead>SKU</TableHead>
-                                    <TableHead>Category</TableHead>
-                                    {canManage && <TableHead>Cost</TableHead>}
-                                    <TableHead>Price</TableHead>
-                                    <TableHead>Stock</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    {canManage && <TableHead className="text-right">Actions</TableHead>}
+                                    <TableHead>{t('colProduct')}</TableHead>
+                                    <TableHead>{t('colSku')}</TableHead>
+                                    <TableHead>{t('colCategory')}</TableHead>
+                                    {canManage && <TableHead>{t('colCost')}</TableHead>}
+                                    <TableHead>{t('colPrice')}</TableHead>
+                                    <TableHead>{t('colStock')}</TableHead>
+                                    <TableHead>{tc('status')}</TableHead>
+                                    {canManage && <TableHead className="text-right">{tc('actions')}</TableHead>}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -247,7 +262,7 @@ export default function ProductsPage() {
                                         <TableCell>{product.stock ?? '-'}</TableCell>
                                         <TableCell>
                                             <Badge variant={product.is_active ? 'default' : 'secondary'}>
-                                                {product.is_active ? 'Active' : 'Inactive'}
+                                                {product.is_active ? tc('active') : tc('inactive')}
                                             </Badge>
                                         </TableCell>
                                         {canManage && (
@@ -256,7 +271,7 @@ export default function ProductsPage() {
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
-                                                        aria-label={`Edit ${product.name}`}
+                                                        aria-label={t('editAria', { name: product.name })}
                                                         onClick={() => setEditing(product)}
                                                     >
                                                         <Edit className="h-4 w-4" />
@@ -265,7 +280,7 @@ export default function ProductsPage() {
                                                         size="sm"
                                                         variant="ghost"
                                                         className="text-red-600 hover:text-red-700"
-                                                        aria-label={`Delete ${product.name}`}
+                                                        aria-label={t('deleteAria', { name: product.name })}
                                                         onClick={() => setToDelete(product)}
                                                     >
                                                         <Trash2 className="h-4 w-4" />
@@ -278,7 +293,7 @@ export default function ProductsPage() {
                             </TableBody>
                         </Table>
                         {products.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">No products found</p>
+                            <p className="py-8 text-center text-muted-foreground">{t('noProducts')}</p>
                         )}
                         <Pagination
                             page={page}
@@ -306,22 +321,21 @@ export default function ProductsPage() {
             <ConfirmDialog
                 open={toDelete !== null}
                 onOpenChange={open => !open && setToDelete(null)}
-                title="Delete product?"
+                title={t('deleteTitle')}
                 description={
                     <>
-                        <strong>{toDelete?.name}</strong> will no longer appear in the catalog or the POS. Its sales
-                        history is kept.
+                        <strong>{toDelete?.name}</strong> {t('deleteBody')}
                     </>
                 }
-                confirmLabel="Delete"
+                confirmLabel={tc('delete')}
                 onConfirm={async () => {
                     if (!toDelete) return
                     try {
                         await productsApi.remove(toDelete.id)
-                        toast.success('Product deleted successfully')
+                        toast.success(t('deleted'))
                         products.reload()
                     } catch (error: unknown) {
-                        toast.error(errorMessage(error, 'Failed to delete product'))
+                        toast.error(errorMessage(error, t('deleteFailed')))
                         throw error
                     }
                 }}

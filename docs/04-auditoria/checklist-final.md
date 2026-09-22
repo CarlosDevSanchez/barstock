@@ -18,7 +18,7 @@ Las tablas de más abajo son el **registro original** (commit `54962b9`). Esta e
 | | Sin vulnerabilidades conocidas en dependencias | ❌ | ✅ | `bun audit` limpio en el CI ([C3]) |
 | | Rate limiting / fuerza bruta en login | ❓ | ⚠️ | Solo el de Supabase Auth (`429`); no hay uno propio |
 | | Protección CSRF | ➖/⚠️ | ✅ | Comprobación de `Origin`, `SameSite=Lax`, JSON; probado |
-| | Sesión en almacenamiento seguro (`httpOnly`) | ❌ | ✅ | Cookies `HttpOnly` (+ `Secure` en producción); `localStorage` sin tokens; verificado en Chromium |
+| | Sesión en almacenamiento seguro (`httpOnly`) | ❌ | ✅ | Cookies `HttpOnly` (+ `Secure` cuando `APP_URL` es https); `localStorage` sin tokens; verificado en Chromium |
 | | Sin escalada de privilegios | ❌ | ✅ | Trigger de perfiles + RLS; `rls.test.ts` |
 | Arquitectura | Estructura clara y escalable | ⚠️ | ✅ | API + servicios + validación compartida |
 | | Separación de concerns | ❌ | ✅ | Lint prohíbe Supabase en la UI |

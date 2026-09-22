@@ -26,7 +26,7 @@ import {
 export const loginSchema = z.object({ email: z.email().toLowerCase(), password: z.string().min(1).max(72) })
 export const forgotPasswordSchema = z.object({ email: z.email().toLowerCase() })
 // 72 = bcrypt input limit
-export const resetPasswordSchema = z.object({ password: z.string().min(10, 'At least 10 characters').max(72) })
+export const resetPasswordSchema = z.object({ password: z.string().min(10, 'validation.minPassword').max(72) })
 
 // ---- Catalog
 export const categoryCreateSchema = z.object({
@@ -77,12 +77,12 @@ export const inventoryAdjustSchema = z.object({
     delta: z.preprocess(
         toNumber,
         numberField()
-            .int('Enter a whole number')
-            .min(-1_000_000, 'Too small')
-            .max(1_000_000, 'Too large')
-            .refine(value => value !== 0, 'Enter a change other than 0')
+            .int('validation.wholeNumber')
+            .min(-1_000_000, 'validation.tooSmall')
+            .max(1_000_000, 'validation.tooLarge')
+            .refine(value => value !== 0, 'validation.nonzero')
     ),
-    reason: z.string().trim().min(3, 'A reason is required').max(500)
+    reason: z.string().trim().min(3, 'validation.reasonRequired').max(500)
 })
 
 // ---- Sales and refunds: the client sends ids and quantities only; prices, taxes and totals come from the DB.
@@ -98,12 +98,12 @@ export const saleSchema = z.object({
                 discount: money.optional()
             })
         )
-        .min(1, 'The cart is empty')
+        .min(1, 'validation.cartEmpty')
         .max(100),
     payment_method: z.enum(PAYMENT_METHODS),
     discount: money.optional()
 })
-export const refundSchema = z.object({ reason: z.string().trim().min(3, 'A reason is required').max(500) })
+export const refundSchema = z.object({ reason: z.string().trim().min(3, 'validation.reasonRequired').max(500) })
 
 // ---- Users (admin only)
 export const inviteUserSchema = z.object({
@@ -113,7 +113,7 @@ export const inviteUserSchema = z.object({
 })
 export const updateUserSchema = z
     .object({ role: z.enum(USER_ROLES).optional(), is_active: z.boolean().optional() })
-    .refine(value => value.role !== undefined || value.is_active !== undefined, 'Nothing to update')
+    .refine(value => value.role !== undefined || value.is_active !== undefined, 'validation.nothingToUpdate')
 
 // ---- Settings (stored one JSONB value per key in `settings`)
 // Intl.NumberFormat accepts any well-formed 3-letter code (even 'ZZZ'), so check against the known list.
@@ -134,12 +134,12 @@ export const settingsSchema = z.object({
     store_email: z.union([z.literal(''), z.email().max(254)]),
     currency: z
         .string()
-        .regex(/^[A-Z]{3}$/, 'ISO 4217 code')
-        .refine(isValidCurrency, 'Unknown currency'),
-    timezone: z.string().refine(isValidTimeZone, 'Unknown time zone'),
+        .regex(/^[A-Z]{3}$/, 'validation.currencyCode')
+        .refine(isValidCurrency, 'validation.unknownCurrency'),
+    timezone: z.string().refine(isValidTimeZone, 'validation.unknownTimezone'),
     low_stock_threshold: z.preprocess(
         toNumber,
-        numberField().int('Enter a whole number').min(0, 'Must be 0 or more').max(100_000, 'Too large')
+        numberField().int('validation.wholeNumber').min(0, 'validation.minZero').max(100_000, 'validation.tooLarge')
     ),
     tax_rate: taxRate,
     receipt_template: z.object({ header: z.string().trim().max(200), footer: z.string().trim().max(200) })

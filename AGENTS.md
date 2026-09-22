@@ -23,7 +23,7 @@ Next.js (App Router) + Supabase (Postgres, Auth, PostgREST).
 | Framework | Next.js 16 (App Router, Turbopack), React 19, TypeScript 5 (`strict`, `noUncheckedIndexedAccess`) |
 | Backend | Supabase (Postgres 17, Auth, PostgREST) vía `@supabase/supabase-js` + `@supabase/ssr`. API propia: Route Handlers en `app/api/v1`, `proxy.ts` |
 | Validación / formularios | zod 4 (esquemas compartidos cliente/servidor), react-hook-form |
-| UI | Tailwind CSS 4, shadcn/ui (`new-york`) sobre Radix, lucide-react, Sonner, next-themes, Recharts |
+| UI | Tailwind CSS 4, shadcn/ui (`new-york`) sobre Radix, lucide-react, Sonner, next-themes, Recharts, **next-intl** (ES/EN) |
 | Estado de cliente | Zustand **solo para el carrito** (ids y cantidades); contexto de sesión; `useApiQuery` |
 | Pruebas / CI | `bun test`, happy-dom + Testing Library, Playwright; GitHub Actions + Dependabot |
 
@@ -40,6 +40,7 @@ bun run build                           # requiere las 4 variables de .env.examp
 bun run db:start                        # Supabase local (Docker): migraciones + seed; luego `bun run db:types`
 bun run test                            # unit + components + integración (necesita db:start); `test:e2e` para Playwright
 bun run test:coverage                   # ≥ 80 % en lib/server y lib/validation
+bun run local:up                        # TODO en Docker: Supabase + usuarios de prueba (admin|manager|cashier@barstock.local) + app en :3000; local:down / local:reset
 ```
 
 Trampas: `npx tsc` sin instalar descarga un paquete falso; **todas** las dependencias están a versión exacta (actualizar con `bun add next@x`);
@@ -108,7 +109,7 @@ Detalle y tamaños: [`docs/01-arquitectura/02-estructura-de-carpetas.md`](docs/0
 
 **Lo impone Prettier** (`bun run format`): 4 espacios, sin punto y coma, comillas simples; `"use client"` en la primera línea, alias `@/…`. Lo impone ESLint (`--max-warnings 0`): sin `any`, sin promesas sin esperar, y la UI no importa Supabase ni `lib/server`.
 Nombres: `XxxPage`, `XxxDialog`, `xxxApi`, servicios `listX/getX/createX`, esquemas `xxxCreateSchema`, `useXStore`, columnas `snake_case`. Acciones destructivas con `ConfirmDialog` (no `confirm()`); botones de icono con `aria-label`.
-La UI está en **inglés**; el código, los commits y los comentarios en inglés; la documentación en **español**.
+La UI es **bilingüe (ES por defecto + EN)** vía `next-intl` y `profiles.locale`; el código, los commits y los comentarios en inglés; la documentación en **español**. Moneda por defecto **COP** (decimales según la moneda: `currencyDecimals` / `money_scale`).
 Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/convenciones-de-codigo.md).
 
 ## 8. Trampas conocidas (no asumas que esto funciona)
@@ -128,7 +129,7 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 | Carrito | Persiste solo ids y cantidades y se vacía en el logout; el total mostrado es una vista previa | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
 | `next build` / `next dev` | Fallan si falta alguna de las 4 variables (el error nombra cuál). `next dev` no debe escribir en `AGENTS.md` (`agentRules: false`) | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
 | Impresión | Solo `window.print()` en el detalle de orden; no hay recibo | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
-| Cookies de sesión | `@supabase/ssr` las crea `httpOnly: false`; `lib/auth/cookie-options.ts` las fuerza a `HttpOnly` (y `Secure` en producción). Mantenerlo | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
+| Cookies de sesión | `@supabase/ssr` las crea `httpOnly: false`; `lib/auth/cookie-options.ts` las fuerza a `HttpOnly` (y `Secure` cuando `APP_URL` es https). Mantenerlo | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
 | Formularios de auth | Enviados antes de hidratar hacen un `GET` nativo y **ponen la contraseña en la URL**: `method="post"` + botón deshabilitado hasta `useHydrated()` | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
 | Alta de usuarios | Solo por invitación. Un perfil nace **activo únicamente si el servidor le asignó rol** (`app_metadata`); `user_metadata` no se usa. Un usuario desactivado no puede entrar aunque su sesión siga válida | [usuarios](docs/03-modulos/usuarios.md) |
 | `mock.module` (Bun) | Es **global al proceso** y se filtra entre archivos de test: por eso unitarias, componentes (un proceso por archivo) e integración corren separadas | [testing](docs/05-guias/testing.md) |

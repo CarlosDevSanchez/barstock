@@ -20,7 +20,7 @@
 | `name` | 1–200 caracteres, sin espacios sobrantes |
 | `sku` | 1–64, **único** (409 al duplicar; también entre borrados lógicos) |
 | `barcode` | opcional, ≤ 64, **único** si existe |
-| `cost_price`, `selling_price` | `NUMERIC(10,2)`, ≥ 0, máx. 99 999 999,99; se redondea a centavos, se rechaza precisión real (`1.005`) |
+| `cost_price`, `selling_price` | `NUMERIC(14,2)`, ≥ 0; se redondea a la escala de la moneda de la tienda (0 decimales en COP, 2 en USD); la API rechaza más precisión de la permitida |
 | `tax_rate` | **fracción** `NUMERIC(6,4)` entre 0 y 1 en la API (`0.10`); el formulario la muestra y recibe como **porcentaje** (`taxRatePercent`) |
 | `is_active` | `boolean`; **no hay control en el formulario** (solo API/BD) |
 

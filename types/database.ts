@@ -505,6 +505,7 @@ export type Database = {
           full_name: string | null
           id: string
           is_active: boolean
+          locale: string
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
@@ -516,6 +517,7 @@ export type Database = {
           full_name?: string | null
           id: string
           is_active?: boolean
+          locale?: string
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -527,6 +529,7 @@ export type Database = {
           full_name?: string | null
           id?: string
           is_active?: boolean
+          locale?: string
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -722,6 +725,7 @@ export type Database = {
         }
         Returns: string
       }
+      currency_decimals: { Args: { p_currency: string }; Returns: number }
       current_app_role: {
         Args: never
         Returns: Database["public"]["Enums"]["user_role"]
@@ -731,6 +735,7 @@ export type Database = {
         Args: { p_minimum: Database["public"]["Enums"]["user_role"] }
         Returns: boolean
       }
+      money_scale: { Args: never; Returns: number }
       refresh_customer_totals: {
         Args: { p_customer_id: string }
         Returns: undefined

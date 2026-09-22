@@ -51,8 +51,8 @@ describe('products', () => {
             sku,
             barcode: '',
             category_id: '',
-            selling_price: '3.50',
-            cost_price: '1',
+            selling_price: '3500',
+            cost_price: '1000',
             tax_rate: 0.07
         })
         const first = await manager.post(createProduct, 'products', { body: body(uniq('A')) })
@@ -64,7 +64,7 @@ describe('products', () => {
         ).toMatchObject({
             barcode: null,
             category_id: null,
-            selling_price: 3.5
+            selling_price: 3500
         })
     })
 

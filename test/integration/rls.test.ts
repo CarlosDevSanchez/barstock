@@ -93,6 +93,22 @@ describe('profiles: a cashier cannot escalate', () => {
         await service().from('profiles').update({ full_name: null }).eq('id', users.cashier.id)
     })
 
+    test('may change their own locale but not someone else’s', async () => {
+        await service().from('profiles').update({ locale: 'es' }).in('id', [users.cashier.id, users.manager.id])
+
+        expect((await cashier.from('profiles').update({ locale: 'en' }).eq('id', users.cashier.id)).error).toBeNull()
+        const own = await service().from('profiles').select('locale').eq('id', users.cashier.id).single()
+        expect(own.data?.locale).toBe('en')
+
+        // RLS hides other profiles on UPDATE (0 rows, no error) — confirm the manager row was not touched.
+        const other = await cashier.from('profiles').update({ locale: 'en' }).eq('id', users.manager.id).select()
+        expect(other.data ?? []).toHaveLength(0)
+        const managerLocale = await service().from('profiles').select('locale').eq('id', users.manager.id).single()
+        expect(managerLocale.data?.locale).toBe('es')
+
+        await service().from('profiles').update({ locale: 'es' }).eq('id', users.cashier.id)
+    })
+
     test('cannot create or delete profiles', async () => {
         expect((await cashier.from('profiles').insert({ id: crypto.randomUUID(), email: 'x@y.z' })).error?.code).toBe(
             PERMISSION_DENIED

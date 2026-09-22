@@ -1,0 +1,17 @@
+# Keep the build context small and never bake secrets or local state into an image.
+.git
+.github
+node_modules
+.next
+.env
+.env.*
+!.env.example
+coverage
+playwright-report
+test-results
+.code-review-graph
+.claude
+supabase
+docs
+*.md
+!README.md

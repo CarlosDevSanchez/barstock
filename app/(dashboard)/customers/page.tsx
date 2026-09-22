@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus, Search, Users } from 'lucide-react'
 import { Card } from '@/components/ui/card'
@@ -27,6 +28,8 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 const PAGE_SIZE = 25
 
 function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+    const t = useTranslations('customers')
+    const tc = useTranslations('common')
     const form = useForm({
         resolver: zodResolver(customerCreateSchema),
         defaultValues: { name: '', email: '', phone: '', address: '' }
@@ -36,10 +39,10 @@ function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     const onSubmit = form.handleSubmit(async values => {
         try {
             await customersApi.create(values)
-            toast.success('Customer added successfully')
+            toast.success(t('added'))
             onSaved()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Failed to add customer'))
+            toast.error(errorMessage(error, t('addFailed')))
         }
     })
 
@@ -47,22 +50,22 @@ function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         <Dialog open onOpenChange={open => !open && onClose()}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Add New Customer</DialogTitle>
+                    <DialogTitle>{t('addTitle')}</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate>
                         <div className="space-y-4 py-4">
-                            <TextField name="name" label="Name *" />
-                            <TextField name="email" label="Email" type="email" />
-                            <TextField name="phone" label="Phone" />
-                            <TextField name="address" label="Address" />
+                            <TextField name="name" label={t('name')} />
+                            <TextField name="email" label={t('email')} type="email" />
+                            <TextField name="phone" label={t('phone')} />
+                            <TextField name="address" label={t('address')} />
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={onClose}>
-                                Cancel
+                                {tc('cancel')}
                             </Button>
                             <Button type="submit" disabled={submitting}>
-                                {submitting ? 'Saving…' : 'Add Customer'}
+                                {submitting ? tc('saving') : t('addCustomer')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -73,6 +76,8 @@ function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 }
 
 export default function CustomersPage() {
+    const t = useTranslations('customers')
+    const tc = useTranslations('common')
     const router = useRouter()
     const money = useMoney()
     const [searchQuery, setSearchQuery] = useState('')
@@ -89,12 +94,12 @@ export default function CustomersPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold">Customers</h1>
-                    <p className="text-muted-foreground">Manage your customer database</p>
+                    <h1 className="text-3xl font-bold">{t('title')}</h1>
+                    <p className="text-muted-foreground">{t('subtitle')}</p>
                 </div>
                 <Button onClick={() => setShowDialog(true)}>
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Customer
+                    {t('addCustomer')}
                 </Button>
             </div>
 
@@ -106,7 +111,7 @@ export default function CustomersPage() {
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">
-                                {search ? 'Matching Customers' : 'Total Customers'}
+                                {search ? t('matchingCustomers') : t('totalCustomers')}
                             </p>
                             <p className="text-2xl font-bold">{customers.data?.total ?? '-'}</p>
                         </div>
@@ -119,7 +124,7 @@ export default function CustomersPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by name, email or phone..."
+                            placeholder={t('searchPlaceholder')}
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
@@ -139,12 +144,12 @@ export default function CustomersPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Phone</TableHead>
-                                    <TableHead>Loyalty Points</TableHead>
-                                    <TableHead>Total Spent</TableHead>
-                                    <TableHead>Status</TableHead>
+                                    <TableHead>{t('colName')}</TableHead>
+                                    <TableHead>{t('colEmail')}</TableHead>
+                                    <TableHead>{t('colPhone')}</TableHead>
+                                    <TableHead>{t('colLoyalty')}</TableHead>
+                                    <TableHead>{t('colTotalSpent')}</TableHead>
+                                    <TableHead>{t('colStatus')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -158,14 +163,16 @@ export default function CustomersPage() {
                                         <TableCell>{customer.email || '-'}</TableCell>
                                         <TableCell>{customer.phone || '-'}</TableCell>
                                         <TableCell>
-                                            <Badge variant="secondary">{customer.loyalty_points} pts</Badge>
+                                            <Badge variant="secondary">
+                                                {t('points', { count: customer.loyalty_points })}
+                                            </Badge>
                                         </TableCell>
                                         <TableCell className="font-semibold text-emerald-600">
                                             {money(customer.total_spent)}
                                         </TableCell>
                                         <TableCell>
                                             <Badge variant={customer.is_active ? 'default' : 'secondary'}>
-                                                {customer.is_active ? 'Active' : 'Inactive'}
+                                                {customer.is_active ? tc('active') : tc('inactive')}
                                             </Badge>
                                         </TableCell>
                                     </TableRow>
@@ -173,7 +180,7 @@ export default function CustomersPage() {
                             </TableBody>
                         </Table>
                         {customers.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">No customers found</p>
+                            <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
                         )}
                         <Pagination
                             page={page}

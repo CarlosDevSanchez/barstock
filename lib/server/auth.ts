@@ -1,6 +1,8 @@
 import 'server-only'
+import { cache } from 'react'
 import { z } from 'zod'
 import { roleAtLeast, USER_ROLES, type UserRole } from '@/lib/auth/roles'
+import { APP_LOCALES, type AppLocale } from '@/lib/i18n/config'
 import { forbidden, unauthorized } from './errors'
 import { createSupabaseServerClient, type AppSupabaseClient } from './supabase'
 
@@ -9,6 +11,7 @@ export interface SessionUser {
     email: string
     fullName: string | null
     role: UserRole
+    locale: AppLocale
 }
 
 export interface Session {
@@ -19,7 +22,8 @@ export interface Session {
 const profileSchema = z.object({
     role: z.enum(USER_ROLES),
     full_name: z.string().nullable(),
-    is_active: z.boolean()
+    is_active: z.boolean(),
+    locale: z.enum(APP_LOCALES)
 })
 
 /**
@@ -36,7 +40,7 @@ export async function loadSession(supabase: AppSupabaseClient): Promise<Session 
 
     const { data, error: profileError } = await supabase
         .from('profiles')
-        .select('role, full_name, is_active')
+        .select('role, full_name, is_active, locale')
         .eq('id', user.id)
         .maybeSingle()
     if (profileError || !data) return null
@@ -49,15 +53,17 @@ export async function loadSession(supabase: AppSupabaseClient): Promise<Session 
             id: user.id,
             email: user.email ?? '',
             fullName: profile.data.full_name,
-            role: profile.data.role
+            role: profile.data.role,
+            locale: profile.data.locale
         },
         supabase
     }
 }
 
-export async function getSession(): Promise<Session | null> {
+/** Shared across the root layout and `i18n/request.ts` in the same request. */
+export const getSession = cache(async (): Promise<Session | null> => {
     return loadSession(await createSupabaseServerClient())
-}
+})
 
 export async function requireUser(): Promise<Session> {
     const session = await getSession()

@@ -16,6 +16,7 @@
 | `bun run test` | unit + components + integration | ✅ (integración necesita `db:start`) |
 | `bun run test:unit` · `test:components` · `test:integration` · `test:e2e` · `test:coverage` | Cada nivel por separado; ver [testing](testing.md) | ✅ |
 | `bun run audit` | `bun audit` | ✅ limpio tras Next 16.3.5 ([C3](../04-auditoria/hallazgos/C3-dependencias-vulnerables.md)) |
+| `bun run local:up` · `local:down` · `local:reset` · `local:seed` | Todo en Docker con usuarios de prueba ([docker-local](docker-local.md)) | ✅ |
 | `bun run db:start` · `db:reset` · `db:types` | Supabase CLI local | — (requiere Docker y Supabase CLI) |
 | `bun run check` | typecheck → lint → test → build | — |
 

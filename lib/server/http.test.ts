@@ -24,7 +24,7 @@ const { AppError, notFound } = await import('./errors')
 
 const signIn = (role: string, extra: Record<string, unknown> = {}) => {
     authUser = { id: 'u1', email: 'u@shop.com' }
-    profile = { role, full_name: 'U', is_active: true, ...extra }
+    profile = { role, full_name: 'U', is_active: true, locale: 'es', ...extra }
 }
 const request = (method = 'GET', init: RequestInit & { headers?: Record<string, string> } = {}) =>
     new Request('http://localhost:3000/api/v1/x?page=2', { method, ...init })

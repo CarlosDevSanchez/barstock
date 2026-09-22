@@ -37,6 +37,17 @@ navegador ─ fetch /api/v1 ─▶ proxy.ts ─▶ Route Handlers (route(): orig
 
 ## Puesta en marcha
 
+### Opción rápida: todo con Docker (para verlo funcionando)
+
+```bash
+bun run local:up        # Supabase + usuarios de prueba + la app en un contenedor
+```
+
+Abre <http://localhost:3000> e inicia sesión con `admin@barstock.local`, `manager@barstock.local` o `cashier@barstock.local` (contraseña `barstock-local-2026`; **solo local**).
+Trae ventas de demostración. Para parar: `bun run local:down` (o `local:reset` para borrar también los datos). Detalle en [docker-local](docs/05-guias/docker-local.md).
+
+### Para desarrollar (recarga en caliente)
+
 Requisitos: **Bun ≥ 1.4.1**, **Node ≥ 20.9** (`.nvmrc` fija 24), **Docker Desktop** y la **Supabase CLI** (`brew install supabase/tap/supabase`).
 
 ```bash
@@ -47,7 +58,7 @@ cp .env.example .env.local              # y rellenar las 4 variables (ver docs/0
 bun run dev                             # http://localhost:3000
 ```
 
-No hay registro público: el primer admin se crea con la API de administración de Auth ([guía](docs/05-guias/setup-local.md#6-crear-el-primer-usuario-admin)); los demás, invitándolos desde `/users`.
+No hay registro público: el primer admin se crea con la API de administración de Auth ([guía](docs/05-guias/setup-local.md#6-crear-usuarios-para-entrar)); los demás, invitándolos desde `/users`.
 Los correos de invitación y recuperación llegan a Mailpit (<http://127.0.0.1:54324>).
 
 Si falta una variable de entorno, `next dev` y `next build` fallan **nombrándola**. La clave `SUPABASE_SERVICE_ROLE_KEY` salta RLS: solo la usa el servidor para invitar usuarios y **nunca** debe ir en una variable `NEXT_PUBLIC_*`.
@@ -65,6 +76,7 @@ Si falta una variable de entorno, `next dev` y `next build` fallan **nombrándol
 | `bun run test:e2e` | Playwright contra el build de producción (`bunx playwright install chromium` una vez) |
 | `bun audit` | Vulnerabilidades de dependencias |
 | `bun run db:start` · `db:reset` · `db:types` | Supabase local, recrear la BD, regenerar `types/database.ts` |
+| `bun run local:up` · `local:down` · `local:reset` · `local:seed` | Todo en Docker (Supabase + usuarios de prueba + app) y su semilla |
 
 Más en [`docs/05-guias/comandos.md`](docs/05-guias/comandos.md).
 
@@ -83,6 +95,7 @@ components/  hooks/           UI compartida; shadcn en components/ui
 lib/server                    Servicios, autenticación, errores (SOLO servidor)
 lib/validation  lib/api       Esquemas zod compartidos · cliente fetch del navegador
 supabase/migrations           Baseline, integridad, roles/RLS, RPC, reportes  (+ seed.sql, templates/, legacy/)
+Dockerfile  docker-compose.yml  La app como imagen de producción (uso local) · scripts/local-*.sh, seed-local.ts
 test/  e2e/  scripts/         Pruebas y umbral de cobertura
 docs/                         Documentación interna (índice en docs/README.md)
 ```

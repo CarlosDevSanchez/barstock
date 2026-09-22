@@ -4,6 +4,7 @@ import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { AlertTriangle, PackagePlus, Search, TrendingUp, Warehouse } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -46,6 +47,8 @@ interface AdjustDialogProps {
 // Stock never changes through a plain UPDATE: the adjustment goes through a database function that records who, why and how
 // much, and refuses to make the stock negative.
 function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
+    const t = useTranslations('inventory')
+    const tc = useTranslations('common')
     const form = useForm<AdjustInput, unknown, AdjustOutput>({
         resolver: zodResolver(inventoryAdjustSchema),
         defaultValues: { delta: undefined, reason: '' }
@@ -55,10 +58,10 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     const onSubmit = form.handleSubmit(async values => {
         try {
             const { quantity } = await inventoryApi.adjust(item.id, values)
-            toast.success(`Stock updated: ${item.product.name} now has ${quantity}`)
+            toast.success(t('stockUpdated', { name: item.product.name, quantity }))
             onSaved()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Failed to adjust stock'))
+            toast.error(errorMessage(error, t('adjustFailed')))
         }
     })
 
@@ -66,10 +69,9 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
         <Dialog open onOpenChange={open => !open && onClose()}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Adjust stock</DialogTitle>
+                    <DialogTitle>{t('adjustTitle')}</DialogTitle>
                     <DialogDescription>
-                        {item.product.name} · currently {item.quantity} in stock. Use a positive number to add units and
-                        a negative one to remove them.
+                        {t('adjustDescription', { name: item.product.name, quantity: item.quantity })}
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
@@ -77,23 +79,19 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
                         <div className="space-y-4 py-4">
                             <TextField
                                 name="delta"
-                                label="Change (units) *"
+                                label={t('changeLabel')}
                                 type="number"
                                 step="1"
-                                placeholder="e.g. 12 or -3"
+                                placeholder={t('changePlaceholder')}
                             />
-                            <TextField
-                                name="reason"
-                                label="Reason *"
-                                placeholder="e.g. New delivery, damaged, recount"
-                            />
+                            <TextField name="reason" label={t('reasonLabel')} placeholder={t('reasonPlaceholder')} />
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={onClose}>
-                                Cancel
+                                {tc('cancel')}
                             </Button>
                             <Button type="submit" disabled={submitting}>
-                                {submitting ? 'Saving…' : 'Apply adjustment'}
+                                {submitting ? tc('saving') : t('apply')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -104,6 +102,8 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
 }
 
 export default function InventoryPage() {
+    const t = useTranslations('inventory')
+    const tc = useTranslations('common')
     const { user } = useSession()
     const money = useMoney()
     const canAdjust = roleAtLeast(user.role, 'manager')
@@ -123,41 +123,43 @@ export default function InventoryPage() {
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold">Inventory Management</h1>
-                <p className="text-muted-foreground">Track and manage your stock levels</p>
+                <h1 className="text-3xl font-bold">{t('title')}</h1>
+                <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>
 
             <div className="grid gap-4 md:grid-cols-3">
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Items</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t('totalItems')}</CardTitle>
                         <Warehouse className="h-4 w-4 text-emerald-600" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{summary?.total_units ?? '-'}</div>
-                        <p className="text-xs text-muted-foreground">Across {summary?.item_count ?? '-'} products</p>
+                        <p className="text-xs text-muted-foreground">
+                            {t('acrossProducts', { count: summary?.item_count ?? '-' })}
+                        </p>
                     </CardContent>
                 </Card>
 
                 <Card className="rounded-2xl border-red-100 dark:border-red-900/30">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Low Stock Alert</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t('lowStockAlert')}</CardTitle>
                         <AlertTriangle className="h-4 w-4 text-red-600" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-red-600">{summary?.low_stock_count ?? '-'}</div>
-                        <p className="text-xs text-muted-foreground">Products need restocking</p>
+                        <p className="text-xs text-muted-foreground">{t('needRestocking')}</p>
                     </CardContent>
                 </Card>
 
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Stock Value</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t('stockValue')}</CardTitle>
                         <TrendingUp className="h-4 w-4 text-blue-600" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{summary ? money(summary.stock_value) : '-'}</div>
-                        <p className="text-xs text-muted-foreground">Total inventory value (at cost)</p>
+                        <p className="text-xs text-muted-foreground">{t('stockValueHint')}</p>
                     </CardContent>
                 </Card>
             </div>
@@ -167,7 +169,7 @@ export default function InventoryPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by product name or SKU..."
+                            placeholder={t('searchPlaceholder')}
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
@@ -185,7 +187,7 @@ export default function InventoryPage() {
                         }}
                     >
                         <AlertTriangle className="mr-2 h-4 w-4" />
-                        Low stock only
+                        {t('lowStockOnly')}
                     </Button>
                 </div>
 
@@ -198,13 +200,13 @@ export default function InventoryPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Product</TableHead>
-                                    <TableHead>SKU</TableHead>
-                                    <TableHead>Quantity</TableHead>
-                                    <TableHead>Min Threshold</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead>Value</TableHead>
-                                    {canAdjust && <TableHead className="text-right">Actions</TableHead>}
+                                    <TableHead>{t('product')}</TableHead>
+                                    <TableHead>{t('sku')}</TableHead>
+                                    <TableHead>{t('quantity')}</TableHead>
+                                    <TableHead>{t('minThreshold')}</TableHead>
+                                    <TableHead>{tc('status')}</TableHead>
+                                    <TableHead>{t('value')}</TableHead>
+                                    {canAdjust && <TableHead className="text-right">{tc('actions')}</TableHead>}
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -232,7 +234,7 @@ export default function InventoryPage() {
                                             <TableCell>{item.low_stock_threshold}</TableCell>
                                             <TableCell>
                                                 <Badge variant={isLowStock ? 'destructive' : 'default'}>
-                                                    {isLowStock ? 'Low Stock' : 'In Stock'}
+                                                    {isLowStock ? t('lowStock') : t('inStock')}
                                                 </Badge>
                                             </TableCell>
                                             <TableCell>{money(item.quantity * item.product.cost_price)}</TableCell>
@@ -241,7 +243,7 @@ export default function InventoryPage() {
                                                     <Button
                                                         size="sm"
                                                         variant="ghost"
-                                                        aria-label={`Adjust stock of ${item.product.name}`}
+                                                        aria-label={t('adjustAria', { name: item.product.name })}
                                                         onClick={() => setAdjusting(item)}
                                                     >
                                                         <PackagePlus className="h-4 w-4" />
@@ -254,7 +256,7 @@ export default function InventoryPage() {
                             </TableBody>
                         </Table>
                         {inventory.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">No inventory found</p>
+                            <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
                         )}
                         <Pagination
                             page={page}

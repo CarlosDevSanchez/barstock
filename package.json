@@ -25,7 +25,11 @@
     "db:types": "supabase gen types typescript --local > types/database.ts",
     "check": "bun run typecheck && bun run lint && bun run test && bun run build",
     "test:components": "for f in test/components/*.test.tsx; do bun test \"$f\" || exit 1; done",
-    "test:coverage": "rm -rf coverage && bun test lib stores --coverage --coverage-reporter=lcov --coverage-dir=coverage/unit && bun test test/integration --coverage --coverage-reporter=lcov --coverage-dir=coverage/integration && bun run scripts/coverage-check.ts"
+    "test:coverage": "rm -rf coverage && bun test lib stores --coverage --coverage-reporter=lcov --coverage-dir=coverage/unit && bun test test/integration --coverage --coverage-reporter=lcov --coverage-dir=coverage/integration && bun run scripts/coverage-check.ts",
+    "local:up": "bash scripts/local-up.sh",
+    "local:down": "bash scripts/local-down.sh",
+    "local:reset": "bash scripts/local-down.sh --reset",
+    "local:seed": "eval \"$(supabase status -o env)\" && SUPABASE_URL=\"$API_URL\" SUPABASE_ANON_KEY=\"$ANON_KEY\" SUPABASE_SERVICE_ROLE_KEY=\"$SERVICE_ROLE_KEY\" bun run scripts/seed-local.ts"
   },
   "dependencies": {
     "@hookform/resolvers": "5.9.1",
@@ -46,6 +50,7 @@
     "date-fns": "4.4.0",
     "lucide-react": "0.563.0",
     "next": "16.3.5",
+    "next-intl": "4.14.6",
     "next-themes": "0.4.6",
     "react": "19.3.0",
     "react-dom": "19.3.0",

@@ -1,4 +1,5 @@
 import type { NextConfig } from 'next'
+import createNextIntlPlugin from 'next-intl/plugin'
 import { parseEnv, serverEnvSchema } from './lib/env/schema'
 
 // Fail fast (dev and build) naming any missing variable, instead of `supabaseUrl is required` deep inside a page.
@@ -41,4 +42,5 @@ const nextConfig: NextConfig = {
     }
 }
 
-export default nextConfig
+const withNextIntl = createNextIntlPlugin()
+export default withNextIntl(nextConfig)

@@ -8,10 +8,30 @@ const EMAIL: Record<TestRole | 'inactive', string> = {
     inactive: 'inactive@barstock.test'
 }
 
+/** Preference cookie for anonymous pages (login). Logged-in UI prefers profiles.locale — see forceEnglishUi. */
+export async function pinEnglish(page: Page) {
+    await page.context().addCookies([{ name: 'NEXT_LOCALE', value: 'en', url: 'http://localhost:3000' }])
+}
+
+/**
+ * Existing e2e suites assert English copy. Once a session exists, profiles.locale wins over NEXT_LOCALE
+ * (i18n/request.ts), so pin the cookie and align the profile, then reload.
+ */
+export async function forceEnglishUi(page: Page) {
+    await pinEnglish(page)
+    const res = await page.request.patch('/api/v1/me', {
+        data: { locale: 'en' },
+        headers: { Origin: 'http://localhost:3000' }
+    })
+    if (res.ok()) await page.reload()
+}
+
 /** Signs in through the real form. The button is disabled until React hydrates, so waiting for it is the readiness check. */
 export async function signInWith(page: Page, email: string, password: string, options: { stayOnPage?: boolean } = {}) {
+    await pinEnglish(page)
     // `stayOnPage` keeps the current URL (e.g. /login?next=/pos) instead of opening a clean /login.
     if (!options.stayOnPage) await page.goto('/login')
+    else await page.reload() // apply NEXT_LOCALE cookie on the already-open login page
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeEnabled()
     await page.getByLabel('Email').fill(email)
     await page.getByLabel('Password').fill(password)
@@ -21,6 +41,7 @@ export async function signInWith(page: Page, email: string, password: string, op
 export async function signInAs(page: Page, role: TestRole) {
     await signInWith(page, EMAIL[role], TEST_PASSWORD)
     await page.waitForURL('**/dashboard')
+    await forceEnglishUi(page)
 }
 
 /** A fresh browser context (own cookies): one per person at the shop. */
