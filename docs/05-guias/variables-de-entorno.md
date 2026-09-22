@@ -14,6 +14,7 @@
 | `R2_ACCESS_KEY_ID` | Solo servidor | Token de API de R2 (Object Read & Write, limitado a `R2_BUCKET`). **Opcional como grupo** |
 | `R2_SECRET_ACCESS_KEY` | Solo servidor | Secreto del token anterior. **Opcional como grupo** |
 | `R2_BUCKET` | Solo servidor | Bucket privado (nunca público) donde se guardan las imágenes. **Opcional como grupo** |
+| `R2_ENDPOINT_OVERRIDE` | Solo servidor | **Solo desarrollo local, opcional e independiente del grupo anterior.** Sustituye el host real de R2 por un endpoint S3 compatible (el contenedor MinIO de `docker-compose.r2.yml`). Nunca se define en producción |
 
 Plantilla versionada: [`.env.example`](../../.env.example). Copiarla a `.env.local`.
 
@@ -25,6 +26,15 @@ dev`/`next build` funcionan igual (a diferencia de las otras variables, que son 
 selector de imagen en ese caso. El bucket es **privado**: las imágenes se sirven con URL firmada (12 h), nunca públicas. El token de R2
 debe estar limitado a ese único bucket con permiso "Object Read & Write" (no se crea el token real en este repositorio, solo se
 documenta el requisito).
+
+### R2 en local (MinIO), sin credenciales reales
+
+`bun run local:up` y `bun run local:dev` levantan también un contenedor [MinIO](https://min.io) (`docker-compose.r2.yml`) que emula la
+API S3 de R2, con un bucket ya creado y credenciales locales fijas. `R2_ENDPOINT_OVERRIDE=http://r2:9000` (dentro de la red Docker) hace
+que `lib/server/storage.ts` firme y suba objetos contra ese contenedor en vez del R2 real — así se puede probar la subida de imágenes de
+producto y del logo del ticket de principio a fin sin credenciales de Cloudflare. Consola web: `http://localhost:9001` (usuario/clave
+`barstock-local` / `barstock-local-2026`). `R2_ENDPOINT_OVERRIDE` **nunca** debe definirse fuera de este flujo local; en Vercel/CI se deja
+sin definir para hablar con el R2 real.
 
 ## Validación
 

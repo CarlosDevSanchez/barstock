@@ -27,6 +27,7 @@
     "test:components": "for f in test/components/*.test.tsx; do bun test \"$f\" || exit 1; done",
     "test:coverage": "rm -rf coverage && bun test lib stores --coverage --coverage-reporter=lcov --coverage-dir=coverage/unit && bun test test/integration --coverage --coverage-reporter=lcov --coverage-dir=coverage/integration && bun run scripts/coverage-check.ts",
     "local:up": "bash scripts/local-up.sh",
+    "local:dev": "bash scripts/local-dev.sh",
     "local:down": "bash scripts/local-down.sh",
     "local:reset": "bash scripts/local-down.sh --reset",
     "local:seed": "eval \"$(supabase status -o env)\" && SUPABASE_URL=\"$API_URL\" SUPABASE_ANON_KEY=\"$ANON_KEY\" SUPABASE_SERVICE_ROLE_KEY=\"$SERVICE_ROLE_KEY\" bun run scripts/seed-local.ts"

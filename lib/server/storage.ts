@@ -126,7 +126,11 @@ class R2Storage implements StorageBackend {
 
     constructor(accountId: string, accessKeyId: string, secretAccessKey: string, bucket: string) {
         this.client = new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' })
-        this.base = `https://${accountId}.r2.cloudflarestorage.com/${bucket}`
+        // R2_ENDPOINT_OVERRIDE (local dev only, e.g. docker-compose.r2.yml's MinIO container) replaces the real R2
+        // host; accountId still selects nothing meaningful there (MinIO has no per-account subdomain), but every
+        // other code path (signing, key generation, CHECK constraint) is unaffected.
+        const endpoint = serverEnv.R2_ENDPOINT_OVERRIDE ?? `https://${accountId}.r2.cloudflarestorage.com`
+        this.base = `${endpoint}/${bucket}`
     }
 
     async putObject(key: string, bytes: Uint8Array, contentType: string): Promise<void> {

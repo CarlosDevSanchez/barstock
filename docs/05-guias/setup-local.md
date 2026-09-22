@@ -1,6 +1,6 @@
 # Puesta en marcha local (verificada)
 
-> ¿Solo quieres **verlo funcionando**? `bun run local:up` levanta todo en Docker con usuarios de prueba: [docker-local](docker-local.md). Esta guía es para **desarrollar** con recarga en caliente.
+> ¿Solo quieres **verlo funcionando**? `bun run local:up` levanta todo en Docker con usuarios de prueba: [docker-local](docker-local.md). Esta guía es para **desarrollar** con recarga en caliente directamente en el host (más rápido si ya tienes Bun). Si prefieres programar dentro de Docker (p. ej. sin Bun instalado), `bun run local:dev` da recarga en caliente en un contenedor: mismo documento [docker-local](docker-local.md).
 
 > Sustituye a la sección "Installation" del README, que está desactualizada ([readme-vs-realidad](../04-auditoria/readme-vs-realidad.md)).
 > Herramientas migradas a Bun. El flujo de base de datos y usuarios (secciones 2, 4, 6 y 7) describe el estado **anterior** a la

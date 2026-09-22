@@ -1,10 +1,12 @@
 # syntax=docker/dockerfile:1
 #
-# Production image of the app (`next build` + `next start`). For LOCAL use: it talks to a Supabase stack reachable at
-# NEXT_PUBLIC_SUPABASE_URL (see docs/05-guias/docker-local.md and `bun run local:up`).
+# Two usable targets, both talking to a Supabase stack reachable at NEXT_PUBLIC_SUPABASE_URL (see
+# docs/05-guias/docker-local.md):
+#   - `run` (default): production image (`next build` + `next start`). `bun run local:up`.
+#   - `dev`: hot-reload (`next dev`) over a bind-mounted repo, no rebuild needed on code changes. `bun run local:dev`.
 #
-# NEXT_PUBLIC_* values are inlined at build time, so they are build arguments. Secrets are NOT: the service_role key is only
-# given at runtime (docker-compose.yml) and never stored in an image layer.
+# NEXT_PUBLIC_* values are inlined at build time for the `run` target, so they are build arguments there. Secrets are
+# NOT: the service_role key is only given at runtime (docker-compose.yml) and never stored in an image layer.
 
 FROM node:24-slim AS base
 # Next.js runs on Node; Bun installs and runs the scripts. Same Bun version as package.json ("packageManager").
@@ -15,6 +17,13 @@ FROM base AS deps
 COPY package.json bun.lock bunfig.toml ./
 # Exact versions from the lockfile; Bun skips dependency install scripts.
 RUN bun install --frozen-lockfile
+
+FROM deps AS dev
+# LOCAL DEV ONLY, hot-reload: docker-compose.dev.yml bind-mounts the repo over /app and masks /app/node_modules with a
+# named volume, so this layer's install survives and `next dev` picks up host edits. No source COPY here on purpose.
+ENV NEXT_TELEMETRY_DISABLED=1
+EXPOSE 3000
+CMD ["bun", "run", "dev"]
 
 FROM deps AS build
 COPY . .

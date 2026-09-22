@@ -1,0 +1,15 @@
+# LOCAL DEV ONLY overlay: joins the app to the Docker network the Supabase CLI creates (`supabase start`), so it
+# reaches the API gateway by container name instead of a public URL. Not meant to run alone — layer it on the base
+# file (`bun run local:up` does this):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml --env-file .env.docker up -d --build
+services:
+    app:
+        networks:
+            - supabase
+
+networks:
+    supabase:
+        external: true
+        # Created by the Supabase CLI; the name comes from `project_id` in supabase/config.toml.
+        name: supabase_network_barstock

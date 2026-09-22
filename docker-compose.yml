@@ -1,6 +1,10 @@
-# The app, built as a production image. It does NOT start Supabase: it joins the network of the local Supabase stack that
-# `supabase start` creates, so it reaches the API gateway by name. Use `bun run local:up`, which starts everything in order
-# (Supabase -> seed users -> this file) and writes .env.docker.
+# Portable base: builds and runs the app as a production image against ANY Supabase reachable at
+# NEXT_PUBLIC_SUPABASE_URL (hosted or otherwise). Production deploys on Vercel and do not use this file (see D13,
+# docs/06-roadmap/decisiones-pendientes.md); it exists so the container can be built and run the same way outside
+# Vercel — e.g. to reproduce the production build locally, or on a self-hosted box, against a real Supabase.
+#
+# For LOCAL development against the Supabase CLI stack, layer docker-compose.local.yml on top (see
+# docs/05-guias/docker-local.md); `bun run local:up` does this for you.
 #
 #   docker compose --env-file .env.docker up -d --build
 services:
@@ -8,8 +12,8 @@ services:
         build:
             context: .
             args:
-                NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?run `bun run local:up` (it writes .env.docker)}
-                NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?run `bun run local:up`}
+                NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL:?set it to your Supabase project's URL}
+                NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY:?set it to your Supabase project's anon key}
                 APP_URL: ${APP_URL:-http://localhost:3000}
         image: barstock-app:local
         container_name: barstock_app
@@ -18,14 +22,6 @@ services:
         environment:
             NEXT_PUBLIC_SUPABASE_URL: ${NEXT_PUBLIC_SUPABASE_URL}
             NEXT_PUBLIC_SUPABASE_ANON_KEY: ${NEXT_PUBLIC_SUPABASE_ANON_KEY}
-            SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?run `bun run local:up`}
+            SUPABASE_SERVICE_ROLE_KEY: ${SUPABASE_SERVICE_ROLE_KEY:?set it to your Supabase project's service_role key (server only)}
             APP_URL: ${APP_URL:-http://localhost:3000}
-        networks:
-            - supabase
         restart: unless-stopped
-
-networks:
-    supabase:
-        external: true
-        # Created by the Supabase CLI; the name comes from `project_id` in supabase/config.toml.
-        name: supabase_network_barstock

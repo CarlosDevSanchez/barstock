@@ -1,0 +1,68 @@
+# LOCAL DEV ONLY overlay: adds a MinIO container that emulates Cloudflare R2's S3-compatible API, so the product and
+# receipt-logo image upload feature (lib/server/storage.ts) can be exercised end to end without real R2 credentials.
+# Not meant to run alone — layered by `bun run local:up` / `bun run local:dev` on top of the base file plus
+# docker-compose.local.yml or docker-compose.dev.yml:
+#
+#   docker compose -f docker-compose.yml -f docker-compose.local.yml -f docker-compose.r2.yml --env-file .env.docker up -d --build
+#
+# `minio/minio` is no longer published to Docker Hub (MinIO restricted it to the AGPLv3 source build); the community
+# image now lives at quay.io/minio/minio. `r2-init` runs once to create the bucket, then exits; MinIO itself does not
+# auto-create buckets.
+services:
+    r2:
+        image: quay.io/minio/minio:RELEASE.2025-09-07T16-13-09Z
+        container_name: barstock_r2
+        command: server /data --console-address ':9001'
+        environment:
+            MINIO_ROOT_USER: barstock-local
+            MINIO_ROOT_PASSWORD: barstock-local-2026
+        ports:
+            - '${R2_PORT:-9000}:9000' # S3 API (matches R2_ENDPOINT_OVERRIDE below)
+            - '${R2_CONSOLE_PORT:-9001}:9001' # Web console, to browse uploaded objects
+        volumes:
+            - r2_data:/data
+        networks:
+            - supabase
+        healthcheck:
+            test: ['CMD', 'mc', 'ready', 'local']
+            interval: 2s
+            timeout: 5s
+            retries: 30
+        restart: unless-stopped
+
+    r2-init:
+        image: quay.io/minio/mc:RELEASE.2025-08-13T08-35-41Z
+        container_name: barstock_r2_init
+        depends_on:
+            r2:
+                condition: service_healthy
+        entrypoint: >
+            /bin/sh -c "
+            mc alias set local http://r2:9000 barstock-local barstock-local-2026 &&
+            mc mb --ignore-existing local/barstock-local
+            "
+        networks:
+            - supabase
+
+    app:
+        depends_on:
+            r2-init:
+                condition: service_completed_successfully
+        environment:
+            # Dummy credentials MinIO accepts for any value; the real secret is MINIO_ROOT_PASSWORD above.
+            R2_ACCOUNT_ID: barstock-local
+            R2_ACCESS_KEY_ID: barstock-local
+            R2_SECRET_ACCESS_KEY: barstock-local-2026
+            R2_BUCKET: barstock-local
+            # Dev-only override (lib/server/storage.ts): the app reaches MinIO by container name on the shared
+            # network, never by localhost:9000 (that port is only for your host machine / the console).
+            R2_ENDPOINT_OVERRIDE: http://r2:9000
+
+networks:
+    supabase:
+        external: true
+        # Created by the Supabase CLI; the name comes from `project_id` in supabase/config.toml.
+        name: supabase_network_barstock
+
+volumes:
+    r2_data:

@@ -21,7 +21,12 @@ export const serverEnvSchema = clientEnvSchema
         R2_ACCOUNT_ID: z.string().min(1).optional(),
         R2_ACCESS_KEY_ID: z.string().min(1).optional(),
         R2_SECRET_ACCESS_KEY: z.string().min(1).optional(),
-        R2_BUCKET: z.string().min(1).optional()
+        R2_BUCKET: z.string().min(1).optional(),
+        // LOCAL DEV ONLY escape hatch: points lib/server/storage.ts at an S3-compatible endpoint (e.g. the MinIO
+        // container from docker-compose.r2.yml) instead of the real https://<account>.r2.cloudflarestorage.com.
+        // Independent of the four R2_* vars above (still required, even if their values are dummy local ones) and
+        // never set in production. Never documented as required; leave unset to use real R2.
+        R2_ENDPOINT_OVERRIDE: z.string().url().optional()
     })
     .superRefine((value, ctx) => {
         const present = R2_KEYS.filter(key => value[key] !== undefined)
