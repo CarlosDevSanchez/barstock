@@ -41,6 +41,18 @@ Se implementaron para poder cerrar la base técnica; **cambiarlos es una migraci
 | D8 | Reembolso **total**, solo gerente/admin, con motivo, idempotente |
 | D6 | Sin topes de descuento por rol (sigue pendiente) |
 
+## Supuestos aplicados en la etapa 2 (cuentas abiertas y Top 5, a validar con el negocio)
+
+Igual que en la etapa 1: se implementaron para cerrar la base técnica de [cuentas-abiertas](../03-modulos/cuentas-abiertas.md);
+cambiarlos también es una migración.
+
+| ID | Supuesto implementado |
+|---|---|
+| D-tabs1 | El precio de un `tab_item` es una **foto** tomada la primera vez que ese producto se añade a la cuenta; añadir más tarde el mismo producto suma cantidad pero **no** vuelve a cotizarlo (igual que `create_sale` fija el precio al vender) |
+| D-tabs2 | Las cuentas abiertas son **visibles y editables por cualquier cajero** (no solo quien la abrió): en un bar/restaurante cualquiera puede atender cualquier mesa |
+| D-tabs3 | Una cuenta solo se puede **anular** mientras no tiene pagos; con pagos, la única salida es cobrar el saldo (se cierra sola) o dejarla abierta |
+| D-top5 | `top_selling_products` es `SECURITY DEFINER` a propósito: el panel de venta rápida muestra la moda de **toda la tienda**, no solo las ventas de quien está en la caja (a diferencia de `dashboard_summary`, que sí respeta "solo mis ventas" para un cajero) |
+
 ### D4 — Decidido 2026-09-21
 Decisión: una moneda por instalación (tabla `settings`); valor por defecto **COP**; decimales de cobro y precios según la moneda (`public.money_scale()` / `currencyDecimals`: 0 para COP y otras monedas de unidad entera, 2 para el resto). Montos ampliados a `NUMERIC(14,2)`.
 Motivo: el negocio opera en Colombia; `NUMERIC(10,2)` y centavos fijos no sirven para pesos.

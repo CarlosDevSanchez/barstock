@@ -33,10 +33,13 @@
 | `order_items`, `payments` | SELECT de sus órdenes (heredan la visibilidad de `orders`) | todas | todas |
 | `expenses` | — | SELECT, INSERT | + UPDATE, DELETE |
 | `settings` | SELECT | SELECT | SELECT, INSERT, UPDATE, DELETE |
+| `tabs`, `tab_members`, `tab_items`, `tab_payments` | SELECT (compartido: cualquier cajero ve/atiende cualquier cuenta; escritura solo vía RPC) | SELECT | SELECT |
 
 `orders`, `order_items`, `payments`, `inventory` e `inventory_transactions` tienen además `REVOKE INSERT, UPDATE, DELETE` a nivel de tabla
 (defensa en profundidad: aunque alguien añadiera una política por error, el privilegio no existe). `TRUNCATE`, `REFERENCES` y `TRIGGER`
-están revocados para `authenticated` en todas las tablas (`TRUNCATE` ignora RLS).
+están revocados para `authenticated` en todas las tablas (`TRUNCATE` ignora RLS). `tabs`, `tab_members`, `tab_items` y `tab_payments`
+siguen el mismo patrón: `REVOKE INSERT, UPDATE, DELETE` a `authenticated` (solo hay política de `SELECT`); todo lo demás pasa por las RPC de
+[cuentas-abiertas](../03-modulos/cuentas-abiertas.md).
 
 `customers` usa **privilegios por columna**: `total_spent` y `loyalty_points` están derivados de las órdenes y ningún cliente de la API
 puede escribirlos.

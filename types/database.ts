@@ -308,6 +308,7 @@ export type Database = {
           refunded_by: string | null
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
+          tab_id: string | null
           tax: number
           total: number
           updated_at: string
@@ -325,6 +326,7 @@ export type Database = {
           refunded_by?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
+          tab_id?: string | null
           tax?: number
           total?: number
           updated_at?: string
@@ -342,6 +344,7 @@ export type Database = {
           refunded_by?: string | null
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
+          tab_id?: string | null
           tax?: number
           total?: number
           updated_at?: string
@@ -352,6 +355,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_tab_id_fkey"
+            columns: ["tab_id"]
+            isOneToOne: false
+            referencedRelation: "tabs"
             referencedColumns: ["id"]
           },
         ]
@@ -707,11 +717,237 @@ export type Database = {
         }
         Relationships: []
       }
+      tab_items: {
+        Row: {
+          added_by: string | null
+          created_at: string
+          id: string
+          product_id: string
+          quantity: number
+          tab_id: string
+          tax_rate: number
+          unit_price: number
+          updated_at: string
+          variant_id: string | null
+        }
+        Insert: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          product_id: string
+          quantity: number
+          tab_id: string
+          tax_rate: number
+          unit_price: number
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Update: {
+          added_by?: string | null
+          created_at?: string
+          id?: string
+          product_id?: string
+          quantity?: number
+          tab_id?: string
+          tax_rate?: number
+          unit_price?: number
+          updated_at?: string
+          variant_id?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tab_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tab_items_tab_id_fkey"
+            columns: ["tab_id"]
+            isOneToOne: false
+            referencedRelation: "tabs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tab_items_variant_id_fkey"
+            columns: ["variant_id"]
+            isOneToOne: false
+            referencedRelation: "product_variants"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tab_members: {
+        Row: {
+          created_at: string
+          customer_id: string | null
+          display_name: string
+          id: string
+          tab_id: string
+        }
+        Insert: {
+          created_at?: string
+          customer_id?: string | null
+          display_name: string
+          id?: string
+          tab_id: string
+        }
+        Update: {
+          created_at?: string
+          customer_id?: string | null
+          display_name?: string
+          id?: string
+          tab_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tab_members_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tab_members_tab_id_fkey"
+            columns: ["tab_id"]
+            isOneToOne: false
+            referencedRelation: "tabs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tab_payments: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string | null
+          id: string
+          member_id: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          tab_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          member_id?: string | null
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          tab_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string | null
+          id?: string
+          member_id?: string | null
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          tab_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tab_payments_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "tab_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tab_payments_tab_id_fkey"
+            columns: ["tab_id"]
+            isOneToOne: false
+            referencedRelation: "tabs"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      tabs: {
+        Row: {
+          closed_at: string | null
+          closed_by: string | null
+          customer_id: string | null
+          discount: number
+          id: string
+          label: string
+          opened_at: string
+          opened_by: string | null
+          order_id: string | null
+          status: Database["public"]["Enums"]["tab_status"]
+          tab_number: string
+          updated_at: string
+          void_reason: string | null
+          voided_at: string | null
+          voided_by: string | null
+        }
+        Insert: {
+          closed_at?: string | null
+          closed_by?: string | null
+          customer_id?: string | null
+          discount?: number
+          id?: string
+          label: string
+          opened_at?: string
+          opened_by?: string | null
+          order_id?: string | null
+          status?: Database["public"]["Enums"]["tab_status"]
+          tab_number: string
+          updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Update: {
+          closed_at?: string | null
+          closed_by?: string | null
+          customer_id?: string | null
+          discount?: number
+          id?: string
+          label?: string
+          opened_at?: string
+          opened_by?: string | null
+          order_id?: string | null
+          status?: Database["public"]["Enums"]["tab_status"]
+          tab_number?: string
+          updated_at?: string
+          void_reason?: string | null
+          voided_at?: string | null
+          voided_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "tabs_customer_id_fkey"
+            columns: ["customer_id"]
+            isOneToOne: false
+            referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tabs_order_id_fkey"
+            columns: ["order_id"]
+            isOneToOne: false
+            referencedRelation: "orders"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
     }
     Views: {
       [_ in never]: never
     }
     Functions: {
+      _close_tab: { Args: { p_tab_id: string }; Returns: string }
+      _tab_totals: {
+        Args: { p_tab_id: string }
+        Returns: {
+          balance: number
+          discount: number
+          paid: number
+          subtotal: number
+          tax: number
+          total: number
+        }[]
+      }
       adjust_inventory: {
         Args: { p_delta: number; p_inventory_id: string; p_reason: string }
         Returns: number
@@ -736,6 +972,10 @@ export type Database = {
         Returns: boolean
       }
       money_scale: { Args: never; Returns: number }
+      open_tab: {
+        Args: { p_customer_id: string; p_label: string; p_members: string[] }
+        Returns: string
+      }
       refresh_customer_totals: {
         Args: { p_customer_id: string }
         Returns: undefined
@@ -748,11 +988,68 @@ export type Database = {
         Args: { p_from: string; p_to: string; p_tz?: string }
         Returns: Json
       }
+      tab_add_items: {
+        Args: { p_items: Json; p_tab_id: string }
+        Returns: undefined
+      }
+      tab_add_members: {
+        Args: { p_names: string[]; p_tab_id: string }
+        Returns: undefined
+      }
+      tab_pay: {
+        Args: {
+          p_amount: number
+          p_member_id: string
+          p_method: Database["public"]["Enums"]["payment_method"]
+          p_tab_id: string
+        }
+        Returns: undefined
+      }
+      tab_remove_item: {
+        Args: {
+          p_item_id: string
+          p_quantity: number
+          p_reason: string
+          p_tab_id: string
+        }
+        Returns: undefined
+      }
+      tab_set_discount: {
+        Args: { p_discount: number; p_tab_id: string }
+        Returns: undefined
+      }
+      tab_summary: {
+        Args: { p_tab_id: string }
+        Returns: {
+          balance: number
+          discount: number
+          paid: number
+          subtotal: number
+          tax: number
+          total: number
+        }[]
+      }
+      top_selling_products: {
+        Args: { p_days?: number; p_limit?: number }
+        Returns: {
+          category_name: string
+          name: string
+          product_id: string
+          quantity: number
+          selling_price: number
+          stock: number
+        }[]
+      }
+      void_tab: {
+        Args: { p_reason: string; p_tab_id: string }
+        Returns: undefined
+      }
     }
     Enums: {
       order_status: "draft" | "pending" | "completed" | "refunded"
       payment_method: "cash" | "card" | "ewallet"
       po_status: "draft" | "pending" | "received" | "cancelled"
+      tab_status: "open" | "closed" | "voided"
       user_role: "admin" | "manager" | "cashier"
     }
     CompositeTypes: {
@@ -887,6 +1184,7 @@ export const Constants = {
       order_status: ["draft", "pending", "completed", "refunded"],
       payment_method: ["cash", "card", "ewallet"],
       po_status: ["draft", "pending", "received", "cancelled"],
+      tab_status: ["open", "closed", "voided"],
       user_role: ["admin", "manager", "cashier"],
     },
   },

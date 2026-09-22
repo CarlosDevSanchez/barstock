@@ -1,6 +1,6 @@
 # Triggers y funciones
 
-> **Estado: implementado** (etapa 1 + `…06_locale_and_money`; migraciones `…02`–`…06`). Confianza: **[Verificado]** con SQL y contra la API real.
+> **Estado: implementado** (etapa 1 + `…06_locale_and_money` + etapa 2 `…07_top_products`/`…08_tabs`; migraciones `…02`–`…08`). Confianza: **[Verificado]** con SQL y contra la API real.
 > Convención: toda función `SECURITY DEFINER` fija `search_path = ''` y califica sus objetos; a todas se les revoca `EXECUTE` a `anon`
 > (Supabase se lo concede por defecto) y las de trigger a todos los roles.
 
@@ -39,6 +39,20 @@ Todas re-comprueban el rol dentro (no dependen solo de que la API lo haga), corr
 
 ### `adjust_inventory(p_inventory_id, p_delta, p_reason) → int` — gerente+
 - Delta distinto de 0, motivo obligatorio. `UPDATE … WHERE quantity + delta >= 0` (nunca negativo). Registra `adjustment`. Devuelve la nueva cantidad.
+
+### `top_selling_products(p_days default 30, p_limit default 5) → table(...)` — cajero+, `SECURITY DEFINER` (`…07`)
+A diferencia de `dashboard_summary`/`sales_report` (abajo), que son `INVOKER` y respetan que un cajero solo vea sus propias ventas, esta es
+`SECURITY DEFINER` a propósito: la venta rápida del POS necesita la **moda de toda la tienda**, no solo lo que vendió quien está atendiendo.
+Solo devuelve agregados de producto (nombre, precio, stock, unidades vendidas) — nunca datos de orden, cliente ni pago — así que ampliar su
+alcance es seguro. Excluye reembolsos (`status = 'completed'`), respeta la ventana de días (máx. 366) y el límite (máx. 20).
+
+## Cuentas abiertas (`…08`) — la única vía para escribir `tabs`/`tab_items`/`tab_payments`
+
+Mismo patrón que las RPC de negocio de arriba (`SECURITY DEFINER`, `search_path=''`, errores `P0001`/`P0002`/`42501`); documentadas en detalle
+en [cuentas-abiertas](../03-modulos/cuentas-abiertas.md). Todas bloquean la cuenta con `SELECT … FOR UPDATE` antes de tocar nada:
+`open_tab`, `tab_add_members`, `tab_add_items` (cajero+); `tab_remove_item`, `void_tab` (gerente+); `tab_set_discount`, `tab_pay` (cajero+).
+Dos internas sin `GRANT` a nadie: `_tab_totals` (la fórmula de `create_sale` aplicada a `tab_items`) y `_close_tab` (convierte la cuenta pagada
+en una `orders` normal). `tab_summary(p_tab_id)` expone `_tab_totals` de solo lectura para el endpoint de detalle.
 
 ## Reportes (`…05`) — `SECURITY INVOKER`
 

@@ -14,6 +14,8 @@
 | `…04_business_rpc.sql` | `create_sale`, `refund_order`, `adjust_inventory`, secuencia de órdenes, inventario automático, totales de clientes derivados |
 | `…05_reporting.sql` | `dashboard_summary`, `sales_report` |
 | `…06_locale_and_money.sql` | `profiles.locale`; `currency_decimals` / `money_scale`; columnas de dinero → `NUMERIC(14,2)`; `create_sale` con redondeo según la moneda de la tienda |
+| `…07_top_products.sql` | `top_selling_products` (RPC `SECURITY DEFINER`, panel de venta rápida del POS) |
+| `…08_tabs.sql` | `tabs`, `tab_members`, `tab_items`, `tab_payments`, `orders.tab_id`, enum `tab_status`, RLS y sus RPC ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)) |
 
 `supabase/legacy/` conserva `schema.sql` y `fix_rls_policies.sql` como historia (**no ejecutar**). `fix_rls_policies.sql` no se migra: `…03`
 elimina todas las políticas existentes, incluidas las que ese parche haya creado en una base ya desplegada.

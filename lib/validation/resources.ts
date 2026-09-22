@@ -159,6 +159,10 @@ export const productsQuerySchema = paginationSchema.extend({
     ids: uuidList
 })
 export const inventoryQuerySchema = paginationSchema.extend({ low: queryBoolean })
+export const topProductsQuerySchema = z.object({
+    days: positiveInt(366).default(30),
+    limit: positiveInt(20).default(5)
+})
 export const ordersQuerySchema = paginationSchema.extend({
     status: z.preprocess(value => blankToNull(value) ?? undefined, z.enum(ORDER_STATUSES).optional()),
     customer_id: optionalUuid,
@@ -180,5 +184,6 @@ export type SaleInput = z.output<typeof saleSchema>
 export type InviteUserInput = z.output<typeof inviteUserSchema>
 export type UpdateUserInput = z.output<typeof updateUserSchema>
 export type ProductsQuery = z.output<typeof productsQuerySchema>
+export type TopProductsQuery = z.output<typeof topProductsQuerySchema>
 export type InventoryQuery = z.output<typeof inventoryQuerySchema>
 export type OrdersQuery = z.output<typeof ordersQuerySchema>

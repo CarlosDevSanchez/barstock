@@ -19,11 +19,15 @@ export type OrderDetail = Tables<'orders'> & {
     payments: Tables<'payments'>[]
     /** Who rang up the sale (null when the caller may not read that profile). */
     created_by_name: string | null
+    /** Set when this order came from a closed tab (an account with several people/payments); null for a direct sale. */
+    tab: Pick<Tables<'tabs'>, 'id' | 'tab_number' | 'label'> | null
 }
 
 // One literal on purpose: supabase-js infers the result type from the select string, and `+` would widen it to `string`.
+// `!orders_tab_id_fkey` disambiguates: orders.tab_id -> tabs.id AND tabs.order_id -> orders.id are two different FKs
+// between the same two tables, so PostgREST cannot pick one on its own.
 const DETAIL_SELECT =
-    '*, customer:customers(id, name, email, phone), items:order_items(*, product:products(id, name, sku), variant:product_variants(id, name)), payments(*)'
+    '*, customer:customers(id, name, email, phone), items:order_items(*, product:products(id, name, sku), variant:product_variants(id, name)), payments(*), tab:tabs!orders_tab_id_fkey(id, tab_number, label)'
 
 /** Cashiers only see their own orders, managers and admins all of them: RLS decides, not this code. */
 export async function listOrders(
