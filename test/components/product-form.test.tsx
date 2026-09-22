@@ -31,9 +31,9 @@ void mock.module('next/navigation', () => ({
 const { default: ProductsPage } = await import('@/app/(dashboard)/products/page')
 const { SessionProvider } = await import('@/components/session-provider')
 
-const renderPage = (role: 'cashier' | 'manager') =>
+const renderPage = (role: 'cashier' | 'manager', storeSettings = settings) =>
     render(
-        <SessionProvider value={{ user: userWithRole(role), settings }}>
+        <SessionProvider value={{ user: userWithRole(role), settings: storeSettings }}>
             <ProductsPage />
         </SessionProvider>
     )
@@ -73,6 +73,14 @@ describe('product form validation', () => {
         fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
         return screen.findByRole('dialog')
     }
+
+    test('a new product starts with the store default tax rate from Settings', async () => {
+        renderPage('manager', { ...settings, tax_rate: 0.0725 })
+        await screen.findByText('Wireless Mouse')
+        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        await screen.findByRole('dialog')
+        expect((screen.getByLabelText('Tax Rate (%)') as HTMLInputElement).value).toBe('7.25')
+    })
 
     test('submitting an empty form shows readable errors and sends nothing', async () => {
         const dialog = await openNewProduct()

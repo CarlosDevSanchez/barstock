@@ -43,7 +43,8 @@ const productFormSchema = productCreateSchema.extend({
     cost_price: productCreateSchema.shape.selling_price
 })
 
-const emptyValues = {
+// A new product starts with the store's default tax rate (Settings), shown as a percentage.
+const emptyValues = (defaultTaxPercent: string) => ({
     name: '',
     description: '',
     sku: '',
@@ -51,11 +52,11 @@ const emptyValues = {
     category_id: '',
     cost_price: '',
     selling_price: '',
-    tax_rate: '10'
-}
+    tax_rate: defaultTaxPercent
+})
 
-function valuesFor(product: ProductListItem | null) {
-    if (!product) return emptyValues
+function valuesFor(product: ProductListItem | null, defaultTaxPercent: string) {
+    if (!product) return emptyValues(defaultTaxPercent)
     return {
         name: product.name,
         description: product.description ?? '',
@@ -76,9 +77,10 @@ interface ProductDialogProps {
 }
 
 function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogProps) {
+    const { settings } = useSession()
     const form = useForm<z.input<typeof productFormSchema>, unknown, z.output<typeof productFormSchema>>({
         resolver: zodResolver(productFormSchema),
-        defaultValues: valuesFor(product)
+        defaultValues: valuesFor(product, String(Math.round(settings.tax_rate * 10_000) / 100))
     })
     const submitting = form.formState.isSubmitting
 
