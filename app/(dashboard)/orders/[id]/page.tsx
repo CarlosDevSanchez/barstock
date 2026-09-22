@@ -133,7 +133,7 @@ export default function OrderDetailPage() {
 
     return (
         <div className="space-y-6">
-            <div className="print:hidden space-y-6">
+            <div className="print:hidden space-y-6" data-testid="order-detail-view">
                 <div className="flex items-center justify-between">
                     <div className="flex items-center gap-4">
                         <Button

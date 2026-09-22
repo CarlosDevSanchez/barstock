@@ -41,9 +41,18 @@ test('a sale takes stock, a manager refunds it, the stock comes back', async ({ 
     // ---- the cashier sees the order but cannot refund it
     await toast.getByRole('button', { name: 'View order' }).click()
     await expect(till.getByRole('heading', { name: 'Order Details' })).toBeVisible()
-    await expect(till.getByText(product.name)).toBeVisible()
+    // Scoped: the print-only <ReceiptTicket> (always mounted, hidden on screen) repeats the product name too.
+    const detailView = till.getByTestId('order-detail-view')
+    await expect(detailView.getByText(product.name)).toBeVisible()
     await expect(till.getByRole('button', { name: 'Refund' })).toHaveCount(0)
     const orderUrl = till.url()
+
+    // ---- print preview: the 80mm ticket shows up, the normal view and the app shell are hidden
+    await till.emulateMedia({ media: 'print' })
+    await expect(till.locator('[data-testid="receipt-ticket"]')).toBeVisible()
+    await expect(till.getByRole('heading', { name: 'Order Details' })).toBeHidden()
+    await expect(till.locator('aside')).toBeHidden()
+    await till.emulateMedia({ media: 'screen' })
 
     // ---- a manager refunds it
     const office = await newSession(browser, 'manager')

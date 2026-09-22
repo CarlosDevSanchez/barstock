@@ -153,6 +153,21 @@ export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
                 </>
             )}
 
+            {order.payments.length > 0 && (
+                <div data-testid="receipt-payments">
+                    <div className="border-t border-dashed border-black my-2" />
+                    <p className="font-bold">{t('receiptPayments')}</p>
+                    <div className="space-y-0.5">
+                        {order.payments.map(payment => (
+                            <div key={payment.id} className="flex justify-between">
+                                <span>{paymentLabel(payment.payment_method)}</span>
+                                <span>{money(payment.amount)}</span>
+                            </div>
+                        ))}
+                    </div>
+                </div>
+            )}
+
             {order.status === 'refunded' && (
                 <>
                     <div className="border-t border-dashed border-black my-2" />

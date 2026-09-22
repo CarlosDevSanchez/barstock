@@ -4,7 +4,7 @@ import { setupDom } from '../helpers/dom'
 import type { OrderDetail } from '@/lib/api/orders'
 
 setupDom()
-const { cleanup, render, screen } = await import('@testing-library/react')
+const { cleanup, render, screen, within } = await import('@testing-library/react')
 const { ReceiptTicket } = await import('@/components/orders/receipt-ticket')
 
 afterEach(cleanup)
@@ -103,8 +103,52 @@ describe('ReceiptTicket', () => {
         expect(screen.getAllByText('10%')).toHaveLength(2)
         expect(screen.getByText('Tax breakdown')).toBeTruthy()
 
+        // Dedicated payments section: method + amount for the single cash payment. Scoped: the ticket's own
+        // "Total" line can (legitimately) show the same amount when there is a single, full payment.
+        const payments = within(screen.getByTestId('receipt-payments'))
+        expect(payments.getByText('Payments')).toBeTruthy()
+        expect(payments.getByText('Cash')).toBeTruthy()
+        expect(payments.getByText('$141.00')).toBeTruthy()
+
         // Not refunded: no stamp.
         expect(screen.queryByText('REFUNDED')).toBeNull()
+    })
+
+    test('a split payment lists every method with its own amount', () => {
+        const split: OrderDetail = {
+            ...baseOrder,
+            payments: [
+                {
+                    id: 'pay-1',
+                    order_id: 'order-1',
+                    payment_method: 'cash',
+                    amount: 100,
+                    reference_number: null,
+                    notes: null,
+                    created_at: '2026-09-21T15:30:00Z'
+                },
+                {
+                    id: 'pay-2',
+                    order_id: 'order-1',
+                    payment_method: 'card',
+                    amount: 41,
+                    reference_number: null,
+                    notes: null,
+                    created_at: '2026-09-21T15:30:00Z'
+                }
+            ]
+        }
+        render(
+            <IntlProvider>
+                <ReceiptTicket order={split} settings={testSettings} />
+            </IntlProvider>
+        )
+        // Scoped: the tax breakdown's "Base" column happens to also show $100.00 for this fixture's items.
+        const payments = within(screen.getByTestId('receipt-payments'))
+        expect(payments.getByText('Cash')).toBeTruthy()
+        expect(payments.getByText('$100.00')).toBeTruthy()
+        expect(payments.getByText('Card')).toBeTruthy()
+        expect(payments.getByText('$41.00')).toBeTruthy()
     })
 
     test('shows a walk-in fallback when there is no customer', () => {
