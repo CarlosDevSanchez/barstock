@@ -1,19 +1,33 @@
-import { beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { POST as adjust } from '@/app/api/v1/inventory/[id]/adjust/route'
 import { GET as listInventory } from '@/app/api/v1/inventory/route'
 import { GET as getOrder } from '@/app/api/v1/orders/[id]/route'
 import { POST as refund } from '@/app/api/v1/orders/[id]/refund/route'
 import { GET as listOrders } from '@/app/api/v1/orders/route'
 import { POST as createSale } from '@/app/api/v1/sales/route'
-import { adminClient, createCustomer, createProduct, ensureTestUsers, stockOf, uniq } from '../helpers/integration'
+import {
+    adminClient,
+    createCustomer,
+    createProduct,
+    ensureTestUsers,
+    pinStoreCurrency,
+    stockOf,
+    uniq
+} from '../helpers/integration'
 import { dataOf, errorOf, loginAs, TestClient } from '../helpers/http'
 
 let cashier: TestClient
 let manager: TestClient
 
+let restoreCurrency: () => Promise<void>
+
 beforeAll(async () => {
     await ensureTestUsers()
+    restoreCurrency = await pinStoreCurrency('USD') // these suites assert cents; COP (whole pesos) has its own suite
     ;[cashier, manager] = await Promise.all([loginAs('cashier'), loginAs('manager')])
+})
+afterAll(async () => {
+    await restoreCurrency()
 })
 
 interface Order {

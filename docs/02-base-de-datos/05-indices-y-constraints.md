@@ -1,6 +1,6 @@
 # Índices y constraints
 
-> Extraído de `pg_indexes` y `pg_constraint` de la BD local tras las 5 migraciones · Confianza: **[Verificado]**. **Sin `EXPLAIN` real**: no hay una base con datos de producción; el rendimiento con volumen real es **[Por verificar]**.
+> Extraído de `pg_indexes` y `pg_constraint` de la BD local tras las 6 migraciones · Confianza: **[Verificado]**. **Sin `EXPLAIN` real**: no hay una base con datos de producción; el rendimiento con volumen real es **[Por verificar]**.
 
 ## Índices (además de las PK)
 

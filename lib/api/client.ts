@@ -1,4 +1,7 @@
 import type { ApiErrorBody, Paginated, Single } from './types'
+import { DEFAULT_APP_LOCALE, isAppLocale, type AppLocale } from '@/lib/i18n/config'
+import en from '@/messages/en.json'
+import es from '@/messages/es.json'
 
 export class ApiError extends Error {
     constructor(
@@ -22,6 +25,7 @@ interface RequestOptions {
 }
 
 const BASE = '/api/v1/'
+const catalogs = { es, en } as const
 
 function buildUrl(path: string, query?: Query): string {
     const search = new URLSearchParams()
@@ -102,12 +106,31 @@ export async function apiDelete(path: string): Promise<void> {
     await request('DELETE', path)
 }
 
-/** A message fit for a toast: the API message plus the first field problem of a validation error. */
+function currentLocale(): AppLocale {
+    if (typeof document === 'undefined') return DEFAULT_APP_LOCALE
+    return isAppLocale(document.documentElement.lang) ? document.documentElement.lang : DEFAULT_APP_LOCALE
+}
+
+function translateKey(key: string, locale: AppLocale): string | undefined {
+    const parts = key.split('.')
+    let node: unknown = catalogs[locale]
+    for (const part of parts) {
+        if (!node || typeof node !== 'object') return undefined
+        node = (node as Record<string, unknown>)[part]
+    }
+    return typeof node === 'string' ? node : undefined
+}
+
+/** A message fit for a toast: translates known keys (`validation.*`); otherwise shows the API text. */
 export function errorMessage(error: unknown, fallback = 'Something went wrong'): string {
     if (!(error instanceof Error)) return fallback
+    const locale = currentLocale()
     if (error instanceof ApiError && Array.isArray(error.details)) {
         const first = error.details[0] as { path?: string; message?: string } | undefined
-        if (first?.message) return `${first.path ? `${first.path}: ` : ''}${first.message}`
+        if (first?.message) {
+            const translated = translateKey(first.message, locale) ?? first.message
+            return `${first.path ? `${first.path}: ` : ''}${translated}`
+        }
     }
-    return error.message || fallback
+    return translateKey(error.message, locale) ?? (error.message || fallback)
 }

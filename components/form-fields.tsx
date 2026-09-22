@@ -1,7 +1,8 @@
 'use client'
 
 import type { ComponentProps } from 'react'
-import { FormControl, FormDescription, FormField, FormItem, FormLabel, FormMessage } from '@/components/ui/form'
+import { FormControl, FormDescription, FormField, FormItem, FormLabel } from '@/components/ui/form'
+import { TranslatedFormMessage } from '@/components/translated-form-message'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 
@@ -27,7 +28,7 @@ export function TextField({ name, label, description, className, ...inputProps }
                         <Input {...inputProps} {...field} value={field.value ?? ''} />
                     </FormControl>
                     {description && <FormDescription>{description}</FormDescription>}
-                    <FormMessage />
+                    <TranslatedFormMessage />
                 </FormItem>
             )}
         />
@@ -73,7 +74,7 @@ export function SelectField({ name, label, placeholder, options, noneLabel, clas
                             ))}
                         </SelectContent>
                     </Select>
-                    <FormMessage />
+                    <TranslatedFormMessage />
                 </FormItem>
             )}
         />

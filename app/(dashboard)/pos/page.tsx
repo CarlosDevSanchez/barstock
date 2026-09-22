@@ -2,6 +2,7 @@
 
 import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Search, Trash2, Plus, Minus, ShoppingCart, CreditCard, DollarSign, Smartphone } from 'lucide-react'
 import { Button } from '@/components/ui/button'
@@ -22,7 +23,8 @@ import { Separator } from '@/components/ui/separator'
 import { ScrollArea } from '@/components/ui/scroll-area'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
-import { useMoney } from '@/components/session-provider'
+import { useMoney, useSession } from '@/components/session-provider'
+import { currencyDecimals, moneyStep } from '@/lib/money'
 import { categoriesApi } from '@/lib/api/categories'
 import { errorMessage } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
@@ -37,15 +39,20 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 const CATALOG_SIZE = 100
 const ALL = 'all'
 
-const PAYMENT_OPTIONS: Array<{ value: PaymentMethod; label: string; icon: typeof DollarSign }> = [
-    { value: 'cash', label: 'Cash', icon: DollarSign },
-    { value: 'card', label: 'Card', icon: CreditCard },
-    { value: 'ewallet', label: 'E-Wallet', icon: Smartphone }
+const PAYMENT_ICONS: Array<{ value: PaymentMethod; icon: typeof DollarSign }> = [
+    { value: 'cash', icon: DollarSign },
+    { value: 'card', icon: CreditCard },
+    { value: 'ewallet', icon: Smartphone }
 ]
 
 export default function POSPage() {
+    const t = useTranslations('pos')
+    const tc = useTranslations('common')
     const router = useRouter()
     const money = useMoney()
+    const { settings } = useSession()
+    const priceStep = moneyStep(settings.currency)
+    const decimals = currencyDecimals(settings.currency)
 
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedCategory, setSelectedCategory] = useState(ALL)
@@ -95,9 +102,9 @@ export default function POSPage() {
     // Until the live lookup settles a missing product is just "not loaded yet"; afterwards it means deleted or hidden.
     const lookupSettled = cartIds === '' || (cartProducts.data !== undefined && !cartProducts.loading)
     const problemWith = ({ item, product }: (typeof lines)[number]) => {
-        if (!product) return lookupSettled ? 'No longer available' : null
-        if (!product.is_active || product.stock === null) return 'No longer available'
-        if (item.quantity > product.stock) return `Only ${product.stock} in stock`
+        if (!product) return lookupSettled ? t('noLongerAvailable') : null
+        if (!product.is_active || product.stock === null) return t('noLongerAvailable')
+        if (item.quantity > product.stock) return t('onlyInStock', { count: product.stock })
         return null
     }
     // Checkout stays disabled while any line cannot be sold (or is still loading): the server would refuse it anyway.
@@ -115,7 +122,8 @@ export default function POSPage() {
                   ]
                 : []
         ),
-        discount
+        discount,
+        decimals
     )
     const activeCustomers = (customers.data?.data ?? []).filter(customer => customer.is_active)
 
@@ -133,15 +141,15 @@ export default function POSPage() {
                 discount
             })
             // The receipt total comes from the server, which priced the sale from the database.
-            toast.success(`Order ${order.order_number} completed: ${money(order.total)}`, {
-                action: { label: 'View order', onClick: () => router.push(`/orders/${order.id}`) }
+            toast.success(t('orderCompleted', { orderNumber: order.order_number, total: money(order.total) }), {
+                action: { label: t('viewOrder'), onClick: () => router.push(`/orders/${order.id}`) }
             })
             clearCart()
             setSelectedCustomer('')
             setShowPaymentDialog(false)
             catalog.reload()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Failed to process order'))
+            toast.error(errorMessage(error, t('processFailed')))
             // Most failures are stock or price changes: refresh what the till shows.
             catalog.reload()
             cartProducts.reload()
@@ -155,8 +163,8 @@ export default function POSPage() {
             {/* Products Section */}
             <div className="flex-1 flex flex-col space-y-4">
                 <div>
-                    <h1 className="text-3xl font-bold">Point of Sale</h1>
-                    <p className="text-muted-foreground">Scan or select products to add to cart</p>
+                    <h1 className="text-3xl font-bold">{t('title')}</h1>
+                    <p className="text-muted-foreground">{t('subtitle')}</p>
                 </div>
 
                 {/* Search and Filter */}
@@ -164,18 +172,18 @@ export default function POSPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by name, SKU, or barcode..."
+                            placeholder={t('searchPlaceholder')}
                             value={searchQuery}
                             onChange={e => setSearchQuery(e.target.value)}
                             className="pl-10"
                         />
                     </div>
                     <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                        <SelectTrigger className="w-full sm:w-48" aria-label="Category">
-                            <SelectValue placeholder="Category" />
+                        <SelectTrigger className="w-full sm:w-48" aria-label={t('category')}>
+                            <SelectValue placeholder={t('category')} />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value={ALL}>All Categories</SelectItem>
+                            <SelectItem value={ALL}>{t('allCategories')}</SelectItem>
                             {(categories.data?.data ?? []).map(category => (
                                 <SelectItem key={category.id} value={category.id}>
                                     {category.name}
@@ -201,7 +209,7 @@ export default function POSPage() {
                                         key={product.id}
                                         role="button"
                                         aria-disabled={soldOut}
-                                        aria-label={`Add ${product.name} to cart`}
+                                        aria-label={t('addToCart', { name: product.name })}
                                         tabIndex={soldOut ? -1 : 0}
                                         className={`transition-all rounded-2xl overflow-hidden group ${
                                             soldOut ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'
@@ -219,13 +227,17 @@ export default function POSPage() {
                                         </div>
                                         <CardContent className="p-4">
                                             <h3 className="font-semibold line-clamp-2 text-sm">{product.name}</h3>
-                                            <p className="text-xs text-muted-foreground mt-1">SKU: {product.sku}</p>
+                                            <p className="text-xs text-muted-foreground mt-1">
+                                                {t('sku', { sku: product.sku })}
+                                            </p>
                                             <div className="flex items-center justify-between mt-2">
                                                 <p className="text-lg font-bold text-emerald-600">
                                                     {money(product.selling_price)}
                                                 </p>
                                                 <Badge variant={soldOut ? 'destructive' : 'secondary'}>
-                                                    {soldOut ? 'Out of stock' : `${product.stock} left`}
+                                                    {soldOut
+                                                        ? t('outOfStock')
+                                                        : t('left', { count: product.stock ?? 0 })}
                                                 </Badge>
                                             </div>
                                         </CardContent>
@@ -234,12 +246,14 @@ export default function POSPage() {
                             })}
                         </div>
                         {catalog.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">No products found</p>
+                            <p className="py-8 text-center text-muted-foreground">{t('noProducts')}</p>
                         )}
                         {catalog.data.total > catalog.data.data.length && (
                             <p className="pb-4 text-center text-sm text-muted-foreground">
-                                Showing {catalog.data.data.length} of {catalog.data.total} products. Refine the search
-                                to see the rest.
+                                {t('showingRefine', {
+                                    shown: catalog.data.data.length,
+                                    total: catalog.data.total
+                                })}
                             </p>
                         )}
                     </ScrollArea>
@@ -251,22 +265,22 @@ export default function POSPage() {
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <ShoppingCart className="h-5 w-5 text-emerald-600" />
-                        Cart ({items.length})
+                        {t('cart', { count: items.length })}
                     </CardTitle>
                 </CardHeader>
                 <CardContent className="flex-1 flex flex-col">
                     {/* Customer Selection */}
                     <div className="mb-4 space-y-2">
-                        <Label className="text-foreground font-semibold">Customer (Optional)</Label>
+                        <Label className="text-foreground font-semibold">{t('customerOptional')}</Label>
                         <Select
                             value={selectedCustomer || undefined}
                             onValueChange={value => setSelectedCustomer(value === '__walk_in__' ? '' : value)}
                         >
-                            <SelectTrigger aria-label="Customer">
-                                <SelectValue placeholder="Walk-in Customer" />
+                            <SelectTrigger aria-label={t('customer')}>
+                                <SelectValue placeholder={t('walkIn')} />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="__walk_in__">Walk-in Customer</SelectItem>
+                                <SelectItem value="__walk_in__">{t('walkIn')}</SelectItem>
                                 {activeCustomers.map(customer => (
                                     <SelectItem key={customer.id} value={customer.id}>
                                         {customer.name}
@@ -284,8 +298,8 @@ export default function POSPage() {
                         {items.length === 0 ? (
                             <div className="flex flex-col items-center justify-center py-12 text-center">
                                 <ShoppingCart className="h-16 w-16 text-muted-foreground/30 mb-4" />
-                                <p className="text-muted-foreground">Cart is empty</p>
-                                <p className="text-sm text-muted-foreground">Add products to get started</p>
+                                <p className="text-muted-foreground">{t('cartEmpty')}</p>
+                                <p className="text-sm text-muted-foreground">{t('addProductsHint')}</p>
                             </div>
                         ) : (
                             <div className="space-y-3">
@@ -299,7 +313,8 @@ export default function POSPage() {
                                         >
                                             <div className="flex-1 min-w-0">
                                                 <p className="font-medium text-sm truncate">
-                                                    {product?.name ?? (lookupSettled ? 'Unknown product' : 'Loading…')}
+                                                    {product?.name ??
+                                                        (lookupSettled ? t('unknownProduct') : tc('loading'))}
                                                 </p>
                                                 {product && (
                                                     <p className="text-sm font-bold text-emerald-600">
@@ -313,7 +328,7 @@ export default function POSPage() {
                                                     size="icon"
                                                     variant="outline"
                                                     className="h-7 w-7"
-                                                    aria-label="Decrease quantity"
+                                                    aria-label={t('decreaseQty')}
                                                     onClick={() => updateQuantity(item.productId, item.quantity - 1)}
                                                 >
                                                     <Minus className="h-3 w-3" />
@@ -323,7 +338,7 @@ export default function POSPage() {
                                                     size="icon"
                                                     variant="outline"
                                                     className="h-7 w-7"
-                                                    aria-label="Increase quantity"
+                                                    aria-label={t('increaseQty')}
                                                     disabled={
                                                         !!product &&
                                                         product.stock !== null &&
@@ -337,7 +352,7 @@ export default function POSPage() {
                                                     size="icon"
                                                     variant="ghost"
                                                     className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                    aria-label="Remove from cart"
+                                                    aria-label={t('removeFromCart')}
                                                     onClick={() => removeItem(item.productId)}
                                                 >
                                                     <Trash2 className="h-3 w-3" />
@@ -356,33 +371,31 @@ export default function POSPage() {
                             <Separator className="my-4" />
                             <div className="space-y-3">
                                 <div className="flex justify-between text-sm">
-                                    <span>Subtotal</span>
+                                    <span>{t('subtotal')}</span>
                                     <span className="font-medium">{money(totals.subtotal)}</span>
                                 </div>
                                 <div className="flex justify-between text-sm">
-                                    <span>Tax</span>
+                                    <span>{t('tax')}</span>
                                     <span className="font-medium">{money(totals.tax)}</span>
                                 </div>
                                 <div className="flex justify-between items-center text-sm">
-                                    <span>Discount</span>
+                                    <span>{t('discount')}</span>
                                     <Input
                                         type="number"
-                                        aria-label="Discount"
+                                        aria-label={t('discount')}
                                         value={discount}
                                         onChange={e => setGlobalDiscount(Number(e.target.value) || 0)}
                                         className="w-24 h-8 text-right"
                                         min="0"
-                                        step="0.01"
+                                        step={priceStep}
                                     />
                                 </div>
                                 <Separator />
                                 <div className="flex justify-between text-lg font-bold">
-                                    <span>Total</span>
+                                    <span>{t('total')}</span>
                                     <span className="text-emerald-600">{money(totals.total)}</span>
                                 </div>
-                                <p className="text-xs text-muted-foreground">
-                                    Estimate. The final amount is calculated when the sale is completed.
-                                </p>
+                                <p className="text-xs text-muted-foreground">{t('estimateHint')}</p>
 
                                 <Button
                                     className="w-full"
@@ -391,7 +404,7 @@ export default function POSPage() {
                                     disabled={items.length === 0 || blocked}
                                 >
                                     <CreditCard className="mr-2 h-5 w-5" />
-                                    Checkout
+                                    {t('checkout')}
                                 </Button>
                             </div>
                         </>
@@ -403,17 +416,17 @@ export default function POSPage() {
             <Dialog open={showPaymentDialog} onOpenChange={open => !processing && setShowPaymentDialog(open)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>Complete Payment</DialogTitle>
+                        <DialogTitle>{t('completePayment')}</DialogTitle>
                         <DialogDescription>
-                            Estimated total:{' '}
+                            {t('estimatedTotal')}{' '}
                             <span className="text-lg font-bold text-emerald-600">{money(totals.total)}</span>
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
                         <div className="space-y-2">
-                            <Label className="text-foreground font-semibold">Payment Method</Label>
+                            <Label className="text-foreground font-semibold">{t('paymentMethod')}</Label>
                             <div className="grid grid-cols-3 gap-2">
-                                {PAYMENT_OPTIONS.map(({ value, label, icon: Icon }) => (
+                                {PAYMENT_ICONS.map(({ value, icon: Icon }) => (
                                     <Button
                                         key={value}
                                         variant={paymentMethod === value ? 'default' : 'outline'}
@@ -422,7 +435,7 @@ export default function POSPage() {
                                         onClick={() => setPaymentMethod(value)}
                                     >
                                         <Icon className="h-6 w-6 mb-1" />
-                                        <span className="text-xs">{label}</span>
+                                        <span className="text-xs">{tc(`payment.${value}`)}</span>
                                     </Button>
                                 ))}
                             </div>
@@ -430,10 +443,10 @@ export default function POSPage() {
                     </div>
                     <DialogFooter>
                         <Button variant="outline" disabled={processing} onClick={() => setShowPaymentDialog(false)}>
-                            Cancel
+                            {tc('cancel')}
                         </Button>
                         <Button onClick={handleCheckout} disabled={processing}>
-                            {processing ? 'Processing...' : 'Complete Order'}
+                            {processing ? t('processing') : t('completeOrder')}
                         </Button>
                     </DialogFooter>
                 </DialogContent>

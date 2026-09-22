@@ -30,7 +30,7 @@ Límites: **no** cubre bien SQL, configuración ni Markdown → para
 `build_or_update_graph_tool` (incremental por defecto). El directorio `.code-review-graph/` es generado.
 
 ### Acuerdos de trabajo
-- **Idioma:** responder y documentar en **español**; código, commits y nombres en inglés; la UI se queda en inglés hasta decidir lo contrario.
+- **Idioma:** responder y documentar en **español**; código, commits y nombres en inglés; la UI es ES/EN (`profiles.locale`, `next-intl`).
 - **No hacer commit ni push sin que se pida.** Si se pide, terminar el mensaje con la línea `Co-Authored-By` que indique el arnés.
 - **Acciones sobre la base de datos:** solo lectura contra el proyecto real. Las pruebas de integración/e2e escriben datos y **solo se ejecutan contra el Supabase local** (`bun run db:start`; se niegan a correr contra otro host). No apliques migraciones a la base real sin que se pida: es un paso controlado ([guía](docs/05-guias/verificar-checkout.md)).
 - **Confianza en lo documentado:** respetar las etiquetas `[Verificado]` / `[Inferido]` / `[Por verificar]`. Si compruebas una hipótesis,

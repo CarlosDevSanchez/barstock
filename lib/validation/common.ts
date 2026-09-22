@@ -9,16 +9,18 @@ export const toNumber = (value: unknown) => {
     return value.trim() === '' ? undefined : Number(value)
 }
 
-/** `z.number()` with messages a person can act on (zod's default is "expected number, received undefined"). */
+/** `z.number()` with message keys the UI translates (`validation.*`). */
 export const numberField = () =>
-    z.number({ error: issue => (issue.input === undefined ? 'Required' : 'Enter a valid number') })
+    z.number({
+        error: issue => (issue.input === undefined ? 'validation.required' : 'validation.invalidNumber')
+    })
 
 const hasAtMostDecimals = (decimals: number) => (value: number) => {
     const scale = 10 ** decimals
     return Math.abs(value * scale - Math.round(value * scale)) < 1e-6
 }
 
-export const requiredText = (max: number) => z.string().trim().min(1, 'Required').max(max)
+export const requiredText = (max: number) => z.string().trim().min(1, 'validation.required').max(max)
 export const nullableText = (max: number) => z.preprocess(blankToNull, z.string().trim().max(max).nullable().optional())
 export const nullableUuid = z.preprocess(blankToNull, z.guid().nullable().optional())
 export const nullableEmail = z.preprocess(blankToNull, z.email().max(254).toLowerCase().nullable().optional())
@@ -38,22 +40,23 @@ export const queryBoolean = z.preprocess(
 
 export const nullableUrl = z.preprocess(blankToNull, z.url().max(2048).nullable().optional())
 
-// NUMERIC(10,2). Float noise from client arithmetic (0.1 + 0.2) is tolerated and rounded to cents; real extra precision (1.005) is rejected.
+// NUMERIC(14,2). Float noise from client arithmetic (0.1 + 0.2) is tolerated and rounded to cents; real extra precision (1.005) is rejected.
+// The store currency may allow fewer decimals (COP: none): the services check that with `assertMoneyScale`.
 export const money = z.preprocess(
     toNumber,
     numberField()
-        .min(0, 'Must be 0 or more')
-        .max(99_999_999.99, 'Too large')
-        .refine(hasAtMostDecimals(2), 'At most 2 decimals')
+        .min(0, 'validation.minZero')
+        .max(999_999_999_999.99, 'validation.tooLarge')
+        .refine(hasAtMostDecimals(2), 'validation.atMostTwoDecimals')
         .transform(value => Math.round(value * 100) / 100)
 )
 /** Tax rate as a fraction (0.10 = 10 %), NUMERIC(6,4). */
 export const taxRate = z.preprocess(
     toNumber,
     numberField()
-        .min(0, 'Must be 0 or more')
-        .max(1, 'Must be at most 1')
-        .refine(hasAtMostDecimals(4), 'At most 4 decimals')
+        .min(0, 'validation.minZero')
+        .max(1, 'validation.maxOne')
+        .refine(hasAtMostDecimals(4), 'validation.atMostFourDecimals')
 )
 /**
  * Tax rate typed as a percentage in a form ("7.25") and converted to the fraction the API stores (0.0725).
@@ -65,12 +68,15 @@ export const taxRatePercent = z.preprocess(
         return typeof number === 'number' && Number.isFinite(number) ? Math.round(number * 100) / 10000 : number
     },
     numberField()
-        .min(0, 'Must be 0 or more')
-        .max(1, 'Must be at most 100 %')
-        .refine(hasAtMostDecimals(4), 'At most 2 decimals')
+        .min(0, 'validation.minZero')
+        .max(1, 'validation.maxPercent')
+        .refine(hasAtMostDecimals(4), 'validation.atMostTwoDecimals')
 )
 export const positiveInt = (max: number) =>
-    z.preprocess(toNumber, numberField().int('Enter a whole number').min(1, 'Must be at least 1').max(max, 'Too large'))
+    z.preprocess(
+        toNumber,
+        numberField().int('validation.wholeNumber').min(1, 'validation.minOne').max(max, 'validation.tooLarge')
+    )
 
 export const paginationSchema = z.object({
     page: positiveInt(100_000).default(1),

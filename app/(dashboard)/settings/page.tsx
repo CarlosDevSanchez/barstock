@@ -4,6 +4,7 @@ import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Settings as SettingsIcon, Save } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -21,8 +22,7 @@ const formSchema = settingsSchema.extend({ tax_rate: taxRatePercent })
 type FormInput = z.input<typeof formSchema>
 type FormOutput = z.output<typeof formSchema>
 
-const COMMON_CURRENCIES = ['USD', 'EUR', 'GBP', 'MXN', 'COP', 'ARS', 'CLP', 'PEN', 'BRL', 'CAD']
-const displayNames = new Intl.DisplayNames('en', { type: 'currency' })
+const COMMON_CURRENCIES = ['COP', 'USD', 'EUR', 'GBP', 'MXN', 'ARS', 'CLP', 'PEN', 'BRL', 'CAD']
 const timeZones = Intl.supportedValuesOf('timeZone')
 
 function toFormValues(settings: SettingsInput): FormInput {
@@ -34,6 +34,10 @@ function toFormValues(settings: SettingsInput): FormInput {
 }
 
 export default function SettingsPage() {
+    const t = useTranslations('settings')
+    const tc = useTranslations('common')
+    const locale = useLocale()
+    const displayNames = new Intl.DisplayNames(locale, { type: 'currency' })
     const router = useRouter()
     const { settings } = useSession()
     const form = useForm<FormInput, unknown, FormOutput>({
@@ -53,19 +57,19 @@ export default function SettingsPage() {
         try {
             const saved = await settingsApi.update(values)
             form.reset(toFormValues(saved))
-            toast.success('Settings saved successfully!')
+            toast.success(t('saved'))
             // Re-runs the server layout so the new store name and currency apply everywhere.
             router.refresh()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Failed to save settings'))
+            toast.error(errorMessage(error, t('saveFailed')))
         }
     })
 
     return (
         <div className="space-y-6">
             <div>
-                <h1 className="text-3xl font-bold">Settings</h1>
-                <p className="text-muted-foreground">Configure your store settings and preferences</p>
+                <h1 className="text-3xl font-bold">{t('title')}</h1>
+                <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>
 
             <Form {...form}>
@@ -75,63 +79,63 @@ export default function SettingsPage() {
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <SettingsIcon className="h-5 w-5 text-emerald-600" />
-                                    Store Information
+                                    {t('storeInfo')}
                                 </CardTitle>
-                                <CardDescription>Basic store details and contact information</CardDescription>
+                                <CardDescription>{t('storeInfoDesc')}</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
-                                <TextField name="store_name" label="Store Name" />
-                                <TextField name="store_address" label="Address" />
-                                <TextField name="store_phone" label="Phone" />
-                                <TextField name="store_email" label="Email" type="email" />
+                                <TextField name="store_name" label={t('storeName')} />
+                                <TextField name="store_address" label={t('address')} />
+                                <TextField name="store_phone" label={t('phone')} />
+                                <TextField name="store_email" label={t('email')} type="email" />
                             </CardContent>
                         </Card>
 
                         <Card className="rounded-2xl">
                             <CardHeader>
-                                <CardTitle>Business Settings</CardTitle>
-                                <CardDescription>Currency, tax, and operational settings</CardDescription>
+                                <CardTitle>{t('business')}</CardTitle>
+                                <CardDescription>{t('businessDesc')}</CardDescription>
                             </CardHeader>
                             <CardContent className="space-y-4">
                                 <SelectField
                                     name="currency"
-                                    label="Currency"
-                                    placeholder="Currency"
+                                    label={t('currency')}
+                                    placeholder={t('currency')}
                                     options={currencies}
                                 />
                                 <SelectField
                                     name="timezone"
-                                    label="Time Zone"
-                                    placeholder="Time zone"
+                                    label={t('timezone')}
+                                    placeholder={t('timezonePlaceholder')}
                                     options={zones.map(zone => ({ value: zone, label: zone }))}
                                 />
                                 <TextField
                                     name="tax_rate"
-                                    label="Default Tax Rate (%)"
+                                    label={t('defaultTaxRate')}
                                     type="number"
                                     step="0.01"
                                     min="0"
                                     max="100"
-                                    description="Suggested rate for new products. Each product keeps its own rate."
+                                    description={t('defaultTaxRateHint')}
                                 />
                                 <TextField
                                     name="low_stock_threshold"
-                                    label="Low Stock Threshold"
+                                    label={t('lowStockThreshold')}
                                     type="number"
                                     min="0"
-                                    description="Applies to new products. Existing items keep their own threshold."
+                                    description={t('lowStockThresholdHint')}
                                 />
                             </CardContent>
                         </Card>
 
                         <Card className="rounded-2xl md:col-span-2">
                             <CardHeader>
-                                <CardTitle>Receipt</CardTitle>
-                                <CardDescription>Text printed at the top and bottom of a receipt</CardDescription>
+                                <CardTitle>{t('receipt')}</CardTitle>
+                                <CardDescription>{t('receiptDesc')}</CardDescription>
                             </CardHeader>
                             <CardContent className="grid gap-4 md:grid-cols-2">
-                                <TextField name="receipt_template.header" label="Header" />
-                                <TextField name="receipt_template.footer" label="Footer" />
+                                <TextField name="receipt_template.header" label={t('header')} />
+                                <TextField name="receipt_template.footer" label={t('footer')} />
                             </CardContent>
                         </Card>
                     </div>
@@ -139,7 +143,7 @@ export default function SettingsPage() {
                     <div className="flex justify-end">
                         <Button type="submit" size="lg" disabled={submitting || !form.formState.isDirty}>
                             <Save className="mr-2 h-4 w-4" />
-                            {submitting ? 'Saving…' : 'Save Settings'}
+                            {submitting ? tc('saving') : t('saveSettings')}
                         </Button>
                     </div>
                 </form>

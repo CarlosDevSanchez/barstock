@@ -59,9 +59,13 @@ Admin → `/users` → `PATCH /users/{id}`. Efecto en la **siguiente petición**
 y un trigger protege al **último admin activo**. Al abrir `/login` con una sesión válida pero un perfil inactivo, `proxy.ts` **cierra la sesión** (antes había un bucle de
 redirecciones infinito `layout → /login → proxy → /dashboard`).
 
+## Idioma de la interfaz
+Cada usuario tiene `profiles.locale` (`es` \| `en`, defecto `es`). El layout escribe la cookie `NEXT_LOCALE`; `next-intl` carga `messages/{locale}.json` sin segmento `[locale]` en la URL.
+Cambiar idioma: Ajustes o selector del shell → `PATCH /api/v1/me { locale }` (cajero+) → actualiza el perfil y la cookie → `router.refresh()`.
+
 ## Cookies de sesión
 `@supabase/ssr` las crea con `httpOnly: false` (su cliente de navegador las necesita). Como el navegador aquí no usa `supabase-js`, `lib/auth/cookie-options.ts` las
-fuerza a **`HttpOnly`** (un XSS no puede leerlas), **`Secure`** en producción y conserva `SameSite=Lax` y `Path=/`. Verificado en Chromium: `document.cookie` no ve la sesión.
+fuerza a **`HttpOnly`** (un XSS no puede leerlas), **`Secure`** cuando `APP_URL` es https (no según `NODE_ENV`: una compilación de producción servida por http, como el Docker local, debe seguir teniendo cookies; Safari descarta las `Secure` sobre http) y conserva `SameSite=Lax` y `Path=/`. Verificado en Chromium: `document.cookie` no ve la sesión.
 
 ## Defensa contra CSRF
 Las escrituras (`POST/PATCH/DELETE`) con `Origin` distinto del host servido (o `x-forwarded-host` detrás de un proxy) se rechazan con `403`; sin `Origin`

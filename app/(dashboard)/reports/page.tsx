@@ -2,6 +2,8 @@
 
 import { useState } from 'react'
 import { format } from 'date-fns'
+import { enUS, es } from 'date-fns/locale'
+import { useLocale, useTranslations } from 'next-intl'
 import { BarChart3, TrendingUp, Package, Users, DollarSign } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -16,6 +18,10 @@ import { calendarDate, dateInZone } from '@/lib/dates'
 import { useApiQuery } from '@/hooks/use-api-query'
 
 export default function ReportsPage() {
+    const t = useTranslations('reports')
+    const tc = useTranslations('common')
+    const locale = useLocale()
+    const dateLocale = locale === 'es' ? es : enUS
     const money = useMoney()
     const { settings } = useSession()
     const [range, setRange] = useState(() => ({
@@ -30,10 +36,17 @@ export default function ReportsPage() {
         validRange ? JSON.stringify(range) : 'invalid-range'
     )
 
+    const paymentLabel = (method: string) => {
+        if (method === 'cash' || method === 'card' || method === 'ewallet') {
+            return tc(`payment.${method}`)
+        }
+        return method
+    }
+
     const dateInputs = (
         <div className="flex flex-wrap items-end gap-4">
             <div className="space-y-1">
-                <Label htmlFor="report-from">From</Label>
+                <Label htmlFor="report-from">{t('from')}</Label>
                 <Input
                     id="report-from"
                     type="date"
@@ -43,7 +56,7 @@ export default function ReportsPage() {
                 />
             </div>
             <div className="space-y-1">
-                <Label htmlFor="report-to">To</Label>
+                <Label htmlFor="report-to">{t('to')}</Label>
                 <Input
                     id="report-to"
                     type="date"
@@ -58,8 +71,8 @@ export default function ReportsPage() {
     const header = (
         <div className="flex flex-wrap items-end justify-between gap-4">
             <div>
-                <h1 className="text-3xl font-bold">Reports & Analytics</h1>
-                <p className="text-muted-foreground">View detailed business insights and reports</p>
+                <h1 className="text-3xl font-bold">{t('title')}</h1>
+                <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>
             {dateInputs}
         </div>
@@ -69,7 +82,7 @@ export default function ReportsPage() {
         return (
             <div className="space-y-6">
                 {header}
-                <p className="text-sm text-muted-foreground">Pick a valid date range (at most 366 days).</p>
+                <p className="text-sm text-muted-foreground">{t('invalidRange')}</p>
             </div>
         )
     }
@@ -96,33 +109,34 @@ export default function ReportsPage() {
         <div className="space-y-6">
             {header}
 
-            {/* Summary Cards */}
             <div className="grid gap-4 md:grid-cols-4">
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Revenue</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t('revenue')}</CardTitle>
                         <DollarSign className="h-4 w-4 text-emerald-600" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold text-emerald-600">{money(data.total_revenue)}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Tax included: {money(data.total_tax)}</p>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {t('taxIncluded', { amount: money(data.total_tax) })}
+                        </p>
                     </CardContent>
                 </Card>
 
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Total Orders</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t('totalOrders')}</CardTitle>
                         <BarChart3 className="h-4 w-4 text-blue-600" />
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{data.total_orders}</div>
-                        <p className="text-xs text-muted-foreground mt-1">Refunded orders excluded</p>
+                        <p className="text-xs text-muted-foreground mt-1">{t('refundsExcluded')}</p>
                     </CardContent>
                 </Card>
 
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Avg Order Value</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t('avgOrderValue')}</CardTitle>
                         <TrendingUp className="h-4 w-4 text-purple-600" />
                     </CardHeader>
                     <CardContent>
@@ -132,7 +146,7 @@ export default function ReportsPage() {
 
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
-                        <CardTitle className="text-sm font-medium">Discounts Given</CardTitle>
+                        <CardTitle className="text-sm font-medium">{t('discountsGiven')}</CardTitle>
                         <Users className="h-4 w-4 text-orange-600" />
                     </CardHeader>
                     <CardContent>
@@ -142,14 +156,13 @@ export default function ReportsPage() {
             </div>
 
             <div className="grid gap-4 md:grid-cols-2">
-                {/* Sales Report */}
                 <Card className="rounded-2xl">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <BarChart3 className="h-5 w-5 text-emerald-600" />
-                            Daily Sales
+                            {t('dailySales')}
                         </CardTitle>
-                        <CardDescription>Revenue and order trends ({data.time_zone})</CardDescription>
+                        <CardDescription>{t('dailySalesDesc', { timezone: data.time_zone })}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         <div className="space-y-2 max-h-96 overflow-y-auto">
@@ -159,8 +172,12 @@ export default function ReportsPage() {
                                     className="flex items-center justify-between p-3 rounded-lg bg-muted"
                                 >
                                     <div>
-                                        <p className="font-medium">{format(calendarDate(day.date), 'MMM dd')}</p>
-                                        <p className="text-sm text-muted-foreground">{day.orders} orders</p>
+                                        <p className="font-medium">
+                                            {format(calendarDate(day.date), 'MMM dd', { locale: dateLocale })}
+                                        </p>
+                                        <p className="text-sm text-muted-foreground">
+                                            {t('ordersCount', { count: day.orders })}
+                                        </p>
                                     </div>
                                     <p className="text-lg font-bold text-emerald-600">{money(day.revenue)}</p>
                                 </div>
@@ -169,25 +186,24 @@ export default function ReportsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Best Sellers */}
                 <Card className="rounded-2xl">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Package className="h-5 w-5 text-purple-600" />
-                            Top Best Sellers
+                            {t('topBestSellers')}
                         </CardTitle>
-                        <CardDescription>Highest revenue products</CardDescription>
+                        <CardDescription>{t('topBestSellersDesc')}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {data.top_products.length === 0 ? (
-                            <p className="text-sm text-muted-foreground text-center py-8">No sales data available</p>
+                            <p className="text-sm text-muted-foreground text-center py-8">{t('noSalesData')}</p>
                         ) : (
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Product</TableHead>
-                                        <TableHead className="text-right">Sold</TableHead>
-                                        <TableHead className="text-right">Revenue</TableHead>
+                                        <TableHead>{t('colProduct')}</TableHead>
+                                        <TableHead className="text-right">{t('colSold')}</TableHead>
+                                        <TableHead className="text-right">{t('colRevenue')}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -208,25 +224,24 @@ export default function ReportsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Top Customers */}
                 <Card className="rounded-2xl">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Users className="h-5 w-5 text-orange-600" />
-                            Top Customers
+                            {t('topCustomers')}
                         </CardTitle>
-                        <CardDescription>Highest spending customers in this period</CardDescription>
+                        <CardDescription>{t('topCustomersDesc')}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {data.top_customers.length === 0 ? (
-                            <p className="text-sm text-muted-foreground text-center py-8">No customer data available</p>
+                            <p className="text-sm text-muted-foreground text-center py-8">{t('noCustomerData')}</p>
                         ) : (
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Customer</TableHead>
-                                        <TableHead className="text-right">Orders</TableHead>
-                                        <TableHead className="text-right">Spent</TableHead>
+                                        <TableHead>{t('colCustomer')}</TableHead>
+                                        <TableHead className="text-right">{t('colOrders')}</TableHead>
+                                        <TableHead className="text-right">{t('colSpent')}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -247,31 +262,32 @@ export default function ReportsPage() {
                     </CardContent>
                 </Card>
 
-                {/* Payment methods */}
                 <Card className="rounded-2xl">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <DollarSign className="h-5 w-5 text-emerald-600" />
-                            Payment Methods
+                            {t('paymentMethods')}
                         </CardTitle>
-                        <CardDescription>How customers paid</CardDescription>
+                        <CardDescription>{t('paymentMethodsDesc')}</CardDescription>
                     </CardHeader>
                     <CardContent>
                         {data.by_payment_method.length === 0 ? (
-                            <p className="text-sm text-muted-foreground text-center py-8">No payments in this period</p>
+                            <p className="text-sm text-muted-foreground text-center py-8">{t('noPayments')}</p>
                         ) : (
                             <Table>
                                 <TableHeader>
                                     <TableRow>
-                                        <TableHead>Method</TableHead>
-                                        <TableHead className="text-right">Orders</TableHead>
-                                        <TableHead className="text-right">Amount</TableHead>
+                                        <TableHead>{t('colMethod')}</TableHead>
+                                        <TableHead className="text-right">{t('colOrders')}</TableHead>
+                                        <TableHead className="text-right">{t('colAmount')}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
                                     {data.by_payment_method.map(payment => (
                                         <TableRow key={payment.method}>
-                                            <TableCell className="font-medium capitalize">{payment.method}</TableCell>
+                                            <TableCell className="font-medium">
+                                                {paymentLabel(payment.method)}
+                                            </TableCell>
                                             <TableCell className="text-right">{payment.orders}</TableCell>
                                             <TableCell className="text-right font-semibold text-emerald-600">
                                                 {money(payment.amount)}

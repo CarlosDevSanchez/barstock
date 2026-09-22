@@ -90,7 +90,7 @@ export function ensureTestUsers(): Promise<TestUsers> {
             // service_role has no auth.uid(), so the profile trigger lets this through.
             const { error: profileError } = await admin
                 .from('profiles')
-                .update({ role, is_active: key !== 'inactive' })
+                .update({ role, is_active: key !== 'inactive', locale: 'en' })
                 .eq('id', user.id)
             if (profileError) throw profileError
             result[key] = { id: user.id, email }
@@ -148,6 +148,25 @@ export async function createCustomer(overrides: Partial<TablesInsert<'customers'
         .single()
     if (error) throw error
     return data
+}
+
+/**
+ * Sets the store currency (settings.currency) and returns a function that puts the previous one back. The seed ships
+ * COP (whole pesos); suites that assert cents pin USD in `beforeAll` and restore it in `afterAll`.
+ * Test files run one after another, so pinning the setting does not leak into other suites.
+ */
+export async function pinStoreCurrency(currency: string): Promise<() => Promise<void>> {
+    const admin = adminClient()
+    const { data, error } = await admin.from('settings').select('value').eq('key', 'currency').single()
+    if (error) throw error
+    const write = async (value: unknown) => {
+        const { error: writeError } = await admin
+            .from('settings')
+            .upsert({ key: 'currency', value: value as never }, { onConflict: 'key' })
+        if (writeError) throw writeError
+    }
+    await write(currency)
+    return () => write(data.value)
 }
 
 export async function stockOf(productId: string): Promise<number> {

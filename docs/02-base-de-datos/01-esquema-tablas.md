@@ -1,10 +1,10 @@
 # Esquema de tablas
 
-> Esquema **efectivo** tras las 5 migraciones de `supabase/migrations/` (extraído de la BD local con `information_schema`, `pg_constraint` y `pg_indexes`). Confianza: **[Verificado]**.
+> Esquema **efectivo** tras las 6 migraciones de `supabase/migrations/` (extraído de la BD local con `information_schema`, `pg_constraint` y `pg_indexes`). Confianza: **[Verificado]**.
 > El esquema original (`supabase/legacy/schema.sql`) es la migración *baseline*; las diferencias con él están al final. Los tipos de TypeScript se **generan** de este esquema (`bun run db:types`).
 
 Convenciones: PK `id uuid default uuid_generate_v4()`; todas las tablas tienen RLS ([políticas](03-rls-y-politicas.md)); `created_at`/`updated_at timestamptz NOT NULL default now()` (con trigger de `updated_at`).
-Los importes son `NUMERIC(10,2)`. Ningún cliente de la API escribe directamente `orders`, `order_items`, `payments`, `inventory` ni `inventory_transactions` (solo RPC).
+Los importes son `NUMERIC(14,2)` (hasta ≈ 10¹²). En COP y otras monedas de unidad entera los precios se guardan enteros (la API y `create_sale` rechazan centavos de más). Ningún cliente de la API escribe directamente `orders`, `order_items`, `payments`, `inventory` ni `inventory_transactions` (solo RPC).
 
 ## Tipos enumerados
 | Enum | Valores |
@@ -15,13 +15,13 @@ Los importes son `NUMERIC(10,2)`. Ningún cliente de la API escribe directamente
 | `po_status` | `draft`, `pending`, `received`, `cancelled` (sin uso: compras sin UI) |
 
 ## Usuarios
-**`profiles`** — `id` → `auth.users` (**ON DELETE CASCADE**), `email` UNIQUE NOT NULL, `full_name`, `role user_role NOT NULL default 'cashier'`, `avatar_url`, `phone`, **`is_active` NOT NULL default true**.
+**`profiles`** — `id` → `auth.users` (**ON DELETE CASCADE**), `email` UNIQUE NOT NULL, `full_name`, `role user_role NOT NULL default 'cashier'`, `avatar_url`, `phone`, **`is_active` NOT NULL default true**, **`locale` text NOT NULL default `'es'` `CHECK IN ('es','en')`** (idioma de la UI; cada usuario puede cambiar el suyo).
 Lo crea un trigger al nacer el usuario; el rol solo lo cambia un admin (trigger); `id` y `email` son inmutables por la API. Ver [RLS](03-rls-y-politicas.md#alta-de-usuarios-cerrada-por-defecto).
 
 ## Catálogo
 **`categories`** — `name` NOT NULL, `description`, `parent_id` → `categories` (jerarquía; sin UI).
 
-**`products`** — `name` NOT NULL, `description`, `sku` UNIQUE NOT NULL, `barcode` UNIQUE, `category_id` → `categories`, `cost_price` y `selling_price` NOT NULL default 0 (`CHECK ≥ 0`),
+**`products`** — `name` NOT NULL, `description`, `sku` UNIQUE NOT NULL, `barcode` UNIQUE, `category_id` → `categories`, `cost_price` y `selling_price` `NUMERIC(14,2)` NOT NULL default 0 (`CHECK ≥ 0`),
 **`tax_rate` `NUMERIC(6,4)` NOT NULL default 0 (`CHECK 0–1`, fracción)**, `image_url`, `is_active` NOT NULL default true, **`deleted_at`** (borrado lógico). Un trigger crea su fila de `inventory`.
 
 **`product_variants`** — `product_id` → `products` CASCADE NOT NULL, `name`, `variant_type` (texto libre: "size", "color"), `sku` UNIQUE, `barcode` UNIQUE, `cost_price`, `selling_price` (nullables, `CHECK ≥ 0`). Sin UI ni venta desde el POS (D10).
@@ -61,3 +61,4 @@ Lo crea un trigger al nacer el usuario; el rol solo lo cambia un admin (trigger)
 | `NOT NULL` en FKs de pertenencia (`inventory.product_id`, `order_items.order_id/product_id`, `payments.order_id`, `product_variants.product_id`, `purchase_order_items.*`) y en `created_at`/`updated_at`/booleanos con default | `…02` |
 | Índice único parcial de inventario sin variante; `profiles.id ON DELETE CASCADE` | `…02` |
 | Secuencia de órdenes; triggers de inventario y totales de clientes | `…04` |
+| `profiles.locale`; importes → `NUMERIC(14,2)`; `currency_decimals` / `money_scale`; `create_sale` redondea según la moneda | `…06` |

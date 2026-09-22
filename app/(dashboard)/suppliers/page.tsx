@@ -3,6 +3,7 @@
 import { useState } from 'react'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
+import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Plus, Search, Truck } from 'lucide-react'
 import { Card } from '@/components/ui/card'
@@ -24,6 +25,8 @@ import { useDebouncedValue } from '@/hooks/use-debounced-value'
 const PAGE_SIZE = 25
 
 function SupplierDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+    const t = useTranslations('suppliers')
+    const tc = useTranslations('common')
     const form = useForm({
         resolver: zodResolver(supplierCreateSchema),
         defaultValues: { name: '', contact_person: '', email: '', phone: '', address: '' }
@@ -33,10 +36,10 @@ function SupplierDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
     const onSubmit = form.handleSubmit(async values => {
         try {
             await suppliersApi.create(values)
-            toast.success('Supplier added successfully')
+            toast.success(t('added'))
             onSaved()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Failed to add supplier'))
+            toast.error(errorMessage(error, t('addFailed')))
         }
     })
 
@@ -44,23 +47,23 @@ function SupplierDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         <Dialog open onOpenChange={open => !open && onClose()}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Add New Supplier</DialogTitle>
+                    <DialogTitle>{t('addTitle')}</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate>
                         <div className="space-y-4 py-4">
-                            <TextField name="name" label="Supplier Name *" />
-                            <TextField name="contact_person" label="Contact Person" />
-                            <TextField name="email" label="Email" type="email" />
-                            <TextField name="phone" label="Phone" />
-                            <TextField name="address" label="Address" />
+                            <TextField name="name" label={t('name')} />
+                            <TextField name="contact_person" label={t('contactPerson')} />
+                            <TextField name="email" label={t('email')} type="email" />
+                            <TextField name="phone" label={t('phone')} />
+                            <TextField name="address" label={t('address')} />
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={onClose}>
-                                Cancel
+                                {tc('cancel')}
                             </Button>
                             <Button type="submit" disabled={submitting}>
-                                {submitting ? 'Saving…' : 'Add Supplier'}
+                                {submitting ? tc('saving') : t('addSupplier')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -71,6 +74,7 @@ function SupplierDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
 }
 
 export default function SuppliersPage() {
+    const t = useTranslations('suppliers')
     const [searchQuery, setSearchQuery] = useState('')
     const [page, setPage] = useState(1)
     const [showDialog, setShowDialog] = useState(false)
@@ -85,12 +89,12 @@ export default function SuppliersPage() {
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold">Suppliers</h1>
-                    <p className="text-muted-foreground">Manage your supplier network</p>
+                    <h1 className="text-3xl font-bold">{t('title')}</h1>
+                    <p className="text-muted-foreground">{t('subtitle')}</p>
                 </div>
                 <Button onClick={() => setShowDialog(true)}>
                     <Plus className="mr-2 h-4 w-4" />
-                    Add Supplier
+                    {t('addSupplier')}
                 </Button>
             </div>
 
@@ -102,7 +106,7 @@ export default function SuppliersPage() {
                         </div>
                         <div>
                             <p className="text-sm text-muted-foreground">
-                                {search ? 'Matching Suppliers' : 'Total Suppliers'}
+                                {search ? t('matchingSuppliers') : t('totalSuppliers')}
                             </p>
                             <p className="text-2xl font-bold">{suppliers.data?.total ?? '-'}</p>
                         </div>
@@ -115,7 +119,7 @@ export default function SuppliersPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search suppliers..."
+                            placeholder={t('searchPlaceholder')}
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
@@ -135,11 +139,11 @@ export default function SuppliersPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Name</TableHead>
-                                    <TableHead>Contact Person</TableHead>
-                                    <TableHead>Email</TableHead>
-                                    <TableHead>Phone</TableHead>
-                                    <TableHead>Address</TableHead>
+                                    <TableHead>{t('colName')}</TableHead>
+                                    <TableHead>{t('colContact')}</TableHead>
+                                    <TableHead>{t('colEmail')}</TableHead>
+                                    <TableHead>{t('colPhone')}</TableHead>
+                                    <TableHead>{t('colAddress')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -155,7 +159,7 @@ export default function SuppliersPage() {
                             </TableBody>
                         </Table>
                         {suppliers.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">No suppliers found</p>
+                            <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
                         )}
                         <Pagination
                             page={page}

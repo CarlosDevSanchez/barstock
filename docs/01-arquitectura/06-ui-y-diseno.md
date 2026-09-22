@@ -10,6 +10,7 @@
   Los archivos de `components/ui/` se excluyen de Prettier para conservar el estilo de upstream.
 - **Tipografía:** Geist Sans y Geist Mono vía `next/font/google` (`--font-geist-sans`, `--font-geist-mono`).
 - **Tema:** `next-themes` (`attribute="class"`, `defaultTheme="light"`, `enableSystem`); el conmutador está en el menú de usuario.
+- **i18n:** `next-intl` sin segmento `[locale]`; idioma desde `profiles.locale` → cookie `NEXT_LOCALE` → `es`. Diccionarios en `messages/{es,en}.json`.
 
 ## Lenguaje visual
 
@@ -19,8 +20,8 @@
 | Superficies | `bg-card`; fondo de contenido `bg-slate-50 dark:bg-slate-900` |
 | Radios | `rounded-2xl` en tarjetas, `rounded-xl` en filas y navegación |
 | Estados | Rojo: bajo stock, reembolso, eliminar. Naranja: advertencia. Púrpura/azul/naranja: KPIs secundarios |
-| Idioma de la interfaz | **Inglés** (decisión D12 pendiente); la documentación está en español |
-| Dinero | `useMoney()` → `Intl.NumberFormat` con la moneda de **Ajustes** (antes, `$` fijo). El servidor devuelve números; nunca se formatea en el servidor |
+| Idioma de la interfaz | **ES por defecto + EN** (`next-intl`, `profiles.locale`, sin `[locale]` en la URL; D12) |
+| Dinero | `useMoney()` → `Intl.NumberFormat` con la moneda de **Ajustes** (defecto COP; decimales según `currencyDecimals`). El servidor devuelve números; nunca se formatea en el servidor |
 | Nombre de la tienda | `settings.store_name` (sidebar), antes "POS System" fijo |
 
 ## Componentes compartidos
@@ -29,7 +30,7 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 
 | Componente | Para qué |
 |---|---|
-| `AppShell` | Navegación lateral/móvil **filtrada por rol**, menú de usuario (tema, logout que vacía el carrito) |
+| `AppShell` | Navegación lateral/móvil **filtrada por rol**, menú de usuario (tema, idioma ES/EN, logout que vacía el carrito) |
 | `ConfirmDialog` | Sustituye a `window.confirm()`: `AlertDialog` accesible que muestra progreso y no se cierra si falla |
 | `TextField`, `SelectField` | Campos de `react-hook-form` con etiqueta y mensaje de error asociados (`htmlFor`/`aria-describedby` por `FormControl`) |
 | `Pagination` | Anterior/siguiente con "Page x of y · N results"; oculta si cabe en una página |

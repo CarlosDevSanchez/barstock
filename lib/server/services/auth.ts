@@ -1,5 +1,6 @@
 import 'server-only'
 import { serverEnv } from '@/lib/env/server'
+import { setLocaleCookie } from '@/lib/i18n/cookie'
 import { forbidden, tooManyRequests, unauthorized, unprocessable } from '@/lib/server/errors'
 import { loadSession, type SessionUser } from '@/lib/server/auth'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
@@ -20,6 +21,7 @@ export async function signIn(supabase: AppSupabaseClient, email: string, passwor
         await supabase.auth.signOut()
         throw forbidden('This account is disabled')
     }
+    await setLocaleCookie(session.user.locale)
     return session.user
 }
 

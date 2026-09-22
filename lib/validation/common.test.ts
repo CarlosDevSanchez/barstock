@@ -15,7 +15,11 @@ describe('money', () => {
         expect(money.safeParse('abc').success).toBe(false)
         expect(money.safeParse(NaN).success).toBe(false)
         expect(money.safeParse(1.005).success).toBe(false)
-        expect(money.safeParse(100_000_000).success).toBe(false)
+        expect(money.safeParse(1_000_000_000_000).success).toBe(false)
+    })
+    test('accepts COP-sized amounts (NUMERIC(14,2) holds up to 999 999 999 999.99)', () => {
+        expect(money.parse(150_000_000)).toBe(150_000_000)
+        expect(money.parse(999_999_999_999.99)).toBe(999_999_999_999.99)
     })
     test('float noise is rounded to cents instead of rejected', () => {
         expect(money.parse(0.1 + 0.2)).toBe(0.3)

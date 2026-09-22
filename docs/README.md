@@ -1,6 +1,6 @@
 # Documentación interna — barstock (POS + Inventario)
 
-> **Estado:** tras la **etapa 1** (rama `feat/etapa-1-base`) · **Revisión:** 2026-09-21. La auditoría de `04-auditoria/` sigue siendo la del commit `54962b9` y es un registro histórico.
+> **Estado:** rama `feat/i18n-cop` (COP por defecto + i18n ES/EN + Docker local) sobre la etapa 1 · **Revisión:** 2026-09-21. La auditoría de `04-auditoria/` sigue siendo la del commit `54962b9` y es un registro histórico.
 > **Idioma:** español para prosa; identificadores, rutas y SQL en inglés tal como están en el código.
 
 Esta carpeta es la fuente de verdad interna del proyecto. Cada archivo cubre **un solo tema** para
@@ -72,7 +72,8 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 ### 05 · Guías — [`05-guias/`](05-guias/)
 | Archivo | Contenido |
 |---|---|
-| [setup-local.md](05-guias/setup-local.md) | Puesta en marcha correcta de cero |
+| [setup-local.md](05-guias/setup-local.md) | Puesta en marcha para desarrollar (`bun run dev`) |
+| [docker-local.md](05-guias/docker-local.md) | Todo en Docker con un comando: Supabase, usuarios de prueba y la app |
 | [variables-de-entorno.md](05-guias/variables-de-entorno.md) | Variables requeridas y cómo validarlas |
 | [comandos.md](05-guias/comandos.md) | Scripts y comandos de verificación |
 | [testing.md](05-guias/testing.md) | Niveles de prueba, cómo ejecutarlas, seguridad de las pruebas y concurrencia |

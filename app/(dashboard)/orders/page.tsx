@@ -3,6 +3,8 @@
 import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
+import { enUS, es } from 'date-fns/locale'
+import { useLocale, useTranslations } from 'next-intl'
 import { Search, Eye } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
@@ -36,6 +38,10 @@ const getStatusColor = (status: string) => {
 }
 
 export default function OrdersPage() {
+    const t = useTranslations('orders')
+    const tc = useTranslations('common')
+    const locale = useLocale()
+    const dateLocale = locale === 'es' ? es : enUS
     const router = useRouter()
     const { user } = useSession()
     const money = useMoney()
@@ -53,13 +59,20 @@ export default function OrdersPage() {
         JSON.stringify({ page, search, status })
     )
 
+    const statusLabel = (value: string) => {
+        if (value === 'completed' || value === 'refunded' || value === 'draft' || value === 'pending') {
+            return tc(`orderStatus.${value}`)
+        }
+        return value
+    }
+
     return (
         <div className="space-y-6">
             <div className="flex items-center justify-between">
                 <div>
-                    <h1 className="text-3xl font-bold">Orders</h1>
+                    <h1 className="text-3xl font-bold">{t('title')}</h1>
                     <p className="text-muted-foreground">
-                        {roleAtLeast(user.role, 'manager') ? 'View and manage all sales orders' : 'Your sales orders'}
+                        {roleAtLeast(user.role, 'manager') ? t('subtitleManage') : t('subtitleOwn')}
                     </p>
                 </div>
             </div>
@@ -69,7 +82,7 @@ export default function OrdersPage() {
                     <div className="relative flex-1">
                         <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                         <Input
-                            placeholder="Search by order number..."
+                            placeholder={t('searchPlaceholder')}
                             value={searchQuery}
                             onChange={e => {
                                 setSearchQuery(e.target.value)
@@ -85,13 +98,13 @@ export default function OrdersPage() {
                             setPage(1)
                         }}
                     >
-                        <SelectTrigger className="w-44" aria-label="Filter by status">
+                        <SelectTrigger className="w-44" aria-label={t('filterStatusAria')}>
                             <SelectValue />
                         </SelectTrigger>
                         <SelectContent>
-                            <SelectItem value={ALL}>All statuses</SelectItem>
-                            <SelectItem value="completed">Completed</SelectItem>
-                            <SelectItem value="refunded">Refunded</SelectItem>
+                            <SelectItem value={ALL}>{t('allStatuses')}</SelectItem>
+                            <SelectItem value="completed">{tc('orderStatus.completed')}</SelectItem>
+                            <SelectItem value="refunded">{tc('orderStatus.refunded')}</SelectItem>
                         </SelectContent>
                     </Select>
                 </div>
@@ -105,12 +118,12 @@ export default function OrdersPage() {
                         <Table>
                             <TableHeader>
                                 <TableRow>
-                                    <TableHead>Order #</TableHead>
-                                    <TableHead>Customer</TableHead>
-                                    <TableHead>Date</TableHead>
-                                    <TableHead>Total</TableHead>
-                                    <TableHead>Status</TableHead>
-                                    <TableHead className="text-right">Actions</TableHead>
+                                    <TableHead>{t('colOrder')}</TableHead>
+                                    <TableHead>{t('colCustomer')}</TableHead>
+                                    <TableHead>{t('colDate')}</TableHead>
+                                    <TableHead>{t('colTotal')}</TableHead>
+                                    <TableHead>{t('colStatus')}</TableHead>
+                                    <TableHead className="text-right">{tc('actions')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -121,22 +134,26 @@ export default function OrdersPage() {
                                         onClick={() => router.push(`/orders/${order.id}`)}
                                     >
                                         <TableCell className="font-mono font-medium">{order.order_number}</TableCell>
-                                        <TableCell>{order.customer?.name || 'Walk-in'}</TableCell>
+                                        <TableCell>{order.customer?.name || t('walkIn')}</TableCell>
                                         <TableCell>
-                                            {format(new Date(order.created_at), 'MMM dd, yyyy HH:mm')}
+                                            {format(new Date(order.created_at), 'MMM dd, yyyy HH:mm', {
+                                                locale: dateLocale
+                                            })}
                                         </TableCell>
                                         <TableCell className="font-bold text-emerald-600">
                                             {money(order.total)}
                                         </TableCell>
                                         <TableCell>
-                                            <Badge variant={getStatusColor(order.status)}>{order.status}</Badge>
+                                            <Badge variant={getStatusColor(order.status)}>
+                                                {statusLabel(order.status)}
+                                            </Badge>
                                         </TableCell>
                                         <TableCell className="text-right">
                                             <div className="flex justify-end gap-2">
                                                 <Button
                                                     size="sm"
                                                     variant="ghost"
-                                                    aria-label={`View order ${order.order_number}`}
+                                                    aria-label={t('viewAria', { orderNumber: order.order_number })}
                                                     onClick={e => {
                                                         e.stopPropagation()
                                                         router.push(`/orders/${order.id}`)
@@ -151,7 +168,7 @@ export default function OrdersPage() {
                             </TableBody>
                         </Table>
                         {orders.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">No orders found</p>
+                            <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
                         )}
                         <Pagination page={page} pageSize={PAGE_SIZE} total={orders.data.total} onPageChange={setPage} />
                     </>

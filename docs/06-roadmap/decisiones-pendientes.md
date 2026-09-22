@@ -11,15 +11,15 @@
 | D1 | ¿Registro público, por invitación o solo admin crea usuarios? | [C1](../04-auditoria/hallazgos/C1-rls-permisivo.md) | Solo admin crea/invita usuarios | **Decidido (2026-09-21, propietario)**: solo por invitación del admin |
 | D2 | ¿Un solo negocio, o varias sucursales/tiendas? | Esquema (`store_id`), RLS | Si hay riesgo de multi-sucursal, añadir `store_id` **antes** de más datos | Pendiente |
 | D3 | Regla fiscal: ¿tasa por producto o global? ¿precio con o sin impuesto? ¿redondeo por línea o por total? ¿descuento antes o después del impuesto? | [H3](../04-auditoria/hallazgos/H3-impuestos-y-dinero.md), `create_sale` | Tasa por producto, precios sin impuesto, redondeo por línea, descuento antes del impuesto — **validar con contabilidad** | **Supuesto aplicado, sin validar** (ver abajo) |
-| D4 | Moneda: ¿única o varias? ¿formato regional? | UI, `settings` | Una moneda por instalación, configurable; `Intl.NumberFormat` | Pendiente |
+| D4 | Moneda: ¿única o varias? ¿formato regional? | UI, `settings` | Una moneda por instalación, configurable; `Intl.NumberFormat` | **Decidido (2026-09-21)**: COP por defecto, decimales según la moneda (`money_scale` / `currencyDecimals`) |
 | D5 | Pagos: ¿mixtos (efectivo+tarjeta)? ¿vuelto? ¿propinas? ¿integración con terminal? | `payments`, UI de cobro | Permitir varios pagos por orden (el esquema ya lo permite) y calcular vuelto | Pendiente |
 | D6 | Descuentos: ¿topes por rol? ¿motivo obligatorio? ¿aprobación de gerente? | `create_sale`, RLS | Tope por rol y motivo sobre cierto monto, auditado | Pendiente |
-| D7 | Fidelidad: ¿cómo se acumulan y canjean los puntos? ¿los reembolsos los restan? | [clientes](../03-modulos/clientes.md) | Derivar de las órdenes (trigger/vista), no editar a mano | **Supuesto aplicado, sin validar**: `floor(total_spent)`, reembolsos restan |
+| D7 | Fidelidad: ¿cómo se acumulan y canjean los puntos? ¿los reembolsos los restan? | [clientes](../03-modulos/clientes.md) | Derivar de las órdenes (trigger/vista), no editar a mano | **Supuesto aplicado, sin validar**: `floor(total_spent)`, reembolsos restan. En COP ≈ 1 punto por peso — escala por revisar |
 | D8 | Reembolsos: ¿parciales? ¿ventana de tiempo? ¿quién autoriza? ¿devuelve al stock siempre? | `refund_order` | Solo gerente/admin, con motivo; parcial por ítem como evolución | Pendiente |
 | D9 | Stock: ¿se permite vender sin stock o sin fila de inventario? ¿stock negativo? | `create_sale`, `CHECK` | No permitir negativo; productos sin control de stock marcados explícitamente | **Supuesto aplicado, sin validar**: nunca negativo; vender sin fila de inventario falla |
 | D10 | Variantes: ¿se venden desde el POS? ¿qué atributos? | UI del POS, inventario | Si sí: selector de variante y alta en productos | Pendiente |
 | D11 | Ajustes: ¿en BD (`settings`), en cliente, o ambos? | [ajustes](../03-modulos/ajustes.md) | **Solo BD** (tabla `settings`) con RLS solo-admin | Pendiente |
-| D12 | Idioma de la interfaz | UI | Definir si se traduce (i18n) o se queda en inglés | Pendiente |
+| D12 | Idioma de la interfaz | UI | Definir si se traduce (i18n) o se queda en inglés | **Decidido (2026-09-21)**: ES por defecto + EN; idioma por usuario (`profiles.locale`), sin segmento `[locale]` en la URL |
 | D13 | Entornos y despliegue: ¿Vercel + un Supabase por entorno? ¿quién despliega? | CI/CD, variables | dev / staging / prod separados; despliegue por PR | Pendiente |
 | D14 | Datos personales de clientes: retención, borrado, consentimiento, normativa aplicable | Clientes, RLS, backups | Minimizar campos; política de retención; acceso por rol | Pendiente |
 | D15 | Hardware: lector de códigos, impresora térmica, cajón de dinero | POS, recibo | Lector como teclado (auto-agregar con Enter); impresión ESC/POS o recibo HTML | Pendiente |
@@ -36,10 +36,20 @@ Se implementaron para poder cerrar la base técnica; **cambiarlos es una migraci
 | ID | Supuesto implementado (`create_sale` / triggers) |
 |---|---|
 | D3 | Impuesto **por producto** (`products.tax_rate`, fracción); precios **sin** impuesto; redondeo **por línea** (`round(base × tasa, 2)`); descuento de línea antes del impuesto; **descuento global después del impuesto** (`total = Σ base + Σ impuesto − descuento`). `settings.tax_rate` queda como tasa por defecto para productos nuevos, no interviene en las órdenes |
-| D7 | `loyalty_points = floor(total_spent)`; `total_spent` = Σ de órdenes `completed`; un reembolso resta |
+| D7 | `loyalty_points = floor(total_spent)`; `total_spent` = Σ de órdenes `completed`; un reembolso resta. Con COP por defecto eso son ≈ 1 punto por peso — pendiente de calibrar con el negocio |
 | D9 | Stock nunca negativo (`CHECK` + `UPDATE … WHERE quantity >= n`); un producto sin fila de inventario no se puede vender; cada producto nuevo recibe su fila con cantidad 0 |
 | D8 | Reembolso **total**, solo gerente/admin, con motivo, idempotente |
 | D6 | Sin topes de descuento por rol (sigue pendiente) |
+
+### D4 — Decidido 2026-09-21
+Decisión: una moneda por instalación (tabla `settings`); valor por defecto **COP**; decimales de cobro y precios según la moneda (`public.money_scale()` / `currencyDecimals`: 0 para COP y otras monedas de unidad entera, 2 para el resto). Montos ampliados a `NUMERIC(14,2)`.
+Motivo: el negocio opera en Colombia; `NUMERIC(10,2)` y centavos fijos no sirven para pesos.
+Impacto: migración `20260921000006_locale_and_money.sql`, `lib/money.ts`, `create_sale`, seed y defaults.
+
+### D12 — Decidido 2026-09-21
+Decisión: UI en **español por defecto** con inglés como alternativa; idioma **por usuario** en `profiles.locale` (`es` \| `en`), sin segmento `[locale]` en la URL (`next-intl`).
+Motivo: el personal puede preferir EN; la tienda es ES.
+Impacto: `next-intl`, `PATCH /api/v1/me`, cookie `NEXT_LOCALE`, diccionarios `messages/{es,en}.json`.
 
 ## Detalle de las decisiones de mayor impacto
 

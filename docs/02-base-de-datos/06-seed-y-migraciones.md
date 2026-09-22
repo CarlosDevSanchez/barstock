@@ -13,6 +13,7 @@
 | `…03_roles_rls.sql` | Roles, políticas por rol, protección de `profiles`, alta cerrada, revocación de escrituras directas ([RLS](03-rls-y-politicas.md)) |
 | `…04_business_rpc.sql` | `create_sale`, `refund_order`, `adjust_inventory`, secuencia de órdenes, inventario automático, totales de clientes derivados |
 | `…05_reporting.sql` | `dashboard_summary`, `sales_report` |
+| `…06_locale_and_money.sql` | `profiles.locale`; `currency_decimals` / `money_scale`; columnas de dinero → `NUMERIC(14,2)`; `create_sale` con redondeo según la moneda de la tienda |
 
 `supabase/legacy/` conserva `schema.sql` y `fix_rls_policies.sql` como historia (**no ejecutar**). `fix_rls_policies.sql` no se migra: `…03`
 elimina todas las políticas existentes, incluidas las que ese parche haya creado en una base ya desplegada.
@@ -46,7 +47,7 @@ Se ejecuta automáticamente tras las migraciones en `supabase start`/`db reset` 
 
 | Tabla | Filas | Detalle |
 |---|---|---|
-| `settings` | 9 | `store_name`, `store_address`, `store_phone`, `store_email`, `tax_rate` (`0.10`, tasa por defecto para productos nuevos), `currency` (`"USD"`), **`timezone` (`"UTC"`)**, `low_stock_threshold` (`10`), `receipt_template` |
+| `settings` | 9 | `store_name`, `store_address`, `store_phone`, `store_email`, `tax_rate` (`0.19`, IVA general CO — supuesto D3), `currency` (`"COP"`), **`timezone` (`"America/Bogota"`)**, `low_stock_threshold` (`10`), `receipt_template` |
 | `categories` | 5 | Electronics, Clothing, Food & Beverages, Home & Garden, Sports & Outdoors |
 | `products` | 6 | Wireless Mouse `ELEC-001`, USB-C Cable `ELEC-002`, T-Shirt `CLTH-001`, Coffee Beans `FOOD-001` (tax `0.05`), Water Bottle `HOME-001`, Yoga Mat `SPRT-001` |
 | `product_variants` | 6 | Solo T-Shirt (Small/Medium/Large, Red/Blue/Black); no se venden desde el POS |

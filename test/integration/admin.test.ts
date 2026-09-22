@@ -24,9 +24,12 @@ let admin: TestClient
 beforeAll(async () => {
     users = await ensureTestUsers()
     ;[cashier, manager, admin] = await Promise.all([loginAs('cashier'), loginAs('manager'), loginAs('admin')])
+    storeTimeZone = dataOf<{ timezone: string }>(await cashier.get(getSettings, 'settings')).timezone
 })
 
-const today = () => new Date().toISOString().slice(0, 10)
+/** Today's date (YYYY-MM-DD) in the store's time zone: the dashboard buckets days with settings.timezone. */
+let storeTimeZone = 'UTC'
+const today = () => new Date().toLocaleDateString('en-CA', { timeZone: storeTimeZone })
 
 interface Dashboard {
     today_revenue: number
@@ -262,7 +265,7 @@ describe('settings', () => {
     test('a corrupt stored value falls back to the default instead of breaking the app', async () => {
         await adminClient().from('settings').update({ value: 'not-a-currency-at-all' }).eq('key', 'currency')
         const settings = dataOf<{ currency: string }>(await cashier.get(getSettings, 'settings'))
-        expect(settings.currency).toBe('USD')
+        expect(settings.currency).toBe('COP') // SETTINGS_DEFAULTS
     })
 })
 

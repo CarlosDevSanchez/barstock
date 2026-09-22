@@ -1,5 +1,7 @@
 # Puesta en marcha local (verificada)
 
+> ¿Solo quieres **verlo funcionando**? `bun run local:up` levanta todo en Docker con usuarios de prueba: [docker-local](docker-local.md). Esta guía es para **desarrollar** con recarga en caliente.
+
 > Sustituye a la sección "Installation" del README, que está desactualizada ([readme-vs-realidad](../04-auditoria/readme-vs-realidad.md)).
 > Herramientas migradas a Bun. El flujo de base de datos y usuarios (secciones 2, 4, 6 y 7) describe el estado **anterior** a la
 > migración de seguridad y se reescribe en el Paso 8 de la etapa 1.
@@ -48,17 +50,19 @@ Local ya viene configurado (`supabase/config.toml`): registro público **cerrado
 bun run dev          # http://localhost:3000
 ```
 
-### 6. Crear el primer usuario (admin)
-No hay registro público: los usuarios se crean por invitación de un admin, y el primero se crea con la API de administración de Auth
-(el trigger asigna el rol y activa el perfil cuando `app_metadata.role` cambia):
+### 6. Crear usuarios para entrar
+No hay registro público: los usuarios se crean por invitación de un admin, y el primero hay que crearlo aparte.
+
+**Lo fácil:** `bun run local:seed` crea `admin@`, `manager@` y `cashier@barstock.local` (contraseña `barstock-local-2026`, **solo local**) y unas ventas de demostración; es idempotente y se niega a ejecutarse contra un host que no sea local ([docker-local](docker-local.md)).
+
+**A mano** (con la API de administración de Auth; el trigger asigna el rol y activa el perfil cuando `app_metadata.role` cambia):
 ```bash
 . <(supabase status -o env | grep -E '^(API_URL|SERVICE_ROLE_KEY)=')
 curl -s -X POST "$API_URL/auth/v1/admin/users" -H "apikey: $SERVICE_ROLE_KEY" -H "Authorization: Bearer $SERVICE_ROLE_KEY" \
   -H "Content-Type: application/json" \
   -d '{"email":"admin@local.dev","password":"a-long-local-password","email_confirm":true,"app_metadata":{"role":"admin"}}'
 ```
-> ⚠️ Mientras dure el refactor a API (Paso 5), las páginas siguen llamando a Supabase directamente y **no** funcionan contra estas
-> políticas ([RLS](../02-base-de-datos/03-rls-y-politicas.md)).
+Los demás usuarios se invitan desde `/users` con ese admin (el correo llega a Mailpit, <http://127.0.0.1:54324>).
 
 ### 7. Stock
 Cada producto recibe su fila de `inventory` (cantidad 0) por trigger; el seed fija las cantidades iniciales. Para ajustar stock se usa el RPC

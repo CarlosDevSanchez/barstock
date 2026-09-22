@@ -5,6 +5,8 @@ import { useParams, useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { format } from 'date-fns'
+import { enUS, es } from 'date-fns/locale'
+import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { ArrowLeft, Receipt, RotateCcw, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -40,6 +42,8 @@ interface RefundDialogProps {
 // Refunding is done by the `refund_order` database function: one transaction that marks the order, restocks every line and
 // logs the movement. It is safe to retry (a second refund of the same order changes nothing).
 function RefundDialog({ order, onClose, onRefunded }: RefundDialogProps) {
+    const t = useTranslations('orders')
+    const tc = useTranslations('common')
     const money = useMoney()
     const form = useForm({ resolver: zodResolver(refundSchema), defaultValues: { reason: '' } })
     const submitting = form.formState.isSubmitting
@@ -47,10 +51,10 @@ function RefundDialog({ order, onClose, onRefunded }: RefundDialogProps) {
     const onSubmit = form.handleSubmit(async values => {
         try {
             await ordersApi.refund(order.id, values.reason)
-            toast.success('Order refunded and stock restored')
+            toast.success(t('refundedToast'))
             onRefunded()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, 'Failed to refund order'))
+            toast.error(errorMessage(error, t('refundFailed')))
         }
     })
 
@@ -58,23 +62,20 @@ function RefundDialog({ order, onClose, onRefunded }: RefundDialogProps) {
         <Dialog open onOpenChange={open => !open && !submitting && onClose()}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>Refund order {order.order_number}?</DialogTitle>
-                    <DialogDescription>
-                        The full amount ({money(order.total)}) is refunded and every item goes back into stock. This
-                        cannot be undone.
-                    </DialogDescription>
+                    <DialogTitle>{t('refundTitle', { orderNumber: order.order_number })}</DialogTitle>
+                    <DialogDescription>{t('refundDescription', { total: money(order.total) })}</DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate>
                         <div className="py-4">
-                            <TextField name="reason" label="Reason *" placeholder="e.g. Customer returned the goods" />
+                            <TextField name="reason" label={t('reasonLabel')} placeholder={t('reasonPlaceholder')} />
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" disabled={submitting} onClick={onClose}>
-                                Cancel
+                                {tc('cancel')}
                             </Button>
                             <Button type="submit" variant="destructive" disabled={submitting}>
-                                {submitting ? 'Refunding…' : 'Refund order'}
+                                {submitting ? t('refunding') : t('refundOrder')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -85,6 +86,10 @@ function RefundDialog({ order, onClose, onRefunded }: RefundDialogProps) {
 }
 
 export default function OrderDetailPage() {
+    const t = useTranslations('orders')
+    const tc = useTranslations('common')
+    const locale = useLocale()
+    const dateLocale = locale === 'es' ? es : enUS
     const params = useParams<{ id: string }>()
     const router = useRouter()
     const { user } = useSession()
@@ -93,13 +98,27 @@ export default function OrderDetailPage() {
 
     const orderQuery = useApiQuery(signal => ordersApi.get(params.id, signal), `order:${params.id}`)
 
+    const statusLabel = (value: string) => {
+        if (value === 'completed' || value === 'refunded' || value === 'draft' || value === 'pending') {
+            return tc(`orderStatus.${value}`)
+        }
+        return value
+    }
+
+    const paymentLabel = (method: string) => {
+        if (method === 'cash' || method === 'card' || method === 'ewallet') {
+            return tc(`payment.${method}`)
+        }
+        return method
+    }
+
     if (orderQuery.error) {
         if (orderQuery.error instanceof ApiError && orderQuery.error.status === 404) {
             return (
                 <div className="text-center py-12">
-                    <p className="text-muted-foreground">Order not found</p>
+                    <p className="text-muted-foreground">{t('notFound')}</p>
                     <Button onClick={() => router.push('/orders')} className="mt-4">
-                        Back to Orders
+                        {t('backToOrders')}
                     </Button>
                 </div>
             )
@@ -118,25 +137,27 @@ export default function OrderDetailPage() {
                     <Button
                         variant="ghost"
                         size="icon"
-                        aria-label="Back to orders"
+                        aria-label={t('backAria')}
                         onClick={() => router.push('/orders')}
                     >
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
                     <div>
-                        <h1 className="text-3xl font-bold">Order Details</h1>
-                        <p className="text-muted-foreground">Order #{order.order_number}</p>
+                        <h1 className="text-3xl font-bold">{t('detailsTitle')}</h1>
+                        <p className="text-muted-foreground">
+                            {t('orderNumberSubtitle', { orderNumber: order.order_number })}
+                        </p>
                     </div>
                 </div>
                 <div className="flex gap-2">
                     <Button variant="outline" onClick={() => window.print()}>
                         <Printer className="mr-2 h-4 w-4" />
-                        Print
+                        {t('print')}
                     </Button>
                     {canRefund && (
                         <Button variant="destructive" onClick={() => setRefunding(true)}>
                             <RotateCcw className="mr-2 h-4 w-4" />
-                            Refund
+                            {t('refund')}
                         </Button>
                     )}
                 </div>
@@ -145,19 +166,19 @@ export default function OrderDetailPage() {
             <div className="grid gap-6 md:grid-cols-2">
                 <Card className="rounded-2xl">
                     <CardHeader>
-                        <CardTitle>Order Information</CardTitle>
+                        <CardTitle>{t('orderInfo')}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Order Number:</span>
+                            <span className="text-muted-foreground">{t('orderNumber')}</span>
                             <span className="font-semibold">{order.order_number}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Date:</span>
-                            <span>{format(new Date(order.created_at), 'PPp')}</span>
+                            <span className="text-muted-foreground">{t('date')}</span>
+                            <span>{format(new Date(order.created_at), 'PPp', { locale: dateLocale })}</span>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Status:</span>
+                            <span className="text-muted-foreground">{t('status')}</span>
                             <Badge
                                 variant={
                                     order.status === 'completed'
@@ -167,26 +188,29 @@ export default function OrderDetailPage() {
                                           : 'secondary'
                                 }
                             >
-                                {order.status}
+                                {statusLabel(order.status)}
                             </Badge>
                         </div>
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Created By:</span>
-                            <span>{order.created_by_name || 'System'}</span>
+                            <span className="text-muted-foreground">{t('createdBy')}</span>
+                            <span>{order.created_by_name || t('system')}</span>
                         </div>
                         {order.payments.length > 0 && (
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Payment:</span>
-                                <span className="capitalize">
-                                    {order.payments.map(p => `${p.payment_method} (${money(p.amount)})`).join(', ')}
+                                <span className="text-muted-foreground">{t('payment')}</span>
+                                <span>
+                                    {order.payments
+                                        .map(p => `${paymentLabel(p.payment_method)} (${money(p.amount)})`)
+                                        .join(', ')}
                                 </span>
                             </div>
                         )}
                         {order.status === 'refunded' && (
                             <div className="flex justify-between gap-4">
-                                <span className="text-muted-foreground">Refund:</span>
+                                <span className="text-muted-foreground">{t('refundLabel')}</span>
                                 <span className="text-right">
-                                    {order.refunded_at && format(new Date(order.refunded_at), 'PPp')}
+                                    {order.refunded_at &&
+                                        format(new Date(order.refunded_at), 'PPp', { locale: dateLocale })}
                                     {order.refund_reason && (
                                         <span className="block text-sm text-muted-foreground">
                                             {order.refund_reason}
@@ -200,22 +224,22 @@ export default function OrderDetailPage() {
 
                 <Card className="rounded-2xl">
                     <CardHeader>
-                        <CardTitle>Customer Information</CardTitle>
+                        <CardTitle>{t('customerInfo')}</CardTitle>
                     </CardHeader>
                     <CardContent className="space-y-3">
                         <div className="flex justify-between">
-                            <span className="text-muted-foreground">Name:</span>
-                            <span className="font-semibold">{order.customer?.name || 'Walk-in Customer'}</span>
+                            <span className="text-muted-foreground">{t('name')}</span>
+                            <span className="font-semibold">{order.customer?.name || t('walkInCustomer')}</span>
                         </div>
                         {order.customer?.email && (
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Email:</span>
+                                <span className="text-muted-foreground">{t('email')}</span>
                                 <span>{order.customer.email}</span>
                             </div>
                         )}
                         {order.customer?.phone && (
                             <div className="flex justify-between">
-                                <span className="text-muted-foreground">Phone:</span>
+                                <span className="text-muted-foreground">{t('phone')}</span>
                                 <span>{order.customer.phone}</span>
                             </div>
                         )}
@@ -223,25 +247,24 @@ export default function OrderDetailPage() {
                 </Card>
             </div>
 
-            {/* Order Items */}
             <Card className="rounded-2xl">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <Receipt className="h-5 w-5 text-emerald-600" />
-                        Order Items
+                        {t('orderItems')}
                     </CardTitle>
                 </CardHeader>
                 <CardContent>
                     <Table>
                         <TableHeader>
                             <TableRow>
-                                <TableHead>Product</TableHead>
-                                <TableHead>Variant</TableHead>
-                                <TableHead className="text-right">Qty</TableHead>
-                                <TableHead className="text-right">Price</TableHead>
-                                <TableHead className="text-right">Discount</TableHead>
-                                <TableHead className="text-right">Tax</TableHead>
-                                <TableHead className="text-right">Total</TableHead>
+                                <TableHead>{t('colProduct')}</TableHead>
+                                <TableHead>{t('colVariant')}</TableHead>
+                                <TableHead className="text-right">{t('colQty')}</TableHead>
+                                <TableHead className="text-right">{t('colPrice')}</TableHead>
+                                <TableHead className="text-right">{t('colDiscount')}</TableHead>
+                                <TableHead className="text-right">{t('colTax')}</TableHead>
+                                <TableHead className="text-right">{t('colTotal')}</TableHead>
                             </TableRow>
                         </TableHeader>
                         <TableBody>
@@ -261,23 +284,22 @@ export default function OrderDetailPage() {
 
                     <Separator className="my-4" />
 
-                    {/* Order Summary */}
                     <div className="space-y-2 max-w-sm ml-auto">
                         <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Subtotal:</span>
+                            <span className="text-muted-foreground">{t('subtotal')}</span>
                             <span>{money(order.subtotal)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Tax:</span>
+                            <span className="text-muted-foreground">{t('tax')}</span>
                             <span>{money(order.tax)}</span>
                         </div>
                         <div className="flex justify-between text-sm">
-                            <span className="text-muted-foreground">Discount:</span>
+                            <span className="text-muted-foreground">{t('discount')}</span>
                             <span className="text-red-600">-{money(order.discount)}</span>
                         </div>
                         <Separator />
                         <div className="flex justify-between text-lg font-bold">
-                            <span>Total:</span>
+                            <span>{t('total')}</span>
                             <span className="text-emerald-600">{money(order.total)}</span>
                         </div>
                     </div>

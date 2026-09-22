@@ -1,9 +1,10 @@
-import { beforeAll, describe, expect, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import {
     adminClient,
     createCustomer,
     createProduct,
     ensureTestUsers,
+    pinStoreCurrency,
     signedInClient,
     stockOf,
     type Db
@@ -14,9 +15,15 @@ let manager: Db
 const service = () => adminClient()
 const walkIn = null as unknown as string // the generated type says `string`; the function accepts NULL
 
+let restoreCurrency: () => Promise<void>
+
 beforeAll(async () => {
     await ensureTestUsers()
+    restoreCurrency = await pinStoreCurrency('USD') // these suites assert cents; COP (whole pesos) has its own suite
     ;[cashier, manager] = await Promise.all([signedInClient('cashier'), signedInClient('manager')])
+})
+afterAll(async () => {
+    await restoreCurrency()
 })
 
 type Line = { product_id: string; variant_id?: string | null; quantity: number; discount?: number }

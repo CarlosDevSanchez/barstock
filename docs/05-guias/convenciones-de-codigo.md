@@ -38,7 +38,7 @@ Alias `@/…` para todo.
 6. Los servicios **comprueban siempre `{ error }`** (`assertNoError`) y tratan "0 filas" como 404 (RLS no lanza error al bloquear un `UPDATE`/`DELETE`).
 7. Filtrar `NULL` con `.is('col', null)`, **nunca** `.eq('col', null)`. No concatenar strings en un `select` de supabase-js (degrada el tipo a `string`).
 8. **Nunca** `service_role` fuera de `lib/server/supabase-admin.ts` ni en variables `NEXT_PUBLIC_*`. Los mensajes crudos de Postgres no llegan al cliente.
-9. Dinero: `NUMERIC` en BD; en cliente, aritmética en centavos (`lib/cart-preview.ts`) y formato con `useMoney()`; nada de `toFixed` para calcular ni `$` fijo.
+9. Dinero: `NUMERIC(14,2)` en BD; en cliente, aritmética en la unidad mínima de la moneda (`lib/cart-preview.ts` + `currencyDecimals`) y formato con `useMoney()`; nada de `toFixed` para calcular ni símbolo fijo.
 10. Sin `any`: `unknown` en `catch`; tipos generados de la BD (`bun run db:types` tras cada migración).
 11. Los enums de la BD y los del código deben coincidir (hay pruebas que lo comprueban).
 
@@ -51,7 +51,7 @@ Alias `@/…` para todo.
 ### UI
 16. Reutilizar `components/ui/*` y los compartidos (`ConfirmDialog`, `Pagination`, `QueryError`, `PageSpinner`). Acciones destructivas con `ConfirmDialog`, nunca `window.confirm()`.
 17. Botones de solo icono con `aria-label`. Listas con paginación y búsqueda **en servidor**.
-18. La interfaz está en **inglés** (D12 pendiente).
+18. La interfaz es **bilingüe ES (defecto) + EN** (`next-intl`, `profiles.locale`, claves en `messages/{es,en}.json`; D12). Los textos nuevos van a los diccionarios, no hardcodeados.
 
 ### Calidad
 19. `bun run format:check`, `lint`, `typecheck`, `test` y `build` pasan (`bun run check`); el CI lo exige.
@@ -65,4 +65,5 @@ Alias `@/…` para todo.
 - Antes de un PR: [lista de comprobación](comandos.md#lista-de-comprobación-antes-de-un-pr). No subir `.env*` (salvo `.env.example`), claves ni volcados de datos.
 
 ## Idioma
-- Interfaz de usuario: **inglés** (decisión D12 pendiente). Código, commits y nombres: inglés. Documentación interna (`docs/`, `AGENTS.md`, `CLAUDE.md`, `README.md`): **español**.
+- Interfaz de usuario: **español por defecto e inglés** (`profiles.locale`, cookie `NEXT_LOCALE`; D12). Código, commits y nombres: inglés. Documentación interna (`docs/`, `AGENTS.md`, `CLAUDE.md`, `README.md`): **español**.
+- Mensajes de validación zod: claves `validation.*` traducidas en el cliente (`TranslatedFormMessage` / `errorMessage`). El contrato de la API (`code` + `message` de negocio en inglés) no cambia.
