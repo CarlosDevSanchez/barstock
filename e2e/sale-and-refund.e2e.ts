@@ -21,17 +21,21 @@ test('a sale takes stock, a manager refunds it, the stock comes back', async ({ 
     const card = till.getByRole('button', { name: `Add ${product.name} to cart` })
     await card.click()
     await card.click()
-    await expect(till.getByText('Cart (1)')).toBeVisible()
+    // The cart is a floating bubble now: open it to see the sheet.
+    await till.getByRole('button', { name: /^Cart:/ }).click()
+    const cartSheet = till.getByRole('dialog', { name: /^Cart/ })
+    await expect(cartSheet.getByText('Cart (1)')).toBeVisible()
     // 2 x 20.00 + 10 % tax = 44.00 (the figure shown is only a preview)
-    await expect(till.getByText('Total', { exact: true }).locator('..')).toContainText('44.00')
+    await expect(cartSheet.getByText('Total', { exact: true }).locator('..')).toContainText('44.00')
 
-    await till.getByRole('button', { name: 'Checkout' }).click()
+    await cartSheet.getByRole('button', { name: 'Checkout' }).click()
     await till.getByRole('button', { name: 'Card' }).click()
     await till.getByRole('button', { name: 'Complete Order' }).click()
     const toast = till.locator('[data-sonner-toast]').first()
     await expect(toast).toContainText(/Order ORD-\d{6}-\d{6} completed/)
     await expect(toast).toContainText('44.00') // the total the SERVER computed
-    await expect(till.getByText('Cart (0)')).toBeVisible()
+    // The bubble hides itself once the cart (and every open tab) is empty.
+    await expect(till.getByRole('button', { name: /^Cart:/ })).toHaveCount(0)
     expect(await stockOf(product.id)).toBe(8)
 
     // ---- the cashier sees the order but cannot refund it

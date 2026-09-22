@@ -18,7 +18,14 @@ export async function listProducts(
     supabase: AppSupabaseClient,
     { page, pageSize, q, category_id, active, ids }: ProductsQuery
 ): Promise<Page<ProductListItem>> {
-    let query = supabase.from('products').select(LIST_SELECT, { count: 'exact' }).is('deleted_at', null).order('name')
+    // `.order('id')` after name breaks ties deterministically: without it, offset pagination can duplicate or skip
+    // rows whenever two products share a name (or Postgres returns equal-name rows in a different order per page).
+    let query = supabase
+        .from('products')
+        .select(LIST_SELECT, { count: 'exact' })
+        .is('deleted_at', null)
+        .order('name')
+        .order('id')
     const filter = searchFilter(q, ['name', 'sku', 'barcode'])
     if (filter) query = query.or(filter)
     if (category_id) query = query.eq('category_id', category_id)
@@ -34,6 +41,24 @@ export async function listProducts(
         stock: inventory.find(row => row.variant_id === null)?.quantity ?? null
     }))
     return { rows, total: count ?? 0 }
+}
+
+export interface TopProduct {
+    product_id: string
+    name: string
+    selling_price: number
+    /** Units in stock right now (product-level row); null when the product has no inventory row. */
+    stock: number | null
+    category_name: string | null
+    /** Units sold in the window, excluding refunded orders. */
+    quantity: number
+}
+
+/** Store-wide best sellers of the last `days` days (mode of sale), for the POS quick-sell panel. */
+export async function listTopProducts(supabase: AppSupabaseClient, days = 30, limit = 5): Promise<TopProduct[]> {
+    const { data, error } = await supabase.rpc('top_selling_products', { p_days: days, p_limit: limit })
+    assertNoError(error)
+    return data
 }
 
 export async function getProduct(supabase: AppSupabaseClient, id: string): Promise<Tables<'products'>> {

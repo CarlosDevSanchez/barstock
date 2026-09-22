@@ -4,83 +4,77 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Search, Trash2, Plus, Minus, ShoppingCart, CreditCard, DollarSign, Smartphone } from 'lucide-react'
-import { Button } from '@/components/ui/button'
+import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Badge } from '@/components/ui/badge'
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle
-} from '@/components/ui/dialog'
-import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
-import { Separator } from '@/components/ui/separator'
-import { ScrollArea } from '@/components/ui/scroll-area'
-import { QueryError } from '@/components/query-error'
-import { PageSpinner } from '@/components/page-spinner'
-import { useMoney, useSession } from '@/components/session-provider'
-import { currencyDecimals, moneyStep } from '@/lib/money'
+import { currencyDecimals } from '@/lib/money'
 import { categoriesApi } from '@/lib/api/categories'
 import { errorMessage } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
 import { salesApi } from '@/lib/api/orders'
+import { tabsApi } from '@/lib/api/tabs'
 import { previewTotals } from '@/lib/cart-preview'
+import { useMoney, useSession } from '@/components/session-provider'
 import type { PaymentMethod } from '@/types'
 import { useCartStore } from '@/stores/cart'
 import { useApiQuery } from '@/hooks/use-api-query'
+import { useInfiniteApiList } from '@/hooks/use-infinite-api-list'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { AddToTabDialog } from '@/components/pos/add-to-tab-dialog'
+import { CartBubble } from '@/components/pos/cart-bubble'
+import { CartSheet, type CartLineView } from '@/components/pos/cart-sheet'
+import { OpenTabDialog } from '@/components/pos/open-tab-dialog'
+import { ProductGrid } from '@/components/pos/product-grid'
+import { TabDetailSheet } from '@/components/pos/tab-detail-sheet'
+import { TopProducts } from '@/components/pos/top-products'
 
-const CATALOG_SIZE = 100
+const PAGE_SIZE = 30
 const ALL = 'all'
-
-const PAYMENT_ICONS: Array<{ value: PaymentMethod; icon: typeof DollarSign }> = [
-    { value: 'cash', icon: DollarSign },
-    { value: 'card', icon: CreditCard },
-    { value: 'ewallet', icon: Smartphone }
-]
 
 export default function POSPage() {
     const t = useTranslations('pos')
-    const tc = useTranslations('common')
+    const tTabs = useTranslations('tabs')
     const router = useRouter()
-    const money = useMoney()
     const { settings } = useSession()
-    const priceStep = moneyStep(settings.currency)
+    const money = useMoney()
     const decimals = currencyDecimals(settings.currency)
 
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedCategory, setSelectedCategory] = useState(ALL)
     const [selectedCustomer, setSelectedCustomer] = useState('')
     const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
+    const [showCart, setShowCart] = useState(false)
     const [showPaymentDialog, setShowPaymentDialog] = useState(false)
     const [processing, setProcessing] = useState(false)
+    const [topReloadSignal, setTopReloadSignal] = useState(0)
+    const [showOpenTabDialog, setShowOpenTabDialog] = useState(false)
+    const [showAddToTabDialog, setShowAddToTabDialog] = useState(false)
+    const [selectedTabId, setSelectedTabId] = useState<string | null>(null)
     const search = useDebouncedValue(searchQuery)
 
     const items = useCartStore(state => state.items)
     const discount = useCartStore(state => state.discount)
     const { addItem, removeItem, updateQuantity, setGlobalDiscount, clearCart } = useCartStore()
 
-    const catalog = useApiQuery(
-        signal =>
+    const catalog = useInfiniteApiList<ProductListItem>(
+        (page, pageSize, signal) =>
             productsApi.list(
                 {
-                    pageSize: CATALOG_SIZE,
+                    page,
+                    pageSize,
                     q: search,
                     category_id: selectedCategory === ALL ? undefined : selectedCategory,
                     active: true
                 },
                 signal
             ),
-        JSON.stringify({ search, selectedCategory })
+        JSON.stringify({ search, selectedCategory }),
+        PAGE_SIZE
     )
     const categories = useApiQuery(signal => categoriesApi.list({ pageSize: 100 }, signal), 'categories')
     const customers = useApiQuery(signal => customersApi.list({ pageSize: 100 }, signal), 'customers')
+    const openTabs = useApiQuery(signal => tabsApi.list({ status: 'open', pageSize: 100 }, signal), 'open-tabs')
 
     // The cart only holds ids: the lines are priced from live data, so a price or stock change is reflected immediately.
     const cartIds = items
@@ -93,15 +87,15 @@ export default function POSPage() {
     )
     const products = useMemo(() => {
         const map = new Map<string, ProductListItem>()
-        for (const product of catalog.data?.data ?? []) map.set(product.id, product)
+        for (const product of catalog.items) map.set(product.id, product)
         for (const product of cartProducts.data?.data ?? []) map.set(product.id, product)
         return map
-    }, [catalog.data, cartProducts.data])
+    }, [catalog.items, cartProducts.data])
 
-    const lines = items.map(item => ({ item, product: products.get(item.productId) }))
+    const lines: CartLineView[] = items.map(item => ({ item, product: products.get(item.productId) }))
     // Until the live lookup settles a missing product is just "not loaded yet"; afterwards it means deleted or hidden.
     const lookupSettled = cartIds === '' || (cartProducts.data !== undefined && !cartProducts.loading)
-    const problemWith = ({ item, product }: (typeof lines)[number]) => {
+    const problemWith = ({ item, product }: CartLineView) => {
         if (!product) return lookupSettled ? t('noLongerAvailable') : null
         if (!product.is_active || product.stock === null) return t('noLongerAvailable')
         if (item.quantity > product.stock) return t('onlyInStock', { count: product.stock })
@@ -147,7 +141,9 @@ export default function POSPage() {
             clearCart()
             setSelectedCustomer('')
             setShowPaymentDialog(false)
+            setShowCart(false)
             catalog.reload()
+            setTopReloadSignal(count => count + 1)
         } catch (error: unknown) {
             toast.error(errorMessage(error, t('processFailed')))
             // Most failures are stock or price changes: refresh what the till shows.
@@ -159,298 +155,117 @@ export default function POSPage() {
     }
 
     return (
-        <div className="h-full flex flex-col lg:flex-row gap-4">
-            {/* Products Section */}
-            <div className="flex-1 flex flex-col space-y-4">
-                <div>
-                    <h1 className="text-3xl font-bold">{t('title')}</h1>
-                    <p className="text-muted-foreground">{t('subtitle')}</p>
-                </div>
-
-                {/* Search and Filter */}
-                <div className="flex flex-col sm:flex-row gap-3">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder={t('searchPlaceholder')}
-                            value={searchQuery}
-                            onChange={e => setSearchQuery(e.target.value)}
-                            className="pl-10"
-                        />
-                    </div>
-                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                        <SelectTrigger className="w-full sm:w-48" aria-label={t('category')}>
-                            <SelectValue placeholder={t('category')} />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value={ALL}>{t('allCategories')}</SelectItem>
-                            {(categories.data?.data ?? []).map(category => (
-                                <SelectItem key={category.id} value={category.id}>
-                                    {category.name}
-                                </SelectItem>
-                            ))}
-                        </SelectContent>
-                    </Select>
-                </div>
-
-                {/* Products Grid */}
-                {catalog.error ? (
-                    <QueryError error={catalog.error} onRetry={catalog.reload} />
-                ) : !catalog.data ? (
-                    <PageSpinner />
-                ) : (
-                    <ScrollArea className="flex-1">
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-4 pb-4">
-                            {catalog.data.data.map(product => {
-                                // stock null = no inventory row, which the database refuses to sell.
-                                const soldOut = product.stock === null || product.stock <= 0
-                                return (
-                                    <Card
-                                        key={product.id}
-                                        role="button"
-                                        aria-disabled={soldOut}
-                                        aria-label={t('addToCart', { name: product.name })}
-                                        tabIndex={soldOut ? -1 : 0}
-                                        className={`transition-all rounded-2xl overflow-hidden group ${
-                                            soldOut ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'
-                                        }`}
-                                        onClick={() => !soldOut && addItem(product.id)}
-                                        onKeyDown={e => {
-                                            if (!soldOut && (e.key === 'Enter' || e.key === ' ')) {
-                                                e.preventDefault()
-                                                addItem(product.id)
-                                            }
-                                        }}
-                                    >
-                                        <div className="aspect-square bg-gradient-to-br from-emerald-50 to-slate-50 dark:from-emerald-950/20 dark:to-slate-900 flex items-center justify-center">
-                                            <ShoppingCart className="w-12 h-12 text-emerald-600/30 group-hover:text-emerald-600/50 transition-colors" />
-                                        </div>
-                                        <CardContent className="p-4">
-                                            <h3 className="font-semibold line-clamp-2 text-sm">{product.name}</h3>
-                                            <p className="text-xs text-muted-foreground mt-1">
-                                                {t('sku', { sku: product.sku })}
-                                            </p>
-                                            <div className="flex items-center justify-between mt-2">
-                                                <p className="text-lg font-bold text-emerald-600">
-                                                    {money(product.selling_price)}
-                                                </p>
-                                                <Badge variant={soldOut ? 'destructive' : 'secondary'}>
-                                                    {soldOut
-                                                        ? t('outOfStock')
-                                                        : t('left', { count: product.stock ?? 0 })}
-                                                </Badge>
-                                            </div>
-                                        </CardContent>
-                                    </Card>
-                                )
-                            })}
-                        </div>
-                        {catalog.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">{t('noProducts')}</p>
-                        )}
-                        {catalog.data.total > catalog.data.data.length && (
-                            <p className="pb-4 text-center text-sm text-muted-foreground">
-                                {t('showingRefine', {
-                                    shown: catalog.data.data.length,
-                                    total: catalog.data.total
-                                })}
-                            </p>
-                        )}
-                    </ScrollArea>
-                )}
+        <div className="flex flex-col gap-4">
+            <div>
+                <h1 className="text-3xl font-bold">{t('title')}</h1>
+                <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>
 
-            {/* Cart Section */}
-            <Card className="w-full lg:w-96 rounded-2xl shadow-xl flex flex-col">
-                <CardHeader>
-                    <CardTitle className="flex items-center gap-2">
-                        <ShoppingCart className="h-5 w-5 text-emerald-600" />
-                        {t('cart', { count: items.length })}
-                    </CardTitle>
-                </CardHeader>
-                <CardContent className="flex-1 flex flex-col">
-                    {/* Customer Selection */}
-                    <div className="mb-4 space-y-2">
-                        <Label className="text-foreground font-semibold">{t('customerOptional')}</Label>
-                        <Select
-                            value={selectedCustomer || undefined}
-                            onValueChange={value => setSelectedCustomer(value === '__walk_in__' ? '' : value)}
-                        >
-                            <SelectTrigger aria-label={t('customer')}>
-                                <SelectValue placeholder={t('walkIn')} />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="__walk_in__">{t('walkIn')}</SelectItem>
-                                {activeCustomers.map(customer => (
-                                    <SelectItem key={customer.id} value={customer.id}>
-                                        {customer.name}
-                                        {customer.phone ? ` - ${customer.phone}` : ''}
-                                    </SelectItem>
-                                ))}
-                            </SelectContent>
-                        </Select>
-                    </div>
+            <div className="flex flex-col sm:flex-row gap-3">
+                <div className="relative flex-1">
+                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                    <Input
+                        placeholder={t('searchPlaceholder')}
+                        value={searchQuery}
+                        onChange={e => setSearchQuery(e.target.value)}
+                        className="pl-10"
+                    />
+                </div>
+                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                    <SelectTrigger className="w-full sm:w-48" aria-label={t('category')}>
+                        <SelectValue placeholder={t('category')} />
+                    </SelectTrigger>
+                    <SelectContent>
+                        <SelectItem value={ALL}>{t('allCategories')}</SelectItem>
+                        {(categories.data?.data ?? []).map(category => (
+                            <SelectItem key={category.id} value={category.id}>
+                                {category.name}
+                            </SelectItem>
+                        ))}
+                    </SelectContent>
+                </Select>
+            </div>
 
-                    <Separator className="my-3" />
+            <TopProducts reloadSignal={topReloadSignal} onAdd={addItem} />
 
-                    {/* Cart Items */}
-                    <ScrollArea className="flex-1 -mx-6 px-6">
-                        {items.length === 0 ? (
-                            <div className="flex flex-col items-center justify-center py-12 text-center">
-                                <ShoppingCart className="h-16 w-16 text-muted-foreground/30 mb-4" />
-                                <p className="text-muted-foreground">{t('cartEmpty')}</p>
-                                <p className="text-sm text-muted-foreground">{t('addProductsHint')}</p>
-                            </div>
-                        ) : (
-                            <div className="space-y-3">
-                                {lines.map(line => {
-                                    const { item, product } = line
-                                    const problem = problemWith(line)
-                                    return (
-                                        <div
-                                            key={item.productId}
-                                            className="flex items-center gap-3 p-3 rounded-xl bg-muted"
-                                        >
-                                            <div className="flex-1 min-w-0">
-                                                <p className="font-medium text-sm truncate">
-                                                    {product?.name ??
-                                                        (lookupSettled ? t('unknownProduct') : tc('loading'))}
-                                                </p>
-                                                {product && (
-                                                    <p className="text-sm font-bold text-emerald-600">
-                                                        {money(product.selling_price)}
-                                                    </p>
-                                                )}
-                                                {problem && <p className="text-xs text-red-600">{problem}</p>}
-                                            </div>
-                                            <div className="flex items-center gap-2">
-                                                <Button
-                                                    size="icon"
-                                                    variant="outline"
-                                                    className="h-7 w-7"
-                                                    aria-label={t('decreaseQty')}
-                                                    onClick={() => updateQuantity(item.productId, item.quantity - 1)}
-                                                >
-                                                    <Minus className="h-3 w-3" />
-                                                </Button>
-                                                <span className="w-8 text-center font-medium">{item.quantity}</span>
-                                                <Button
-                                                    size="icon"
-                                                    variant="outline"
-                                                    className="h-7 w-7"
-                                                    aria-label={t('increaseQty')}
-                                                    disabled={
-                                                        !!product &&
-                                                        product.stock !== null &&
-                                                        item.quantity >= product.stock
-                                                    }
-                                                    onClick={() => updateQuantity(item.productId, item.quantity + 1)}
-                                                >
-                                                    <Plus className="h-3 w-3" />
-                                                </Button>
-                                                <Button
-                                                    size="icon"
-                                                    variant="ghost"
-                                                    className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                    aria-label={t('removeFromCart')}
-                                                    onClick={() => removeItem(item.productId)}
-                                                >
-                                                    <Trash2 className="h-3 w-3" />
-                                                </Button>
-                                            </div>
-                                        </div>
-                                    )
-                                })}
-                            </div>
-                        )}
-                    </ScrollArea>
+            <ProductGrid catalog={catalog} onAdd={addItem} />
 
-                    {/* Summary (preview: the server prices the sale) */}
-                    {items.length > 0 && (
-                        <>
-                            <Separator className="my-4" />
-                            <div className="space-y-3">
-                                <div className="flex justify-between text-sm">
-                                    <span>{t('subtotal')}</span>
-                                    <span className="font-medium">{money(totals.subtotal)}</span>
-                                </div>
-                                <div className="flex justify-between text-sm">
-                                    <span>{t('tax')}</span>
-                                    <span className="font-medium">{money(totals.tax)}</span>
-                                </div>
-                                <div className="flex justify-between items-center text-sm">
-                                    <span>{t('discount')}</span>
-                                    <Input
-                                        type="number"
-                                        aria-label={t('discount')}
-                                        value={discount}
-                                        onChange={e => setGlobalDiscount(Number(e.target.value) || 0)}
-                                        className="w-24 h-8 text-right"
-                                        min="0"
-                                        step={priceStep}
-                                    />
-                                </div>
-                                <Separator />
-                                <div className="flex justify-between text-lg font-bold">
-                                    <span>{t('total')}</span>
-                                    <span className="text-emerald-600">{money(totals.total)}</span>
-                                </div>
-                                <p className="text-xs text-muted-foreground">{t('estimateHint')}</p>
+            <CartBubble
+                itemCount={items.length}
+                total={totals.total}
+                lines={lines.flatMap(({ item, product }) =>
+                    product ? [{ productId: item.productId, name: product.name, quantity: item.quantity }] : []
+                )}
+                hasProblem={blocked}
+                openTabsLabel={
+                    openTabs.data && openTabs.data.total > 0
+                        ? tTabs('openTab') + ` (${openTabs.data.total})`
+                        : undefined
+                }
+                onClick={() => setShowCart(true)}
+            />
 
-                                <Button
-                                    className="w-full"
-                                    size="lg"
-                                    onClick={() => setShowPaymentDialog(true)}
-                                    disabled={items.length === 0 || blocked}
-                                >
-                                    <CreditCard className="mr-2 h-5 w-5" />
-                                    {t('checkout')}
-                                </Button>
-                            </div>
-                        </>
-                    )}
-                </CardContent>
-            </Card>
+            <CartSheet
+                open={showCart}
+                onOpenChange={setShowCart}
+                lines={lines}
+                lookupSettled={lookupSettled}
+                problemWith={problemWith}
+                totals={totals}
+                discount={discount}
+                onDiscountChange={setGlobalDiscount}
+                onUpdateQuantity={updateQuantity}
+                onRemove={removeItem}
+                customers={activeCustomers}
+                selectedCustomer={selectedCustomer}
+                onSelectCustomer={setSelectedCustomer}
+                blocked={blocked}
+                showPaymentDialog={showPaymentDialog}
+                onShowPaymentDialog={setShowPaymentDialog}
+                paymentMethod={paymentMethod}
+                onPaymentMethodChange={setPaymentMethod}
+                processing={processing}
+                onCheckout={handleCheckout}
+                openTabs={openTabs.data?.data ?? []}
+                openTabsLoading={!openTabs.data}
+                onOpenNewTab={() => setShowOpenTabDialog(true)}
+                onSelectTab={tabId => {
+                    setSelectedTabId(tabId)
+                    setShowCart(false)
+                }}
+                onAddToTab={() => setShowAddToTabDialog(true)}
+                canAddToTab={lines.length > 0 && !blocked}
+            />
 
-            {/* Payment Dialog */}
-            <Dialog open={showPaymentDialog} onOpenChange={open => !processing && setShowPaymentDialog(open)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>{t('completePayment')}</DialogTitle>
-                        <DialogDescription>
-                            {t('estimatedTotal')}{' '}
-                            <span className="text-lg font-bold text-emerald-600">{money(totals.total)}</span>
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label className="text-foreground font-semibold">{t('paymentMethod')}</Label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {PAYMENT_ICONS.map(({ value, icon: Icon }) => (
-                                    <Button
-                                        key={value}
-                                        variant={paymentMethod === value ? 'default' : 'outline'}
-                                        aria-pressed={paymentMethod === value}
-                                        className="flex flex-col h-auto py-4"
-                                        onClick={() => setPaymentMethod(value)}
-                                    >
-                                        <Icon className="h-6 w-6 mb-1" />
-                                        <span className="text-xs">{tc(`payment.${value}`)}</span>
-                                    </Button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" disabled={processing} onClick={() => setShowPaymentDialog(false)}>
-                            {tc('cancel')}
-                        </Button>
-                        <Button onClick={handleCheckout} disabled={processing}>
-                            {processing ? t('processing') : t('completeOrder')}
-                        </Button>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <OpenTabDialog
+                open={showOpenTabDialog}
+                onOpenChange={setShowOpenTabDialog}
+                customers={activeCustomers}
+                onOpened={() => openTabs.reload()}
+            />
+
+            <AddToTabDialog
+                open={showAddToTabDialog}
+                onOpenChange={setShowAddToTabDialog}
+                openTabs={openTabs.data?.data ?? []}
+                customers={activeCustomers}
+                items={items.map(item => ({ product_id: item.productId, quantity: item.quantity }))}
+                onAdded={() => {
+                    clearCart()
+                    setShowCart(false)
+                    openTabs.reload()
+                    catalog.reload()
+                }}
+            />
+
+            <TabDetailSheet
+                tabId={selectedTabId}
+                onClose={() => setSelectedTabId(null)}
+                onChanged={() => {
+                    openTabs.reload()
+                    catalog.reload()
+                }}
+            />
         </div>
     )
 }

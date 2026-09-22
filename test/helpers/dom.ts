@@ -16,6 +16,28 @@ export function setupDom(): void {
         disconnect() {}
     }
     Object.assign(globalThis, { ResizeObserver: ResizeObserverStub })
+
+    // Infinite-scroll sentinels (components/pos/product-grid.tsx) use IntersectionObserver, which happy-dom does not
+    // implement either. This stub reports "intersecting" as soon as something is observed, so a mounted sentinel
+    // immediately asks the hook for the next page — good enough to exercise pagination without a real scroll container.
+    class IntersectionObserverStub {
+        #callback: IntersectionObserverCallback
+        constructor(callback: IntersectionObserverCallback) {
+            this.#callback = callback
+        }
+        observe(target: Element) {
+            this.#callback(
+                [{ isIntersecting: true, target } as IntersectionObserverEntry],
+                this as unknown as IntersectionObserver
+            )
+        }
+        unobserve() {}
+        disconnect() {}
+        takeRecords(): IntersectionObserverEntry[] {
+            return []
+        }
+    }
+    Object.assign(globalThis, { IntersectionObserver: IntersectionObserverStub })
     Object.assign(window.HTMLElement.prototype, {
         scrollIntoView: () => {},
         hasPointerCapture: () => false,

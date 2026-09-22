@@ -30,8 +30,8 @@ navegador ── lib/api/* (fetch) ──▶ proxy.ts ──▶ app/api/v1/**/ro
 | `lib/server/errors.ts` | `AppError`, mapeo de códigos de Postgres, `assertNoError()` |
 | `lib/server/supabase.ts` | Cliente tipado (`SupabaseClient<Database>`) con las cookies del request: aplica RLS. Es el único que reciben los servicios |
 | `lib/server/supabase-admin.ts` | Cliente `service_role`. **Solo** lo usa `services/users.ts` para invitar |
-| `lib/server/services/*` | `products`, `categories`, `customers`, `suppliers`, `inventory`, `orders`, `sales`, `reports`, `settings`, `users`, `auth` |
-| `lib/validation/*` | Esquemas zod compartidos cliente/servidor (`common`, `resources`, `reports`) |
+| `lib/server/services/*` | `products` (incluye `listTopProducts`), `categories`, `customers`, `suppliers`, `inventory`, `orders`, `sales`, `tabs`, `reports`, `settings`, `users`, `auth` |
+| `lib/validation/*` | Esquemas zod compartidos cliente/servidor (`common`, `resources`, `tabs`, `reports`) |
 | `lib/api/*` | Cliente `fetch` tipado (`client.ts`, `ApiError`, `errorMessage`) y un módulo por recurso |
 | `app/auth/confirm/route.ts` | Destino de los correos de invitación y recuperación: `verifyOtp(token_hash)` en el servidor → cookie de sesión → `/reset-password` |
 | `supabase/templates/*.html` | Plantillas de esos correos (en un proyecto hospedado hay que pegarlas en *Authentication → Email Templates*) |
@@ -48,6 +48,7 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | `auth/password/reset` | POST | cajero | Requiere la sesión creada por `/auth/confirm` |
 | `me` | GET · PATCH | cajero | GET: sesión actual. PATCH `{ locale: 'es' \| 'en' }` → `profiles.locale` + cookie `NEXT_LOCALE` |
 | `products`, `products/[id]` | GET · POST/PATCH/DELETE | cajero · gerente | `?category_id&active&ids`; DELETE = borrado lógico. Lista con `stock` |
+| `products/top` | GET | cajero | RPC `top_selling_products` (`SECURITY DEFINER`, toda la tienda); `?days&limit` (máx. 366 / 20) |
 | `categories`, `categories/[id]` | GET · POST/PATCH/DELETE | cajero · gerente | Lista con `product_count`; DELETE falla con 409 si tiene productos |
 | `customers`, `customers/[id]` | GET/POST/PATCH | cajero | `total_spent`/`loyalty_points` no son escribibles |
 | `suppliers`, `suppliers/[id]` | GET/POST/PATCH | gerente | |
@@ -56,6 +57,13 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | `sales` | POST | cajero | RPC `create_sale`; solo ids y cantidades; devuelve la orden con totales calculados por la BD |
 | `orders`, `orders/[id]` | GET | cajero | Cajero: solo las suyas (RLS). `?status&customer_id&from&to&q` (q = número de orden) |
 | `orders/[id]/refund` | POST | gerente | RPC `refund_order`; `{ reason }`; idempotente |
+| `tabs`, `tabs/[id]` | GET/POST · GET | cajero | Cuentas abiertas ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)); `?status`; el detalle incluye ítems, personas, pagos y totales (`tab_summary`) |
+| `tabs/[id]/items` | POST | cajero | RPC `tab_add_items` |
+| `tabs/[id]/items/[itemId]` | DELETE | gerente | RPC `tab_remove_item`; `{ quantity, reason }` |
+| `tabs/[id]/members` | POST | cajero | RPC `tab_add_members`; `{ names: string[] }` |
+| `tabs/[id]/discount` | POST | cajero | RPC `tab_set_discount`; solo sin pagos |
+| `tabs/[id]/payments` | POST | cajero | RPC `tab_pay`; cierra la cuenta sola cuando el saldo llega a 0 |
+| `tabs/[id]/void` | POST | gerente | RPC `void_tab`; `{ reason }`; solo sin pagos |
 | `dashboard` | GET | cajero | RPC `dashboard_summary`; el cajero ve solo sus ventas |
 | `reports` | GET | gerente | RPC `sales_report`; `?from&to` (≤ 366 días) |
 | `settings` | GET · PATCH | cajero · admin | Una fila JSONB por clave; valores inválidos caen al valor por defecto |
@@ -111,6 +119,8 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 
 - `hooks/use-api-query.ts`: lectura con cancelación, ignora respuestas obsoletas, conserva los datos previos mientras carga y nunca llama a
   `setState` de forma síncrona en el efecto (regla `react-hooks/set-state-in-effect`).
+- `hooks/use-infinite-api-list.ts`: igual que `use-api-query` pero acumulando páginas (scroll infinito del catálogo del POS); reinicia en la
+  página 1 al cambiar la búsqueda/categoría o al llamar `reload()`.
 - `components/session-provider.tsx`: `useSession()` (usuario y ajustes) y `useMoney()` (moneda de los ajustes). El layout servidor los rellena;
   `router.refresh()` los actualiza tras guardar `/settings`.
 - `stores/cart.ts`: **solo ids, cantidades y descuentos** (sin precios ni totales). El POS consulta precio y stock en vivo con `products?ids=` y
@@ -120,7 +130,7 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 
 ## Límites conocidos
 
-- El selector de clientes del POS carga los 100 primeros (sin búsqueda); el catálogo del POS muestra hasta 100 productos (avisa cuando hay más).
+- El selector de clientes del POS carga los 100 primeros (sin búsqueda); el catálogo del POS pagina de a 30 con scroll infinito (el máximo del API sigue siendo 100 por página).
 - La búsqueda de órdenes es solo por número (antes también por nombre de cliente).
 - El enlace de invitación es de un solo uso: un escáner de correo que lo abra antes lo consume (el usuario pide otro).
 - El límite de intentos de login es el de Supabase Auth; no hay uno propio.

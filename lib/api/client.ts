@@ -102,8 +102,9 @@ export async function apiPatch<T = void>(path: string, body: unknown): Promise<T
     return ((await request('PATCH', path, { body })) as Single<T> | undefined)?.data as T
 }
 
-export async function apiDelete(path: string): Promise<void> {
-    await request('DELETE', path)
+/** Most DELETEs carry no body and return 204; a few (e.g. removing a tab line) need a reason and return the updated resource. */
+export async function apiDelete<T = void>(path: string, body?: unknown): Promise<T> {
+    return ((await request('DELETE', path, { body })) as Single<T> | undefined)?.data as T
 }
 
 function currentLocale(): AppLocale {

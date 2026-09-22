@@ -127,6 +127,7 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 | Dashboard/Reportes | Corregido: agregan en SQL, sin reembolsos, umbral por fila y zona horaria de `settings`. "Loyalty Points" = `floor(total_spent)` derivado (D7, sin validar) | [dashboard](docs/03-modulos/dashboard.md), [reportes](docs/03-modulos/reportes.md) |
 | Órdenes de compra, gastos, variantes | Solo esquema: sin API, UI ni reposición de stock al recibir | [proveedores](docs/03-modulos/proveedores-y-compras.md) |
 | Carrito | Persiste solo ids y cantidades y se vacía en el logout; el total mostrado es una vista previa | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
+| Cuentas abiertas (`tabs`) | El stock baja **al añadir** el producto a la cuenta, no al cerrarla; quitar un ítem (gerente+) o anular la repone. Anular solo funciona **sin pagos** | [cuentas-abiertas](docs/03-modulos/cuentas-abiertas.md) |
 | `next build` / `next dev` | Fallan si falta alguna de las 4 variables (el error nombra cuál). `next dev` no debe escribir en `AGENTS.md` (`agentRules: false`) | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
 | Impresión | Solo `window.print()` en el detalle de orden; no hay recibo | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
 | Cookies de sesión | `@supabase/ssr` las crea `httpOnly: false`; `lib/auth/cookie-options.ts` las fuerza a `HttpOnly` (y `Secure` cuando `APP_URL` es https). Mantenerlo | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
@@ -142,6 +143,7 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 |---|---|
 | Añadir o cambiar un endpoint | [08-api](docs/01-arquitectura/08-api.md) |
 | Modificar el cobro, carrito o stock | [pos-checkout](docs/03-modulos/pos-checkout.md), [estado cliente](docs/01-arquitectura/04-estado-cliente.md), [C2](docs/04-auditoria/hallazgos/C2-checkout-no-atomico.md) |
+| Cuentas abiertas, pagos parciales | [cuentas-abiertas](docs/03-modulos/cuentas-abiertas.md) |
 | Reembolsos u órdenes | [ordenes-y-reembolsos](docs/03-modulos/ordenes-y-reembolsos.md) |
 | Cambiar tablas, políticas o triggers | [`docs/02-base-de-datos/`](docs/02-base-de-datos/) completo y [diseño objetivo](docs/06-roadmap/diseno-objetivo-seguridad.md) |
 | Autenticación, sesión, roles | [auth](docs/01-arquitectura/03-autenticacion-y-sesion.md), [C1](docs/04-auditoria/hallazgos/C1-rls-permisivo.md), [H1](docs/04-auditoria/hallazgos/H1-sin-proteccion-servidor.md) |

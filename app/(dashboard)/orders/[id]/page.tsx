@@ -205,6 +205,14 @@ export default function OrderDetailPage() {
                                 </span>
                             </div>
                         )}
+                        {order.tab && (
+                            <div className="flex justify-between">
+                                <span className="text-muted-foreground">{t('tab')}</span>
+                                <span>
+                                    {t('tabValue', { tabNumber: order.tab.tab_number, label: order.tab.label })}
+                                </span>
+                            </div>
+                        )}
                         {order.status === 'refunded' && (
                             <div className="flex justify-between gap-4">
                                 <span className="text-muted-foreground">{t('refundLabel')}</span>
