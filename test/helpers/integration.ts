@@ -90,7 +90,8 @@ export function ensureTestUsers(): Promise<TestUsers> {
             // service_role has no auth.uid(), so the profile trigger lets this through.
             const { error: profileError } = await admin
                 .from('profiles')
-                .update({ role, is_active: key !== 'inactive', locale: 'es' })
+                // en: e2e suites assert English copy; profiles.locale wins over NEXT_LOCALE once signed in.
+                .update({ role, is_active: key !== 'inactive', locale: 'en' })
                 .eq('id', user.id)
             if (profileError) throw profileError
             result[key] = { id: user.id, email }
