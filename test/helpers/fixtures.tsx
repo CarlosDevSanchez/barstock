@@ -3,20 +3,21 @@ import { NextIntlClientProvider } from 'next-intl'
 import type { SessionUser } from '@/components/session-provider'
 import type { AppLocale } from '@/lib/i18n/config'
 import type { ProductListItem } from '@/lib/api/products'
-import type { SettingsInput } from '@/lib/validation/resources'
+import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 import type { Tables } from '@/types/database'
 import en from '@/messages/en.json'
 import es from '@/messages/es.json'
 
 const messages = { en, es } as const
 
-export const settings: SettingsInput = {
+export const settings: SettingsWithLogoUrl = {
     store_name: 'Test Store',
     store_address: '',
     store_phone: '',
     store_email: '',
     store_tax_id: '',
     store_logo_key: '',
+    store_logo_url: null,
     currency: 'USD',
     timezone: 'UTC',
     low_stock_threshold: 10,

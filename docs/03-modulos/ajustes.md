@@ -1,6 +1,8 @@
 # Módulo: Ajustes
 
-> Actualizado en la etapa 3 (Fase 5: NIT y clave de logo) · `app/(dashboard)/settings/page.tsx` · API `GET/PATCH /settings` · Servicio `services/settings.ts` · Confianza: **[Verificado]** (`admin.test.ts`, `rls.test.ts`, e2e).
+> Actualizado en la etapa 3 (Fase 6: subida real del logo) · `app/(dashboard)/settings/page.tsx` · API `GET/PATCH /settings`,
+> `POST/DELETE /settings/logo` · Servicio `services/settings.ts` · Confianza: **[Verificado]** (`admin.test.ts`, `rls.test.ts`,
+> `product-images.test.ts`, e2e).
 
 Antes: la pantalla era decorativa (no persistía nada) y había tres fuentes de "ajustes" desconectadas. Ahora hay **una**: la tabla `settings` (D11: solo BD).
 
@@ -12,7 +14,7 @@ Antes: la pantalla era decorativa (no persistía nada) y había tres fuentes de 
 |---|---|---|
 | `store_name`, `store_address`, `store_phone`, `store_email` | texto (email válido o vacío) | Nombre en la barra lateral |
 | `store_tax_id` | texto ≤ 30, opcional | NIT impreso en el [ticket de 80 mm](ordenes-y-reembolsos.md) |
-| `store_logo_key` | texto ≤ 200, opcional | Clave de storage del logo del ticket; el campo existe desde la Fase 5 pero **la subida es de la Fase 6** (hoy siempre vacío) |
+| `store_logo_key` | texto ≤ 200, **generada por el servidor** (no PATCH-able desde el body; `settingsUpdateSchema` la omite) | Clave de storage del logo del ticket (`settings/logo/{uuid}.ext`, bucket privado de R2); se sube con `POST /settings/logo` (admin, `multipart/form-data`, campo `file`) y se borra con `DELETE /settings/logo`. `getSettings` la traduce a `store_logo_url` (URL firmada, 1 h); sin las 4 variables `R2_*` el endpoint responde `503 storage_not_configured` |
 | `currency` | código ISO 4217 **existente** (`Intl.supportedValuesOf`) | **Todo el dinero de la UI** (`useMoney`); defecto **COP**. Los decimales de cobro salen de `currencyDecimals` / `money_scale` (0 en COP) |
 | `timezone` | zona IANA válida | Agrupación por días en dashboard y reportes (SQL); defecto `America/Bogota` |
 | `tax_rate` | fracción 0–1 (el formulario usa %) | **Tasa por defecto al crear un producto** (cada producto conserva la suya; **no interviene en las ventas**); defecto `0.19` (supuesto D3) |

@@ -24,6 +24,7 @@ import { Badge } from '@/components/ui/badge'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { SelectField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
+import { ProductImageField } from '@/components/product-image-field'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
 import { useMoney, useSession } from '@/components/session-provider'
@@ -35,6 +36,7 @@ import { roleAtLeast } from '@/lib/auth/roles'
 import { suggestSku } from '@/lib/sku'
 import { taxRatePercent } from '@/lib/validation/common'
 import { productCreateSchema } from '@/lib/validation/resources'
+import type { Tables } from '@/types/database'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePagination } from '@/hooks/use-pagination'
@@ -89,6 +91,10 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
     })
     const submitting = form.formState.isSubmitting
 
+    // The image is uploaded/removed only after the product itself is saved (it needs an id): see onSubmit below.
+    const [imageFile, setImageFile] = useState<File | null>(null)
+    const [imageRemoved, setImageRemoved] = useState(false)
+
     // Autofill the SKU from the name while creating a product, but only until the user edits the SKU by
     // hand: `resetField` both sets the value and keeps `isDirty` false (its default `keepDirty: false`),
     // so it keeps following the name; a real edit through the input marks the field dirty and this stops.
@@ -105,15 +111,15 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
     }
 
     const onSubmit = form.handleSubmit(async values => {
+        let saved: Tables<'products'>
         try {
             if (product) {
-                await productsApi.update(product.id, values)
+                saved = await productsApi.update(product.id, values)
                 toast.success(t('updated'))
             } else {
-                await productsApi.create(values)
+                saved = await productsApi.create(values)
                 toast.success(t('created'))
             }
-            onSaved()
         } catch (error: unknown) {
             // The API turns a duplicate SKU (Postgres 23505) into a 409; surface it on the SKU field
             // with a ready-to-use alternative instead of a generic toast.
@@ -123,7 +129,18 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                 return
             }
             toast.error(errorMessage(error, t('saveFailed')))
+            return
         }
+
+        // The product is already saved at this point: an image failure is reported but never blocks onSaved().
+        try {
+            if (imageFile) await productsApi.uploadImage(saved.id, imageFile)
+            else if (imageRemoved) await productsApi.deleteImage(saved.id)
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('imageSaveFailed')))
+        }
+
+        onSaved()
     })
 
     return (
@@ -136,6 +153,26 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate className="flex flex-col flex-1 overflow-hidden">
                         <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
+                            <ProductImageField
+                                label={t('image')}
+                                existingUrl={product?.image_url ?? null}
+                                file={imageFile}
+                                removed={imageRemoved}
+                                onSelect={file => {
+                                    setImageFile(file)
+                                    setImageRemoved(false)
+                                }}
+                                onRemove={() => {
+                                    setImageFile(null)
+                                    setImageRemoved(true)
+                                }}
+                                onUndo={() => setImageFile(null)}
+                                disabled={submitting}
+                                addLabel={t('addImage')}
+                                changeLabel={t('changeImage')}
+                                removeLabel={t('removeImage')}
+                                resizeErrorLabel={t('imageResizeFailed')}
+                            />
                             <TextField name="name" label={t('name')} className="col-span-2" />
                             <TextField name="description" label={t('description')} className="col-span-2" />
                             {product ? (
@@ -196,6 +233,30 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                 </Form>
             </DialogContent>
         </Dialog>
+    )
+}
+
+/** 40px thumbnail for the products table: falls back to the reserve icon when there is no image, or it fails to load. */
+function ProductThumbnail({ product }: { product: ProductListItem }) {
+    const [failed, setFailed] = useState(false)
+    const showImage = !!product.image_url && !failed
+
+    return (
+        <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+            {showImage ? (
+                // eslint-disable-next-line @next/next/no-img-element -- signed, arbitrary-sized R2 thumbnail
+                <img
+                    src={product.image_url ?? undefined}
+                    alt=""
+                    loading="lazy"
+                    decoding="async"
+                    className="h-full w-full object-cover"
+                    onError={() => setFailed(true)}
+                />
+            ) : (
+                <Package className="h-4 w-4 text-emerald-600" />
+            )}
+        </div>
     )
 }
 
@@ -278,9 +339,7 @@ export default function ProductsPage() {
                                     <TableRow key={product.id}>
                                         <TableCell>
                                             <div className="flex items-center gap-3">
-                                                <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
-                                                    <Package className="h-4 w-4 text-emerald-600" />
-                                                </div>
+                                                <ProductThumbnail product={product} />
                                                 <div>
                                                     <p className="font-medium">{product.name}</p>
                                                     <p className="text-sm text-muted-foreground">

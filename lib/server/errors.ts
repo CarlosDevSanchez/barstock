@@ -6,9 +6,12 @@ export type ErrorCode =
     | 'forbidden'
     | 'not_found'
     | 'conflict'
+    | 'payload_too_large'
+    | 'unsupported_media_type'
     | 'validation_failed'
     | 'too_many_requests'
     | 'unprocessable'
+    | 'storage_not_configured'
     | 'internal_error'
 
 const STATUS: Record<ErrorCode, number> = {
@@ -17,9 +20,12 @@ const STATUS: Record<ErrorCode, number> = {
     forbidden: 403,
     not_found: 404,
     conflict: 409,
+    payload_too_large: 413,
+    unsupported_media_type: 415,
     validation_failed: 422,
     too_many_requests: 429,
     unprocessable: 422,
+    storage_not_configured: 503,
     internal_error: 500
 }
 
@@ -45,6 +51,11 @@ export const tooManyRequests = (message = 'Too many attempts, try again later') 
 export const notFound = (message = 'Not found') => new AppError('not_found', message)
 export const conflict = (message: string) => new AppError('conflict', message)
 export const unprocessable = (message: string) => new AppError('unprocessable', message)
+export const payloadTooLarge = (message = 'File is too large') => new AppError('payload_too_large', message)
+export const unsupportedMediaType = (message = 'Unsupported file type') =>
+    new AppError('unsupported_media_type', message)
+/** The 4 R2 env vars (lib/env/schema.ts) are not set: image endpoints are disabled until they are. */
+export const storageNotConfigured = () => new AppError('storage_not_configured', 'Image storage is not configured')
 
 /** Structural shape of a PostgREST / Postgres error (supabase-js does not throw: it returns `{ error }`). */
 export interface DatabaseError {

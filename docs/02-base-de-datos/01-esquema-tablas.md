@@ -23,7 +23,10 @@ Lo crea un trigger al nacer el usuario; el rol solo lo cambia un admin (trigger)
 **`categories`** — `name` NOT NULL, `description`, `parent_id` → `categories` (jerarquía; sin UI).
 
 **`products`** — `name` NOT NULL, `description`, `sku` UNIQUE NOT NULL, `barcode` UNIQUE, `category_id` → `categories`, `cost_price` y `selling_price` `NUMERIC(14,2)` NOT NULL default 0 (`CHECK ≥ 0`),
-**`tax_rate` `NUMERIC(6,4)` NOT NULL default 0 (`CHECK 0–1`, fracción)**, `image_url`, `is_active` NOT NULL default true, **`deleted_at`** (borrado lógico). Un trigger crea su fila de `inventory`.
+**`tax_rate` `NUMERIC(6,4)` NOT NULL default 0 (`CHECK 0–1`, fracción)**, `image_url` (columna vieja, en desuso, ya no se escribe),
+**`image_key`** (Fase 6: clave de R2, `CHECK image_key ~ '^products/[0-9a-f-]{36}/[0-9a-f-]{36}\.(webp|jpg|png)$'`, generada por el
+servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), `is_active` NOT NULL default true, **`deleted_at`**
+(borrado lógico). Un trigger crea su fila de `inventory`.
 
 **`product_variants`** — `product_id` → `products` CASCADE NOT NULL, `name`, `variant_type` (texto libre: "size", "color"), `sku` UNIQUE, `barcode` UNIQUE, `cost_price`, `selling_price` (nullables, `CHECK ≥ 0`). Sin UI ni venta desde el POS (D10).
 

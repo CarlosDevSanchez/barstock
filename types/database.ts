@@ -463,6 +463,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          image_key: string | null
           image_url: string | null
           is_active: boolean
           name: string
@@ -479,6 +480,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          image_key?: string | null
           image_url?: string | null
           is_active?: boolean
           name: string
@@ -495,6 +497,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          image_key?: string | null
           image_url?: string | null
           is_active?: boolean
           name?: string

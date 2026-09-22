@@ -210,7 +210,13 @@
     "deleteTitle": "¿Eliminar producto?",
     "deleteBody": "ya no aparecerá en el catálogo ni en la caja. Su historial de ventas se conserva.",
     "deleted": "Producto eliminado correctamente",
-    "deleteFailed": "No se pudo eliminar el producto"
+    "deleteFailed": "No se pudo eliminar el producto",
+    "image": "Imagen",
+    "addImage": "Añadir imagen",
+    "changeImage": "Cambiar imagen",
+    "removeImage": "Quitar imagen",
+    "imageResizeFailed": "No se pudo procesar esa imagen. Prueba con otro archivo.",
+    "imageSaveFailed": "El producto se guardó, pero no se pudo guardar la imagen."
   },
   "settings": {
     "title": "Ajustes",
@@ -238,7 +244,14 @@
     "footer": "Pie",
     "saveSettings": "Guardar ajustes",
     "saved": "¡Ajustes guardados correctamente!",
-    "saveFailed": "No se pudieron guardar los ajustes"
+    "saveFailed": "No se pudieron guardar los ajustes",
+    "logo": "Logotipo",
+    "logoDesc": "Se muestra en el ticket impreso",
+    "logoSaveFailed": "Los ajustes se guardaron, pero no se pudo guardar el logotipo.",
+    "addLogo": "Añadir logotipo",
+    "changeLogo": "Cambiar logotipo",
+    "removeLogo": "Quitar logotipo",
+    "logoResizeFailed": "No se pudo procesar esa imagen. Prueba con otro archivo."
   },
   "categories": {
     "title": "Categorías",

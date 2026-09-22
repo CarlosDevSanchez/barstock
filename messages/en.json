@@ -210,7 +210,13 @@
     "deleteTitle": "Delete product?",
     "deleteBody": "will no longer appear in the catalog or the POS. Its sales history is kept.",
     "deleted": "Product deleted successfully",
-    "deleteFailed": "Failed to delete product"
+    "deleteFailed": "Failed to delete product",
+    "image": "Image",
+    "addImage": "Add Image",
+    "changeImage": "Change Image",
+    "removeImage": "Remove Image",
+    "imageResizeFailed": "Could not process that image. Try a different file.",
+    "imageSaveFailed": "The product was saved, but the image could not be saved."
   },
   "settings": {
     "title": "Settings",
@@ -238,7 +244,14 @@
     "footer": "Footer",
     "saveSettings": "Save Settings",
     "saved": "Settings saved successfully!",
-    "saveFailed": "Failed to save settings"
+    "saveFailed": "Failed to save settings",
+    "logo": "Logo",
+    "logoDesc": "Shown on the printed receipt",
+    "logoSaveFailed": "Settings were saved, but the logo could not be saved.",
+    "addLogo": "Add Logo",
+    "changeLogo": "Change Logo",
+    "removeLogo": "Remove Logo",
+    "logoResizeFailed": "Could not process that image. Try a different file."
   },
   "categories": {
     "title": "Categories",

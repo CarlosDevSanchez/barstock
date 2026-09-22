@@ -10,8 +10,21 @@
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Pública** | Clave `anon` (JWT). No es secreta por diseño: la seguridad depende de RLS |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Solo servidor** | Clave `service_role`. **Salta RLS.** Se usa únicamente para invitar usuarios (`auth.admin`) |
 | `APP_URL` | Solo servidor | URL pública de la app; base de los enlaces de invitación y de restablecer contraseña |
+| `R2_ACCOUNT_ID` | Solo servidor | Cuenta de Cloudflare R2 (imágenes de producto y logo del ticket, Fase 6). **Opcional como grupo** |
+| `R2_ACCESS_KEY_ID` | Solo servidor | Token de API de R2 (Object Read & Write, limitado a `R2_BUCKET`). **Opcional como grupo** |
+| `R2_SECRET_ACCESS_KEY` | Solo servidor | Secreto del token anterior. **Opcional como grupo** |
+| `R2_BUCKET` | Solo servidor | Bucket privado (nunca público) donde se guardan las imágenes. **Opcional como grupo** |
 
 Plantilla versionada: [`.env.example`](../../.env.example). Copiarla a `.env.local`.
+
+### R2 (imágenes), opcional como grupo
+
+Las cuatro variables `R2_*` se validan juntas con `superRefine` en `lib/env/schema.ts`: **las cuatro o ninguna**. Sin ellas, `next
+dev`/`next build` funcionan igual (a diferencia de las otras variables, que son obligatorias), y `lib/server/storage.ts` responde
+`503 storage_not_configured` en los endpoints de imagen (`app/api/v1/products/[id]/image`, `app/api/v1/settings/logo`); la UI oculta el
+selector de imagen en ese caso. El bucket es **privado**: las imágenes se sirven con URL firmada (1 h), nunca públicas. El token de R2
+debe estar limitado a ese único bucket con permiso "Object Read & Write" (no se crea el token real en este repositorio, solo se
+documenta el requisito).
 
 ## Validación
 
@@ -49,7 +62,8 @@ Plantilla versionada: [`.env.example`](../../.env.example). Copiarla a `.env.loc
 `next.config.ts` añade CSP, `frame-ancestors 'none'`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, HSTS y
 `Permissions-Policy`. `connect-src` incluye el origen de `NEXT_PUBLIC_SUPABASE_URL` **mientras el navegador siga llamando a Supabase
 directamente**; se retira cuando la UI solo hable con `/api/v1` (Paso 5). `script-src` conserva `'unsafe-inline'`: una CSP con nonce
-obligaría a renderizar dinámicamente todas las páginas.
+obligaría a renderizar dinámicamente todas las páginas. `img-src` añade `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` **solo
+cuando `R2_ACCOUNT_ID` está definido** (derivado del entorno en `next.config.ts`; con el grupo `R2_*` ausente no añade nada).
 
 ## Rotación y compromiso de claves
 

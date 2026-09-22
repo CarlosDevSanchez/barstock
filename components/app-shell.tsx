@@ -20,7 +20,7 @@ import { apiPatch, apiPost, errorMessage } from '@/lib/api/client'
 import { roleAtLeast, type UserRole } from '@/lib/auth/roles'
 import { APP_LOCALES, type AppLocale } from '@/lib/i18n/config'
 import { useCartStore } from '@/stores/cart'
-import type { SettingsInput } from '@/lib/validation/resources'
+import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 import { SessionProvider, type SessionUser } from '@/components/session-provider'
 import { useTheme } from 'next-themes'
 import {
@@ -74,7 +74,7 @@ const navItems: Array<{
 
 interface AppShellProps {
     user: SessionUser
-    settings: SettingsInput
+    settings: SettingsWithLogoUrl
     children: ReactNode
 }
 

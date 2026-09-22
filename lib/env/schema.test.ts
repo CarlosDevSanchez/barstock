@@ -50,3 +50,35 @@ describe('parseEnv', () => {
         expect(parseEnv(serverEnvSchema, { ...valid, PATH: '/bin' })).toEqual(valid)
     })
 })
+
+describe('R2 variables (lib/server/storage.ts), optional as a group', () => {
+    const r2 = {
+        R2_ACCOUNT_ID: 'account',
+        R2_ACCESS_KEY_ID: 'key-id',
+        R2_SECRET_ACCESS_KEY: 'secret',
+        R2_BUCKET: 'bucket'
+    }
+
+    test('none of the four is valid: build/CI must work before the bucket is provisioned', () => {
+        expect(parseEnv(serverEnvSchema, valid)).toMatchObject(valid)
+    })
+
+    test('all four together are valid', () => {
+        expect(parseEnv(serverEnvSchema, { ...valid, ...r2 })).toEqual({ ...valid, ...r2 })
+    })
+
+    test('a partial set is rejected, naming every missing R2 variable', () => {
+        let error: unknown
+        try {
+            parseEnv(serverEnvSchema, { ...valid, R2_ACCOUNT_ID: r2.R2_ACCOUNT_ID, R2_BUCKET: r2.R2_BUCKET })
+        } catch (e: unknown) {
+            error = e
+        }
+        expect(error).toBeInstanceOf(EnvError)
+        expect((error as EnvError).problems).toEqual(['R2_ACCESS_KEY_ID: missing', 'R2_SECRET_ACCESS_KEY: missing'])
+    })
+
+    test('a single R2 variable alone is rejected', () => {
+        expect(() => parseEnv(serverEnvSchema, { ...valid, R2_BUCKET: r2.R2_BUCKET })).toThrow(/R2_ACCOUNT_ID: missing/)
+    })
+})

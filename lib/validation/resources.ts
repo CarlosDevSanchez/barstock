@@ -11,7 +11,6 @@ import {
     uuidList,
     nullableEmail,
     nullableText,
-    nullableUrl,
     nullableUuid,
     positiveInt,
     requiredText,
@@ -45,7 +44,8 @@ export const productCreateSchema = z.object({
     cost_price: money.optional(),
     selling_price: money,
     tax_rate: taxRate.optional(),
-    image_url: nullableUrl,
+    // image_url is legacy (unused, kept in the DB) and image_key is server-generated (never client-writable): see
+    // app/api/v1/products/[id]/image/route.ts and lib/server/storage.ts.
     is_active: z.boolean().optional()
 })
 export const productUpdateSchema = productCreateSchema.partial()
@@ -149,7 +149,9 @@ export const settingsSchema = z.object({
     tax_rate: taxRate,
     receipt_template: z.object({ header: z.string().trim().max(200), footer: z.string().trim().max(200) })
 })
-export const settingsUpdateSchema = settingsSchema.partial()
+// store_logo_key is server-generated (never client-writable): see app/api/v1/settings/logo/route.ts and
+// lib/server/storage.ts. It stays in `settingsSchema` (getSettings validates whatever is stored under that key).
+export const settingsUpdateSchema = settingsSchema.omit({ store_logo_key: true }).partial()
 export type SettingsInput = z.infer<typeof settingsSchema>
 export type SettingKey = keyof SettingsInput
 

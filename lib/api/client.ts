@@ -20,6 +20,8 @@ export type Query = Record<string, QueryValue>
 
 interface RequestOptions {
     body?: unknown
+    /** Multipart body (image uploads): sent as-is, letting the browser set the multipart boundary Content-Type. */
+    formData?: FormData
     query?: Query
     signal?: AbortSignal
 }
@@ -63,11 +65,15 @@ function handleUnauthorized(path: string) {
     window.location.assign(`/login?next=${encodeURIComponent(next)}`)
 }
 
-async function request(method: string, path: string, { body, query, signal }: RequestOptions = {}): Promise<unknown> {
+async function request(
+    method: string,
+    path: string,
+    { body, formData, query, signal }: RequestOptions = {}
+): Promise<unknown> {
     const response = await fetch(buildUrl(path, query), {
         method,
-        headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
+        headers: formData || body === undefined ? undefined : { 'Content-Type': 'application/json' },
+        body: formData ?? (body === undefined ? undefined : JSON.stringify(body)),
         credentials: 'same-origin',
         signal
     })
@@ -96,6 +102,11 @@ export async function apiList<T, S = undefined>(
 
 export async function apiPost<T = void>(path: string, body?: unknown): Promise<T> {
     return ((await request('POST', path, { body })) as Single<T> | undefined)?.data as T
+}
+
+/** POST a multipart body (image uploads): see `readUploadedFile` on the server. */
+export async function apiPostForm<T = void>(path: string, formData: FormData): Promise<T> {
+    return ((await request('POST', path, { formData })) as Single<T> | undefined)?.data as T
 }
 
 export async function apiPatch<T = void>(path: string, body: unknown): Promise<T> {

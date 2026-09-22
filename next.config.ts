@@ -3,17 +3,22 @@ import createNextIntlPlugin from 'next-intl/plugin'
 import { parseEnv, serverEnvSchema } from './lib/env/schema'
 
 // Fail fast (dev and build) naming any missing variable, instead of `supabaseUrl is required` deep inside a page.
-parseEnv(serverEnvSchema, process.env)
+const env = parseEnv(serverEnvSchema, process.env)
 const isDev = process.env.NODE_ENV === 'development'
+
+// Product/logo images are signed R2 URLs, fetched directly from Cloudflare (never proxied through this origin):
+// img-src needs that host. R2_ACCOUNT_ID is optional as a group (lib/env/schema.ts), so this must not throw when
+// it is absent — the extra origin is just omitted, same as the image endpoints answering 503 in that case.
+const r2ImageOrigin = env.R2_ACCOUNT_ID ? ` https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : ''
 
 // Everything is self-hosted (fonts come from next/font). Next.js needs inline scripts/styles for hydration;
 // a nonce-based CSP would force dynamic rendering of every page, so 'unsafe-inline' stays for now.
-// The browser only talks to this origin (/api/v1); Supabase is reached from the server.
+// The browser only talks to this origin (/api/v1) and, for product/logo images, directly to R2.
 const contentSecurityPolicy = [
     "default-src 'self'",
     `script-src 'self' 'unsafe-inline'${isDev ? " 'unsafe-eval'" : ''}`,
     "style-src 'self' 'unsafe-inline'",
-    "img-src 'self' data: blob:",
+    `img-src 'self' data: blob:${r2ImageOrigin}`,
     "font-src 'self' data:",
     `connect-src 'self'${isDev ? ' ws://localhost:* ws://127.0.0.1:*' : ''}`,
     "object-src 'none'",
