@@ -34,7 +34,7 @@ recuperar contraseña) no se pueden hacer desde la aplicación. Riesgo reputacio
 1. Implementar `/reset-password` (`supabase.auth.updateUser({ password })` tras el enlace del correo) — **prioridad inmediata**.
 2. Persistir ajustes en la tabla `settings` y consumirlos (tasa, umbral, moneda, recibo).
 3. Pantalla de inventario con: recepción, ajuste con motivo, edición de umbral y alta de inventario al crear producto.
-4. Flujo de órdenes de compra con recepción que sume stock ([diagrama](../../03-modulos/proveedores-y-compras.md#flujo-previsto-no-construido)).
+4. Flujo de órdenes de compra con recepción que sume stock ([diagrama](../../03-modulos/proveedores-y-compras.md#órdenes-de-compra-y-gastos-solo-esquema)).
 5. Mantener `total_spent`/`loyalty_points` derivados (trigger o vista).
 6. **Corregir el README** para reflejar el estado real (ver [readme-vs-realidad](../readme-vs-realidad.md)).
 

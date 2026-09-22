@@ -1,5 +1,7 @@
 # README vs. realidad
 
+> **Registro histórico.** Compara el `README.md` **original** (commit `54962b9`) con la realidad de entonces. El `README.md` actual se reescribió en la etapa 1 con el estado real; muchas de las discrepancias de abajo ya no existen.
+
 > Comparación de `README.md` (raíz) con el código en el commit `54962b9`. Confianza: **[Verificado]** salvo indicación.
 > Objetivo: que el README deje de afirmar capacidades inexistentes. Ver hallazgo [M12](hallazgos/medios-y-bajos.md) y [H4](hallazgos/H4-flujos-incompletos.md).
 

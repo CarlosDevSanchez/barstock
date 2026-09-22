@@ -41,13 +41,13 @@ await supabase.from('settings').update({ value: '"x"' }).eq('key', 'tax_rate')
 await supabase.from('payments').delete().neq('id', '00000000-0000-0000-0000-000000000000')
 ```
 
-Y en el SQL Editor, para auditar el estado real: consultas de [`03-rls-y-politicas.md`](../../02-base-de-datos/03-rls-y-politicas.md#cómo-auditar-el-estado-real-ejecutar-en-el-sql-editor-de-supabase).
+Y en el SQL Editor, para auditar el estado real: consultas de [`03-rls-y-politicas.md`](../../02-base-de-datos/03-rls-y-politicas.md#cómo-auditar-el-estado-real).
 No ejecutar los `delete` en producción.
 
 ## Recomendación
 
 1. **Reescribir RLS por rol** con una función auxiliar `SECURITY DEFINER STABLE` (`public.current_role()`) que lea `profiles.role`
-   con `SET search_path = ''`. Aplicar la matriz objetivo de [RLS](../../02-base-de-datos/03-rls-y-politicas.md#matriz-objetivo-propuesta-no-aplicada).
+   con `SET search_path = ''`. Aplicar la matriz objetivo de [RLS](../../02-base-de-datos/03-rls-y-politicas.md#matriz-efectiva).
 2. **Proteger `profiles.role`:** trigger `BEFORE UPDATE` que rechace cambios de `role` salvo que quien actúa sea admin, o política con `WITH CHECK`.
 3. **Cerrar el registro público:** desactivar *Enable sign ups* en Supabase y crear usuarios por invitación desde un admin; o dejar
    el alta y forzar `cashier` + aprobación. Quitar el selector de rol de `/register`.

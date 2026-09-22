@@ -1,5 +1,29 @@
 # Auditoría técnica — barstock
 
+> **Este documento es el registro histórico de la auditoría del commit `54962b9`**: el texto de los hallazgos describe el estado *de entonces*. El **estado actual** de cada uno está en la
+> columna "Estado" de la tabla de hallazgos, y el resumen de lo hecho y lo que queda, en la sección siguiente.
+
+## Estado tras la etapa 1 (actualizado)
+
+| Hallazgo | Antes | Ahora |
+|---|---|---|
+| C1 RLS permisivo | Cualquier autenticado lo leía y escribía todo, incluido su rol; registro abierto | **Verificado**: RLS por rol, alta solo por invitación, rol protegido por trigger |
+| C2 Cobro no atómico | Totales del cliente, 5+ llamadas sin transacción, stock que no bajaba | **Verificado**: RPC transaccionales; precio y totales de la BD; concurrencia probada |
+| C3 Next vulnerable | `next@16.1.6` (2 críticos) | **Corregido**: Next 16.3.5, `bun audit` limpio, auditoría y Dependabot en CI |
+| H1 Sin protección en servidor | Guarda solo en cliente, sesión en `localStorage` | **Verificado**: `proxy.ts` + `route()` + RLS; cookies `HttpOnly` |
+| H2 Sin validación | zod sin usar | **Verificado**: esquemas compartidos + `CHECK`/`NOT NULL` |
+| H3 Impuestos y dinero | Dos criterios de impuestos, floats | En curso: cálculo único en la BD; **la regla fiscal (D3) sigue sin validarse** con el negocio |
+| H4 Flujos incompletos | Recuperar contraseña roto, ajustes falsos, sin alta de stock | En curso: los tres **hechos**; compras y gastos sin UI (etapa 2) |
+| H5 Build sin variables | `supabaseUrl is required` | **Corregido**: validación zod que nombra la variable; build en CI |
+| M1–M18 | Todos abiertos | 11 corregidos o verificados y 7 parciales: [detalle](hallazgos/medios-y-bajos.md) |
+
+**Sigue abierto y fuera de lo que se ha hecho:** aplicar las migraciones a la **base real** (paso controlado: [guía](../05-guias/verificar-checkout.md)), validar con el negocio las reglas D3/D6/D7/D9, monitoreo de errores,
+la primera ejecución real del CI en GitHub, y la etapa 2 (órdenes de compra, gastos, variantes en el POS). Ver el [plan de remediación](../06-roadmap/plan-de-remediacion.md).
+
+---
+
+# Auditoría original (commit `54962b9`)
+
 > **Fecha:** 2026-09-21 · **Commit auditado:** `54962b9` (rama `main`, 2 commits) · **Metodología:** ver abajo
 > Este archivo es el resumen ejecutivo. Cada hallazgo tiene su archivo en [`hallazgos/`](hallazgos/).
 
@@ -60,22 +84,24 @@ Para poder ejecutar las herramientas se instaló `node_modules` con `npm ci` (ig
 | [H3](hallazgos/H3-impuestos-y-dinero.md) | Alto | Lógica de negocio | Impuestos inconsistentes; float; `DECIMAL(5,2)` | M | En curso |
 | [H4](hallazgos/H4-flujos-incompletos.md) | Alto | Funcional | Recuperar contraseña roto; ajustes falsos; sin alta de stock; compras/gastos sin UI | M | En curso |
 | [H5](hallazgos/H5-build-sin-env.md) | Alto | DevOps | El build falla sin variables de entorno | S | Corregido |
-| [M1–M18](hallazgos/medios-y-bajos.md) | Medio/Bajo | Varias | 18 hallazgos menores | S–L | Abierto |
+| [M1–M18](hallazgos/medios-y-bajos.md) | Medio/Bajo | Varias | 18 hallazgos menores | S–L | 11 corregidos/verificados · 7 parciales |
 
 Convención de estado: **Abierto → En curso → Corregido → Verificado**. Al cerrar un hallazgo, actualizar
 esta tabla y su archivo con el commit/PR que lo corrige.
 
 ## Puntuación (subjetiva)
 
-| Área | Nota /10 | Justificación breve |
-|---|---|---|
-| Seguridad | 2 | Sin autorización efectiva, escalada de rol, dependencias vulnerables, sin headers ni validación |
-| Arquitectura | 4 | Ordenada y consistente, pero 100 % cliente, sin capa de datos y con duplicación |
-| Base de datos | 4 | Esquema razonable; sin `CHECK`, sin migraciones, RLS contradictoria |
-| Testing | 0 | Cero pruebas |
-| Performance | 5 | Escala pequeña OK; sin paginación y con agregaciones en el navegador |
-| DevOps | 1 | Sin CI, sin monitoreo, build frágil |
-| Documentación | 4 | README extenso pero inexacto (ver [readme-vs-realidad](readme-vs-realidad.md)) |
+> Columna "Nota": la de la auditoría original. Columna "Ahora": **autoevaluación** tras la etapa 1, no una auditoría independiente; sin ejecución contra producción.
+
+| Área | Nota /10 | Ahora | Justificación breve (original) |
+|---|---|---|---|
+| Seguridad | 2 | 7 | Sin autorización efectiva, escalada de rol, dependencias vulnerables, sin headers ni validación. *Ahora:* RLS por rol probada, cookies `HttpOnly`, headers, validación; falta CSP sin `unsafe-inline`, MFA, rate limiting propio y probarlo en producción |
+| Arquitectura | 4 | 7 | Ordenada y consistente, pero 100 % cliente, sin capa de datos y con duplicación. *Ahora:* API + servicios + RPC; las páginas siguen siendo Client Components |
+| Base de datos | 4 | 8 | Esquema razonable; sin `CHECK`, sin migraciones, RLS contradictoria. *Ahora:* migraciones, integridad, RLS y RPC verificadas; falta aplicarlas a la base real |
+| Testing | 0 | 8 | Cero pruebas. *Ahora:* 264 pruebas (107 unitarias, 21 de componentes, 123 de integración, 13 e2e) (con concurrencia y e2e) y umbral de cobertura; sin pruebas de carga ni de accesibilidad |
+| Performance | 5 | 6 | Escala pequeña OK; sin paginación y con agregaciones en el navegador. *Ahora:* paginación y SQL; sin medir con datos reales |
+| DevOps | 1 | 6 | Sin CI, sin monitoreo, build frágil. *Ahora:* CI y Dependabot definidos (primera ejecución pendiente), build validado; sin monitoreo ni despliegue |
+| Documentación | 4 | 8 | README extenso pero inexacto. *Ahora:* README y `docs/` al día |
 
 ## Otros documentos de esta auditoría
 

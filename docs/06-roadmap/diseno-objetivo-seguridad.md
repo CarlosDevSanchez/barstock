@@ -96,7 +96,7 @@ revoke insert, update, delete on public.orders, public.order_items, public.payme
   from authenticated;
 ```
 
-Repetir para el resto de tablas según la [matriz objetivo](../02-base-de-datos/03-rls-y-politicas.md#matriz-objetivo-propuesta-no-aplicada).
+Repetir para el resto de tablas según la [matriz objetivo](../02-base-de-datos/03-rls-y-politicas.md#matriz-efectiva).
 
 ## 3. Secuencia de número de orden
 

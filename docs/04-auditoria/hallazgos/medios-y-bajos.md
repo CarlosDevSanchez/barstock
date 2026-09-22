@@ -1,7 +1,34 @@
 # Hallazgos medios y bajos (M1–M18)
 
-> Base: commit `54962b9` · Cada fila indica evidencia y recomendación. Estado de todos: **Abierto**.
+> Base: commit `54962b9` · Las filas de la tabla de abajo son el **hallazgo original** (evidencia y recomendación, en pasado). El estado actual está en esta primera tabla.
 > Esfuerzo: S = pequeño (< 1 día), M = medio (1–3 días), L = grande (> 3 días).
+
+## Estado tras la etapa 1
+
+**Verificado** = hay pruebas automáticas que lo demuestran; **Corregido** = hecho y comprobado a mano, sin prueba automática; **Parcial** = lo esencial hecho, con lo pendiente indicado. Nada de esto se ha aplicado aún a la base real.
+
+| ID | Estado | Qué se hizo / qué falta |
+|---|---|---|
+| M1 | **Verificado** | Índice único parcial `inventory(product_id) WHERE variant_id IS NULL` (`rls.test.ts`) |
+| M2 | **Verificado** | `CHECK`, `NOT NULL` en FKs de pertenencia, índices (`orders(status, created_at)`, FKs) — [índices](../../02-base-de-datos/05-indices-y-constraints.md) |
+| M3 | **Verificado** | `ORD-YYMMDD-NNNNNN` con `order_number_seq`, generado en `create_sale` (`sales.test.ts`) |
+| M4 | Corregido | Migraciones versionadas, `profiles.id ON DELETE CASCADE`, borrado lógico de productos. Falta aplicarlas a la BD real ([guía](../../05-guias/verificar-checkout.md)) |
+| M5 | **Verificado** | Paginación y búsqueda en servidor con `sanitizeSearch` (`catalog.test.ts`). Los servicios aún usan `select('*')` en varias tablas |
+| M6 | **Verificado** | Agregación en SQL: stock bajo exacto por fila, sin reembolsos, zona horaria de Ajustes (`admin.test.ts`, `rpc.test.ts`); "Loyalty Points" se deriva por trigger |
+| M7 | Parcial | Capa de datos y de servicios hechas; el layout es Server Component, pero **las páginas siguen siendo Client Components** (interactivas) y la navegación sigue duplicada entre escritorio y móvil |
+| M8 | **Verificado** | Carrito inmutable, solo ids y cantidades, cantidad 0 elimina la línea, se vacía en el logout (`cart.test.ts`) |
+| M9 | Parcial | Hechos: CSP, `frame-ancestors`, `nosniff`, `Referrer-Policy`, HSTS, `Permissions-Policy`, contraseña mínima 10, cookies `HttpOnly`, errores sin mensajes crudos. **Falta:** rate limiting propio (solo el de Supabase Auth) y una CSP sin `'unsafe-inline'` (exigiría nonces y render dinámico) |
+| M10 | **Verificado** | Cero `any` (lint `--max-warnings 0`), `unknown` en `catch`, `ConfirmDialog` en vez de `confirm()`, `{ error }` siempre comprobado (`assertNoError`) |
+| M11 | Parcial | Lint en 0. Se eliminó el código muerto salvo `components/ui/tabs.tsx` y los 5 SVG de `public/` |
+| M12 | Corregido | `README.md` reescrito y `docs/` como fuente de verdad |
+| M13 | Parcial | Hechos: 264 pruebas (107 unitarias, 21 de componentes, 123 de integración, 13 e2e) (unitarias, componentes, integración, e2e), CI y Dependabot. **Falta:** monitoreo de errores (Sentry), logging estructurado y alertas |
+| M14 | **Verificado** | `''` → `null` en los esquemas (`resources.test.ts`, `catalog.test.ts`) |
+| M15 | Parcial | `aria-label` en botones de icono, etiquetas asociadas por `FormControl`. **Falta** una auditoría con axe/Lighthouse |
+| M16 | Parcial | Las funciones nuevas fijan `search_path = ''`; `handle_new_user` se reescribió así. **Sigue** usando `uuid_generate_v4()` |
+| M17 | **Verificado** | `settings.timezone` + agregación SQL con zona (`rpc.test.ts`) |
+| M18 | Parcial | El POS ya no imprime; el select de cliente tiene "Walk-in Customer"; se quitó el ítem "Profile" sin acción. **Falta** plantilla de recibo (`receipt_template` se guarda pero no se imprime) y resaltar rutas hijas en la navegación |
+
+## Hallazgos originales
 
 | ID | Sev. | Área | Hallazgo | Evidencia | Recomendación | Esf. |
 |---|---|---|---|---|---|---|

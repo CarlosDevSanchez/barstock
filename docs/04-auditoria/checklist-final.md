@@ -3,6 +3,62 @@
 > Leyenda: ✅ cumple · ⚠️ parcial · ❌ no cumple · ➖ no aplica · ❓ no verificado (requiere acceso a Supabase/entorno).
 > Commit `54962b9` · 2026-09-21. Referencias a hallazgos entre corchetes.
 
+## Estado tras la etapa 1 (actualizado)
+
+Las tablas de más abajo son el **registro original** (commit `54962b9`). Esta es la misma lista con el estado actual. ✅* = hecho y probado en local; falta la primera ejecución real en GitHub o en producción.
+
+| Área | Punto | Antes | Ahora | Nota |
+|---|---|---|---|---|
+| Seguridad | Validación de entrada en todos los endpoints | ❌ | ✅ | `route()` valida body, query y params con zod; `422` con detalle por campo |
+| | No hay secretos en código | ✅ | ✅ | `.env*` ignorado (salvo `.env.example`); el CI no usa secretos |
+| | CORS | ➖ | ➖ | Sin CORS: la API es del mismo origen; las escrituras de otro origen se rechazan (403) |
+| | Security headers | ❌ | ⚠️ | CSP, `frame-ancestors`, `nosniff`, `Referrer-Policy`, HSTS, `Permissions-Policy`. La CSP conserva `'unsafe-inline'` en scripts ([M9](hallazgos/medios-y-bajos.md)) |
+| | Autenticación | ⚠️ | ✅ | Sesión en cookies, `proxy.ts`, `getUser()` en cada petición |
+| | Autorización | ❌ | ✅ | Roles jerárquicos en `route()`, en RLS y en la navegación ([C1]) |
+| | Sin vulnerabilidades conocidas en dependencias | ❌ | ✅ | `bun audit` limpio en el CI ([C3]) |
+| | Rate limiting / fuerza bruta en login | ❓ | ⚠️ | Solo el de Supabase Auth (`429`); no hay uno propio |
+| | Protección CSRF | ➖/⚠️ | ✅ | Comprobación de `Origin`, `SameSite=Lax`, JSON; probado |
+| | Sesión en almacenamiento seguro (`httpOnly`) | ❌ | ✅ | Cookies `HttpOnly` (+ `Secure` en producción); `localStorage` sin tokens; verificado en Chromium |
+| | Sin escalada de privilegios | ❌ | ✅ | Trigger de perfiles + RLS; `rls.test.ts` |
+| Arquitectura | Estructura clara y escalable | ⚠️ | ✅ | API + servicios + validación compartida |
+| | Separación de concerns | ❌ | ✅ | Lint prohíbe Supabase en la UI |
+| | Sin código duplicado significativo | ❌ | ⚠️ | Spinner, diálogos, formularios y listas compartidos; la navegación sigue duplicada entre escritorio y móvil |
+| | Componentes con responsabilidad única | ❌ | ⚠️ | Páginas de 150–440 líneas (antes 120–420, ahora sin lógica de datos) |
+| | Server vs Client Components | ❌ | ⚠️ | El layout es Server Component; las páginas son interactivas y siguen siendo cliente |
+| | Lógica de negocio fuera del cliente | ❌ | ✅ | RPC transaccionales; el cliente solo hace una vista previa |
+| Base de datos | Índices apropiados | ⚠️ | ✅ | [M2](hallazgos/medios-y-bajos.md) |
+| | Migraciones versionadas | ❌ | ✅* | `supabase/migrations/`; falta aplicarlas a la base real |
+| | Backup strategy documentada | ❓ | ❓ | Sigue sin decidirse (D18) |
+| | Performance aceptable | ⚠️ | ⚠️ | Paginación y agregación en SQL; **sin medir con datos reales** |
+| | Constraints de integridad | ❌ | ✅ | `CHECK`, `NOT NULL`, únicos parciales; probados |
+| | Transacciones donde hacen falta | ❌ | ✅ | `create_sale`, `refund_order`, `adjust_inventory` ([C2]) |
+| | Campos de auditoría / soft delete | ⚠️ | ✅ | `deleted_at` en productos, `refunded_by/at/reason`, `created_by`, bitácora de movimientos |
+| Código | TypeScript strict | ✅ | ✅ | + `noUncheckedIndexedAccess`, `noImplicitReturns` |
+| | Uso mínimo de `any` | ❌ | ✅ | 0 (regla ESLint como error) |
+| | Manejo de errores completo | ❌ | ✅ | `assertNoError`, mapeo sin mensajes crudos |
+| | Lógica de negocio testeable | ❌ | ✅ | En servicios y RPC, con pruebas |
+| | Sin números mágicos | ❌ | ⚠️ | Tasa, moneda y umbral vienen de Ajustes; quedan constantes locales (tamaños de página, límites) |
+| | Sin race conditions | ❌ | ✅ | Probado con concurrencia y mutaciones deliberadas |
+| Testing | Cobertura | ❌ | ✅ | ≥ 80 % exigido en `lib/server` (96,8 %) y `lib/validation` (99,1 %); **no hay cifra global** |
+| | Tests de funcionalidad crítica | ❌ | ✅ | Venta, reembolso, permisos, invitación (264 pruebas) |
+| | CI/CD ejecuta tests | ❌ | ✅* | `.github/workflows/ci.yml` |
+| | Tests no frágiles | ➖ | ⚠️ | Comparten una BD local que crece; los de reportes usan un día aislado. Se detectó y corrigió uno frágil |
+| Performance | Web Vitals / bundle | ❓ | ❓ | Sin medir |
+| | Queries optimizadas | ❌ | ⚠️ | Paginadas y agregadas; varios servicios aún usan `select('*')` |
+| | Caching | ❌ | ❌ | Ninguno (respuestas `no-store`); sin SWR/React Query |
+| Deployment | CI/CD pipeline | ❌ | ✅* | |
+| | Ambientes separados | ❓ | ❓ | D13 |
+| | Rollback | ❓ | ❓ | Migraciones sin `down` |
+| | Logs centralizados / Monitoring | ❌ | ❌ | Sin Sentry/APM; solo `console.error` en el servidor |
+| | Build reproducible | ⚠️ | ✅ | `--frozen-lockfile`, versiones exactas, variables validadas |
+| Documentación | README claro y actualizado | ❌ | ✅ | Reescrito |
+| | Contributing / setup | ❌ | ✅ | [convenciones](../05-guias/convenciones-de-codigo.md), [setup-local](../05-guias/setup-local.md) |
+| | Decisiones documentadas | ⚠️ | ⚠️ | Supuestos aplicados y pendientes en [decisiones](../06-roadmap/decisiones-pendientes.md) |
+
+---
+
+## Registro original (commit `54962b9`)
+
 ## Seguridad
 
 | Punto | Estado | Nota |

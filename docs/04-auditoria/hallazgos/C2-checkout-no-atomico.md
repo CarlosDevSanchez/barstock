@@ -17,7 +17,7 @@ manipulados. Es el corazón del producto.
 
 ### 1. Sin transacción — `pos/page.tsx:80-182`
 Tres inserciones (`orders`, `order_items`, `payments`) y por cada ítem un `select` + `update` + `insert` de inventario,
-todo desde el navegador. Cualquier fallo intermedio deja datos parciales (tabla completa en [pos-checkout](../../03-modulos/pos-checkout.md#qué-puede-salir-mal-y-qué-queda-en-la-base)).
+todo desde el navegador. Cualquier fallo intermedio deja datos parciales (tabla completa en [pos-checkout](../../03-modulos/pos-checkout.md#validaciones-y-rechazos)).
 Los resultados de `update` e `insert` del bucle de inventario **no se comprueban** y el toast siempre dice "Order completed successfully!".
 
 ### 2. `.eq('variant_id', null)` no filtra NULL — `pos/page.tsx:145`, `orders/[id]/page.tsx:71`
@@ -36,7 +36,7 @@ No hay `CHECK` ni trigger que valide. Con RLS permisivo ([C1](C1-rls-permisivo.m
 
 ### 5. Reembolso no atómico ni idempotente — `orders/[id]/page.tsx:52-87`
 Cambia el estado primero, luego repone stock; sin `WHERE status='completed'`; sin bitácora `return`; sin tocar `payments`; sin motivo ni autor.
-Detalle: [ordenes-y-reembolsos](../../03-modulos/ordenes-y-reembolsos.md#reembolso--handlerefund-52-87).
+Detalle: [ordenes-y-reembolsos](../../03-modulos/ordenes-y-reembolsos.md#reembolso).
 
 ### 6. Otros
 - `order_number = ORD-${Date.now()}` (`:90`) puede colisionar entre cajas → violación de `UNIQUE`.
