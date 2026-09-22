@@ -23,9 +23,10 @@ const renderBubble = (props: Partial<Parameters<typeof CartBubble>[0]> = {}) => 
 afterEach(cleanup)
 
 describe('CartBubble', () => {
-    test('is hidden while the cart is empty and there are no open tabs', () => {
+    test('stays visible with a 0 badge and its aria-label when the cart is empty', () => {
         renderBubble()
-        expect(screen.queryByRole('button')).toBeNull()
+        const button = screen.getByRole('button', { name: 'Cart: 0 items, total $0.00' })
+        expect(button.textContent).toContain('0')
     })
 
     test('shows the item count and the preview total, and opens the sheet on click', () => {

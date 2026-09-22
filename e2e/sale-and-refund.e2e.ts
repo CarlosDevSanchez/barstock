@@ -34,8 +34,8 @@ test('a sale takes stock, a manager refunds it, the stock comes back', async ({ 
     const toast = till.locator('[data-sonner-toast]').first()
     await expect(toast).toContainText(/Order ORD-\d{6}-\d{6} completed/)
     await expect(toast).toContainText('44.00') // the total the SERVER computed
-    // The bubble hides itself once the cart (and every open tab) is empty.
-    await expect(till.getByRole('button', { name: /^Cart:/ })).toHaveCount(0)
+    // The bubble stays visible but drops back to an empty cart once checkout clears it.
+    await expect(till.getByRole('button', { name: 'Cart: 0 items, total $0.00' })).toBeVisible()
     expect(await stockOf(product.id)).toBe(8)
 
     // ---- the cashier sees the order but cannot refund it

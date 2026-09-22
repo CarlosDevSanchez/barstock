@@ -1,5 +1,6 @@
 'use client'
 
+import { useState } from 'react'
 import { ShoppingCart } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Badge } from '@/components/ui/badge'
@@ -19,8 +20,10 @@ interface ProductCardProps {
 export function ProductCard({ product, onAdd }: ProductCardProps) {
     const t = useTranslations('pos')
     const money = useMoney()
+    const [imageFailed, setImageFailed] = useState(false)
     // stock null = no inventory row, which the database refuses to sell.
     const soldOut = product.stock === null || product.stock <= 0
+    const showImage = !!product.image_url && !imageFailed
 
     return (
         <Card
@@ -40,10 +43,17 @@ export function ProductCard({ product, onAdd }: ProductCardProps) {
                 }
             }}
         >
-            <div className="h-14 bg-gradient-to-br from-emerald-50 to-slate-50 dark:from-emerald-950/20 dark:to-slate-900 flex items-center justify-center shrink-0">
-                {product.image_url ? (
+            <div className="aspect-[4/3] w-full overflow-hidden bg-gradient-to-br from-emerald-50 to-slate-50 dark:from-emerald-950/20 dark:to-slate-900 flex items-center justify-center shrink-0">
+                {showImage ? (
                     // eslint-disable-next-line @next/next/no-img-element -- untrusted, arbitrary-sized product images
-                    <img src={product.image_url} alt="" className="h-full w-full object-cover" />
+                    <img
+                        src={product.image_url ?? undefined}
+                        alt=""
+                        loading="lazy"
+                        decoding="async"
+                        className="h-full w-full object-cover"
+                        onError={() => setImageFailed(true)}
+                    />
                 ) : (
                     <ShoppingCart className="w-6 h-6 text-emerald-600/30 group-hover:text-emerald-600/50 transition-colors" />
                 )}
