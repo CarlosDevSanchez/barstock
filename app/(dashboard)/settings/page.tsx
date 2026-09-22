@@ -110,26 +110,28 @@ export default function SettingsPage() {
                                 <TextField name="store_address" label={t('address')} />
                                 <TextField name="store_phone" label={t('phone')} />
                                 <TextField name="store_email" label={t('email')} type="email" />
-                                <ProductImageField
-                                    label={t('logo')}
-                                    existingUrl={settings.store_logo_url}
-                                    file={logoFile}
-                                    removed={logoRemoved}
-                                    onSelect={file => {
-                                        setLogoFile(file)
-                                        setLogoRemoved(false)
-                                    }}
-                                    onRemove={() => {
-                                        setLogoFile(null)
-                                        setLogoRemoved(true)
-                                    }}
-                                    onUndo={() => setLogoFile(null)}
-                                    disabled={submitting}
-                                    addLabel={t('addLogo')}
-                                    changeLabel={t('changeLogo')}
-                                    removeLabel={t('removeLogo')}
-                                    resizeErrorLabel={t('logoResizeFailed')}
-                                />
+                                {settings.storage_configured && (
+                                    <ProductImageField
+                                        label={t('logo')}
+                                        existingUrl={settings.store_logo_url}
+                                        file={logoFile}
+                                        removed={logoRemoved}
+                                        onSelect={file => {
+                                            setLogoFile(file)
+                                            setLogoRemoved(false)
+                                        }}
+                                        onRemove={() => {
+                                            setLogoFile(null)
+                                            setLogoRemoved(true)
+                                        }}
+                                        onUndo={() => setLogoFile(null)}
+                                        disabled={submitting}
+                                        addLabel={t('addLogo')}
+                                        changeLabel={t('changeLogo')}
+                                        removeLabel={t('removeLogo')}
+                                        resizeErrorLabel={t('logoResizeFailed')}
+                                    />
+                                )}
                             </CardContent>
                         </Card>
 

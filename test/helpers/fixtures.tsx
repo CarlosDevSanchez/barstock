@@ -18,6 +18,7 @@ export const settings: SettingsWithLogoUrl = {
     store_tax_id: '',
     store_logo_key: '',
     store_logo_url: null,
+    storage_configured: true,
     currency: 'USD',
     timezone: 'UTC',
     low_stock_threshold: 10,

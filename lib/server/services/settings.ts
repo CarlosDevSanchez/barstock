@@ -1,13 +1,17 @@
 import 'server-only'
 import { DEFAULT_CURRENCY } from '@/lib/money'
 import { assertNoError } from '@/lib/server/errors'
-import { trySignedGetUrl } from '@/lib/server/storage'
+import { isStorageConfigured, trySignedGetUrl } from '@/lib/server/storage'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import { settingsSchema, type SettingKey, type SettingsInput } from '@/lib/validation/resources'
 import type { Json } from '@/types/database'
 
-/** `getSettings`'s return shape: `store_logo_key` stays (settingsSchema still validates it), plus the signed URL. */
-export type SettingsWithLogoUrl = SettingsInput & { store_logo_url: string | null }
+/**
+ * `getSettings`'s return shape: `store_logo_key` stays (settingsSchema still validates it), plus the signed URL.
+ * `storage_configured` lets the UI hide the image picker (ProductDialog, Settings page) when the 4 R2 vars are
+ * absent, instead of letting someone pick a file only to hit a 503 toast after the fact.
+ */
+export type SettingsWithLogoUrl = SettingsInput & { store_logo_url: string | null; storage_configured: boolean }
 
 // Used when a key is missing or holds an invalid value, so the UI never has to handle a partial object.
 export const SETTINGS_DEFAULTS: SettingsInput = {
@@ -36,7 +40,11 @@ export async function getSettings(supabase: AppSupabaseClient): Promise<Settings
         const parsed = settingsSchema.shape[key].safeParse(stored.get(key))
         if (parsed.success) Object.assign(result, { [key]: parsed.data })
     }
-    return { ...result, store_logo_url: await trySignedGetUrl(result.store_logo_key || null) }
+    return {
+        ...result,
+        store_logo_url: await trySignedGetUrl(result.store_logo_key || null),
+        storage_configured: isStorageConfigured()
+    }
 }
 
 /**

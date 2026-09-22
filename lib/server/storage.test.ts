@@ -1,5 +1,14 @@
-import { describe, expect, test } from 'bun:test'
-import { logoImageKey, MAX_IMAGE_BYTES, productImageKey, validateImage } from './storage'
+import { afterEach, describe, expect, test } from 'bun:test'
+import {
+    InMemoryStorage,
+    isStorageConfigured,
+    logoImageKey,
+    MAX_IMAGE_BYTES,
+    productImageKey,
+    setStorageBackendForTesting,
+    STORAGE_UNCONFIGURED_FOR_TESTING,
+    validateImage
+} from './storage'
 
 const JPEG = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0, 0, 0, 0])
 const PNG = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 0, 0, 0, 0])
@@ -54,5 +63,22 @@ describe('key generation', () => {
     test('logo keys live under settings/logo/ and are never chosen by a caller-supplied id', () => {
         const key = logoImageKey('jpg')
         expect(key).toMatch(new RegExp(`^settings/logo/${UUID_RE}\\.jpg$`))
+    })
+})
+
+describe('test seam (setStorageBackendForTesting)', () => {
+    afterEach(() => setStorageBackendForTesting(null))
+
+    test('an injected backend is reported as configured', () => {
+        setStorageBackendForTesting(new InMemoryStorage())
+        expect(isStorageConfigured()).toBe(true)
+    })
+
+    test('STORAGE_UNCONFIGURED_FOR_TESTING forces "unconfigured" even over a backend set moments earlier', () => {
+        setStorageBackendForTesting(new InMemoryStorage())
+        expect(isStorageConfigured()).toBe(true)
+
+        setStorageBackendForTesting(STORAGE_UNCONFIGURED_FOR_TESTING)
+        expect(isStorageConfigured()).toBe(false)
     })
 })

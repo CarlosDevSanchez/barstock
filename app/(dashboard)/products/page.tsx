@@ -153,26 +153,28 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate className="flex flex-col flex-1 overflow-hidden">
                         <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
-                            <ProductImageField
-                                label={t('image')}
-                                existingUrl={product?.image_url ?? null}
-                                file={imageFile}
-                                removed={imageRemoved}
-                                onSelect={file => {
-                                    setImageFile(file)
-                                    setImageRemoved(false)
-                                }}
-                                onRemove={() => {
-                                    setImageFile(null)
-                                    setImageRemoved(true)
-                                }}
-                                onUndo={() => setImageFile(null)}
-                                disabled={submitting}
-                                addLabel={t('addImage')}
-                                changeLabel={t('changeImage')}
-                                removeLabel={t('removeImage')}
-                                resizeErrorLabel={t('imageResizeFailed')}
-                            />
+                            {settings.storage_configured && (
+                                <ProductImageField
+                                    label={t('image')}
+                                    existingUrl={product?.image_url ?? null}
+                                    file={imageFile}
+                                    removed={imageRemoved}
+                                    onSelect={file => {
+                                        setImageFile(file)
+                                        setImageRemoved(false)
+                                    }}
+                                    onRemove={() => {
+                                        setImageFile(null)
+                                        setImageRemoved(true)
+                                    }}
+                                    onUndo={() => setImageFile(null)}
+                                    disabled={submitting}
+                                    addLabel={t('addImage')}
+                                    changeLabel={t('changeImage')}
+                                    removeLabel={t('removeImage')}
+                                    resizeErrorLabel={t('imageResizeFailed')}
+                                />
+                            )}
                             <TextField name="name" label={t('name')} className="col-span-2" />
                             <TextField name="description" label={t('description')} className="col-span-2" />
                             {product ? (

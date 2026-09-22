@@ -2,7 +2,12 @@ import { afterAll, beforeAll, beforeEach, describe, expect, test } from 'bun:tes
 import { DELETE as deleteProductImage, POST as uploadProductImage } from '@/app/api/v1/products/[id]/image/route'
 import { GET as listProductsRoute } from '@/app/api/v1/products/route'
 import { DELETE as deleteLogo, POST as uploadLogo } from '@/app/api/v1/settings/logo/route'
-import { InMemoryStorage, MAX_IMAGE_BYTES, setStorageBackendForTesting } from '@/lib/server/storage'
+import {
+    InMemoryStorage,
+    MAX_IMAGE_BYTES,
+    setStorageBackendForTesting,
+    STORAGE_UNCONFIGURED_FOR_TESTING
+} from '@/lib/server/storage'
 import { adminClient, createProduct as makeProduct, ensureTestUsers } from '../helpers/integration'
 import { dataOf, errorOf, loginAs, type TestClient } from '../helpers/http'
 
@@ -152,9 +157,10 @@ describe('product image upload', () => {
 
     test('without the 4 R2 env vars, the endpoint answers 503 storage_not_configured', async () => {
         const product = await makeProduct()
-        // This worktree's .env.local has no R2 vars (task requirement): clearing the test override reproduces
-        // exactly that "unconfigured" state, with no real network involved.
-        setStorageBackendForTesting(null)
+        // The sentinel forces "unconfigured" unconditionally: `setStorageBackendForTesting(null)` would instead
+        // fall through to the real `serverEnv`, which could make a real R2 call if a contributor's local
+        // .env.local happens to have R2 configured (AGENTS.md §6.11 forbids that in a test).
+        setStorageBackendForTesting(STORAGE_UNCONFIGURED_FOR_TESTING)
         const response = await manager.post(uploadProductImage, `products/${product.id}/image`, {
             params: { id: product.id },
             formData: formWith(jpegFile())
@@ -193,7 +199,7 @@ describe('store logo upload', () => {
     })
 
     test('without the 4 R2 env vars, the logo endpoint also answers 503', async () => {
-        setStorageBackendForTesting(null)
+        setStorageBackendForTesting(STORAGE_UNCONFIGURED_FOR_TESTING)
         const response = await admin.post(uploadLogo, 'settings/logo', { formData: formWith(jpegFile()) })
         expect(response.status).toBe(503)
         expect(errorOf(response).code).toBe('storage_not_configured')

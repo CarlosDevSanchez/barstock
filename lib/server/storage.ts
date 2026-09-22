@@ -19,10 +19,20 @@ export interface StorageBackend {
 // Integration tests inject `InMemoryStorage` here so they never touch a real bucket or the network (AGENTS.md
 // §6.11: writes only against local infra). Production code never calls this.
 
-let backendOverride: StorageBackend | null = null
+/**
+ * Sentinel that forces `isStorageConfigured()` to `false` unconditionally, without consulting `serverEnv` at all.
+ * Needed because a contributor's real `.env.local` might legitimately have R2 configured: without this, a test
+ * for "storage is unconfigured" (503) would fall through to the real env vars and could make a real R2 call.
+ * `setStorageBackendForTesting(null)` alone is NOT the same thing — it means "no override, use the real env".
+ */
+export const STORAGE_UNCONFIGURED_FOR_TESTING = Symbol('storage-unconfigured-for-testing')
+
+type BackendOverride = StorageBackend | typeof STORAGE_UNCONFIGURED_FOR_TESTING | null
+
+let backendOverride: BackendOverride = null
 
 /** Test-only: substitutes the storage backend. Call with `null` (e.g. in `afterAll`) to restore normal behaviour. */
-export function setStorageBackendForTesting(backend: StorageBackend | null): void {
+export function setStorageBackendForTesting(backend: BackendOverride): void {
     backendOverride = backend
 }
 
@@ -126,6 +136,7 @@ let r2: R2Storage | null = null
 
 /** `null` when the 4 R2 vars are not all set (lib/env/schema.ts guarantees it is never a partial set). */
 function resolveBackend(): StorageBackend | null {
+    if (backendOverride === STORAGE_UNCONFIGURED_FOR_TESTING) return null
     if (backendOverride) return backendOverride
     const { R2_ACCOUNT_ID, R2_ACCESS_KEY_ID, R2_SECRET_ACCESS_KEY, R2_BUCKET } = serverEnv
     if (!R2_ACCOUNT_ID || !R2_ACCESS_KEY_ID || !R2_SECRET_ACCESS_KEY || !R2_BUCKET) return null

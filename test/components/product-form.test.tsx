@@ -147,6 +147,25 @@ describe('product form validation', () => {
     })
 })
 
+describe('image picker visibility (storage_configured)', () => {
+    test('shows the image picker when storage is configured (the default fixture)', async () => {
+        renderPage('manager')
+        await screen.findByText('Wireless Mouse')
+        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        const dialog = await screen.findByRole('dialog')
+        expect(within(dialog).getByRole('button', { name: 'Add Image' })).toBeTruthy()
+    })
+
+    test('hides the image picker when R2 is not configured, instead of letting someone pick a file that will 503', async () => {
+        renderPage('manager', { ...settings, storage_configured: false })
+        await screen.findByText('Wireless Mouse')
+        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        const dialog = await screen.findByRole('dialog')
+        expect(within(dialog).queryByRole('button', { name: 'Add Image' })).toBeNull()
+        expect(within(dialog).queryByRole('button', { name: 'Change Image' })).toBeNull()
+    })
+})
+
 describe('SKU suggestion', () => {
     const openNewProduct = async () => {
         renderPage('manager')
