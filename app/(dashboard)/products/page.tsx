@@ -1,7 +1,7 @@
 'use client'
 
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useEffect, useState } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
@@ -29,9 +29,10 @@ import { PageSpinner } from '@/components/page-spinner'
 import { useMoney, useSession } from '@/components/session-provider'
 import { moneyStep } from '@/lib/money'
 import { categoriesApi } from '@/lib/api/categories'
-import { errorMessage } from '@/lib/api/client'
+import { ApiError, errorMessage } from '@/lib/api/client'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
 import { roleAtLeast } from '@/lib/auth/roles'
+import { suggestSku } from '@/lib/sku'
 import { taxRatePercent } from '@/lib/validation/common'
 import { productCreateSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
@@ -88,6 +89,21 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
     })
     const submitting = form.formState.isSubmitting
 
+    // Autofill the SKU from the name while creating a product, but only until the user edits the SKU by
+    // hand: `resetField` both sets the value and keeps `isDirty` false (its default `keepDirty: false`),
+    // so it keeps following the name; a real edit through the input marks the field dirty and this stops.
+    // Never touches the SKU of an existing product.
+    const name = useWatch({ control: form.control, name: 'name' })
+    useEffect(() => {
+        if (product) return
+        if (form.getFieldState('sku').isDirty) return
+        form.resetField('sku', { defaultValue: suggestSku(name) })
+    }, [name, product, form])
+
+    const regenerateSku = () => {
+        form.resetField('sku', { defaultValue: suggestSku(form.getValues('name')) })
+    }
+
     const onSubmit = form.handleSubmit(async values => {
         try {
             if (product) {
@@ -99,6 +115,13 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
             }
             onSaved()
         } catch (error: unknown) {
+            // The API turns a duplicate SKU (Postgres 23505) into a 409; surface it on the SKU field
+            // with a ready-to-use alternative instead of a generic toast.
+            if (error instanceof ApiError && error.status === 409) {
+                const suggestion = `${form.getValues('sku')}-2`
+                form.setError('sku', { type: 'conflict', message: t('skuConflict', { suggestion }) })
+                return
+            }
             toast.error(errorMessage(error, t('saveFailed')))
         }
     })
@@ -115,7 +138,21 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                         <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
                             <TextField name="name" label={t('name')} className="col-span-2" />
                             <TextField name="description" label={t('description')} className="col-span-2" />
-                            <TextField name="sku" label={t('sku')} />
+                            {product ? (
+                                <TextField name="sku" label={t('sku')} />
+                            ) : (
+                                <div className="flex items-end gap-2">
+                                    <TextField
+                                        name="sku"
+                                        label={t('sku')}
+                                        description={t('skuHelp')}
+                                        className="flex-1"
+                                    />
+                                    <Button type="button" variant="outline" size="sm" onClick={regenerateSku}>
+                                        {t('regenerateSku')}
+                                    </Button>
+                                </div>
+                            )}
                             <TextField name="barcode" label={t('barcode')} />
                             <SelectField
                                 name="category_id"

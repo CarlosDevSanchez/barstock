@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, mock, test } from 'bun:test'
 import { page, product, settings, userWithRole, IntlProvider } from '../helpers/fixtures'
 import { setupDom } from '../helpers/dom'
+import { ApiError } from '@/lib/api/client'
 
 setupDom()
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import('@testing-library/react')
@@ -143,6 +144,69 @@ describe('product form validation', () => {
         await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
         expect(update.mock.calls[0]?.[0]).toBe('p-1')
         expect(update.mock.calls[0]?.[1]).toMatchObject({ selling_price: 31, tax_rate: 0.0725 })
+    })
+})
+
+describe('SKU suggestion', () => {
+    const openNewProduct = async () => {
+        renderPage('manager')
+        await screen.findByText('Wireless Mouse')
+        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        return screen.findByRole('dialog')
+    }
+
+    test('the SKU autofills from the name while creating a product', async () => {
+        await openNewProduct()
+        type('Product Name *', 'Cerveza Club Colombia 330ml')
+        expect((screen.getByLabelText('SKU *') as HTMLInputElement).value).toBe('CER-CLU-COL-330ML')
+    })
+
+    test('autofill stops once the SKU has been edited by hand', async () => {
+        await openNewProduct()
+        type('Product Name *', 'Cerveza Club')
+        expect((screen.getByLabelText('SKU *') as HTMLInputElement).value).toBe('CER-CLU')
+
+        type('SKU *', 'CUSTOM-SKU')
+        type('Product Name *', 'Cerveza Club Colombia')
+        expect((screen.getByLabelText('SKU *') as HTMLInputElement).value).toBe('CUSTOM-SKU')
+    })
+
+    test('the Regenerate button re-derives the SKU from the current name and resumes autofill', async () => {
+        const dialog = await openNewProduct()
+        type('Product Name *', 'Cerveza Club')
+        type('SKU *', 'CUSTOM-SKU')
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Regenerate' }))
+        expect((screen.getByLabelText('SKU *') as HTMLInputElement).value).toBe('CER-CLU')
+
+        type('Product Name *', 'Cerveza Club Colombia')
+        expect((screen.getByLabelText('SKU *') as HTMLInputElement).value).toBe('CER-CLU-COL')
+    })
+
+    test('editing an existing product never autofills the SKU when the name changes', async () => {
+        renderPage('manager')
+        await screen.findByText('Wireless Mouse')
+        fireEvent.click(screen.getByRole('button', { name: 'Edit Wireless Mouse' }))
+        await screen.findByRole('dialog')
+
+        expect((screen.getByLabelText('SKU *') as HTMLInputElement).value).toBe('ELEC-001')
+        type('Product Name *', 'Something Completely Different')
+        expect((screen.getByLabelText('SKU *') as HTMLInputElement).value).toBe('ELEC-001')
+    })
+
+    test('a duplicate SKU (409) surfaces as a field error with a "-2" suggestion', async () => {
+        create.mockImplementationOnce(async () => {
+            throw new ApiError(409, 'conflict', 'A record with the same unique value already exists')
+        })
+        const dialog = await openNewProduct()
+        type('Product Name *', 'Widget')
+        type('SKU *', 'W-1')
+        type('Cost Price *', '4')
+        type('Selling Price *', '9.5')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create Product' }))
+
+        expect(await within(dialog).findByText('This SKU is already in use. Try "W-1-2".')).toBeTruthy()
+        expect(within(dialog).getByText('Add New Product')).toBeTruthy() // dialog stayed open
     })
 })
 
