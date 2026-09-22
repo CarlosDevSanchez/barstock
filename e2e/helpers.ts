@@ -8,7 +8,7 @@ const EMAIL: Record<TestRole | 'inactive', string> = {
     inactive: 'inactive@barstock.test'
 }
 
-/** Preference cookie for anonymous pages (login). Logged-in UI prefers profiles.locale — see useEnglishUi. */
+/** Preference cookie for anonymous pages (login). Logged-in UI prefers profiles.locale — see forceEnglishUi. */
 export async function pinEnglish(page: Page) {
     await page.context().addCookies([{ name: 'NEXT_LOCALE', value: 'en', url: 'http://localhost:3000' }])
 }
@@ -17,7 +17,7 @@ export async function pinEnglish(page: Page) {
  * Existing e2e suites assert English copy. Once a session exists, profiles.locale wins over NEXT_LOCALE
  * (i18n/request.ts), so pin the cookie and align the profile, then reload.
  */
-export async function useEnglishUi(page: Page) {
+export async function forceEnglishUi(page: Page) {
     await pinEnglish(page)
     const res = await page.request.patch('/api/v1/me', {
         data: { locale: 'en' },
@@ -41,7 +41,7 @@ export async function signInWith(page: Page, email: string, password: string, op
 export async function signInAs(page: Page, role: TestRole) {
     await signInWith(page, EMAIL[role], TEST_PASSWORD)
     await page.waitForURL('**/dashboard')
-    await useEnglishUi(page)
+    await forceEnglishUi(page)
 }
 
 /** A fresh browser context (own cookies): one per person at the shop. */

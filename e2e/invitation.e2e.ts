@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { confirmLinkIn, uniq, waitForEmail } from '../test/helpers/integration'
-import { navLinks, newSession, pinEnglish, signInWith, useEnglishUi } from './helpers'
+import { navLinks, newSession, pinEnglish, signInWith, forceEnglishUi } from './helpers'
 
 test('an admin invites a cashier, who accepts by email, chooses a password and lands with the right access', async ({
     browser
@@ -21,7 +21,7 @@ test('an admin invites a cashier, who accepts by email, chooses a password and l
     await invitee.goto(link.toString())
     await invitee.waitForURL('**/reset-password')
     // New profiles default to es; e2e asserts English labels.
-    await useEnglishUi(invitee)
+    await forceEnglishUi(invitee)
 
     await invitee.getByLabel('New password').fill('a-good-passphrase-1')
     await invitee.getByLabel('Confirm password').fill('a-different-one-2')
@@ -59,7 +59,7 @@ test('an admin can disable a user, who loses access immediately, and re-enable t
     const user = await (await browser.newContext()).newPage()
     await user.goto(link.toString())
     await user.waitForURL('**/reset-password')
-    await useEnglishUi(user)
+    await forceEnglishUi(user)
     await user.getByLabel('New password').fill('a-good-passphrase-1')
     await user.getByLabel('Confirm password').fill('a-good-passphrase-1')
     await user.getByRole('button', { name: 'Save password' }).click()
@@ -94,7 +94,7 @@ test('forgot password: request, email, new password, sign in with it', async ({ 
     const first = await (await browser.newContext()).newPage()
     await first.goto(invite.toString())
     await first.waitForURL('**/reset-password')
-    await useEnglishUi(first)
+    await forceEnglishUi(first)
     await first.getByLabel('New password').fill('the-first-password-1')
     await first.getByLabel('Confirm password').fill('the-first-password-1')
     await first.getByRole('button', { name: 'Save password' }).click()
@@ -113,7 +113,7 @@ test('forgot password: request, email, new password, sign in with it', async ({ 
     expect(recovery.searchParams.get('type')).toBe('recovery')
     await page.goto(recovery.toString())
     await page.waitForURL('**/reset-password')
-    await useEnglishUi(page)
+    await forceEnglishUi(page)
     await page.getByLabel('New password').fill('the-second-password-2')
     await page.getByLabel('Confirm password').fill('the-second-password-2')
     await page.getByRole('button', { name: 'Save password' }).click()
