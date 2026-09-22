@@ -250,6 +250,31 @@ describe('a closed tab becomes a normal, refundable order', () => {
     })
 })
 
+describe('the order closed from a tab records the rate that was actually charged', () => {
+    test('order_items.tax_rate is the rate frozen on the tab line, not the product rate at close time', async () => {
+        const product = await createProduct({ selling_price: 100, tax_rate: 0.19, stock: 10 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('Rate') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+
+        // A manager changes the product's rate while the tab is still open.
+        const { error: updateError } = await adminClient()
+            .from('products')
+            .update({ tax_rate: 0.05 })
+            .eq('id', product.id)
+        expect(updateError).toBeNull()
+
+        const closed = dataOf<Tab>(await pay(cashier, tab.id, { payment_method: 'cash', amount: 119 }))
+        expect(closed.status).toBe('closed')
+
+        const { data: lines, error } = await adminClient()
+            .from('order_items')
+            .select('tax_rate, tax')
+            .eq('order_id', closed.order_id!)
+        expect(error).toBeNull()
+        expect(lines).toEqual([{ tax_rate: 0.19, tax: 19 }])
+    })
+})
+
 describe('RLS: tabs, tab_items and tab_payments are read-only from the client', () => {
     test('a cashier cannot write to them directly, and everything is written through the RPCs', async () => {
         const db = await signedInClient('cashier')
