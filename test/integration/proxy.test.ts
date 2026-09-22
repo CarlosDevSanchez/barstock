@@ -112,6 +112,7 @@ describe('signed in', () => {
             const login = await visit('/login', client)
             expect(passesThrough(login)).toBe(true)
             expect(login.headers.get('set-cookie') ?? '').toMatch(/sb-.*(Max-Age=0|expires=)/i)
+            expect(login.headers.get('set-cookie') ?? '').toMatch(/HttpOnly/i)
             // The session is revoked server-side by that sign-out, so the next request is anonymous: /login, no loop.
             expect(redirectPath(await visit('/settings', client))).toMatch(/^\/login/)
         } finally {

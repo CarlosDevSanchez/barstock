@@ -19,6 +19,18 @@ test('a cashier only sees the till and the catalog and is bounced from restricte
     await expect(page.getByRole('button', { name: /Add Product/ })).toHaveCount(0)
 })
 
+test('the session is invisible to page scripts (an XSS could not steal it)', async ({ browser }) => {
+    const page = await newSession(browser, 'cashier')
+    expect(await page.evaluate(() => document.cookie)).not.toMatch(/sb-|auth-token/)
+    const cookies = await page.context().cookies()
+    const session = cookies.filter(cookie => cookie.name.startsWith('sb-'))
+    expect(session.length).toBeGreaterThan(0)
+    expect(session.every(cookie => cookie.httpOnly && cookie.sameSite === 'Lax')).toBe(true)
+    expect(
+        await page.evaluate(() => (typeof localStorage === 'undefined' ? '' : JSON.stringify(localStorage)))
+    ).not.toMatch(/access_token|refresh_token/)
+})
+
 test('from the browser console a cashier cannot escalate: the API answers 403', async ({ browser }) => {
     const users = await ensureTestUsers()
     const page = await newSession(browser, 'cashier')

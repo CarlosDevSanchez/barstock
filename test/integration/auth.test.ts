@@ -47,6 +47,15 @@ describe('login / me / logout', () => {
         expect((await client.get(me, 'me')).status).toBe(401)
     })
 
+    test('the session cookies cannot be read by scripts and are not sent cross-site', async () => {
+        const client = await loginAs('cashier')
+        const session = [...client.cookieOptions].filter(([name]) => name.startsWith('sb-'))
+        expect(session.length).toBeGreaterThan(0)
+        for (const [, options] of session) {
+            expect(options).toMatchObject({ httpOnly: true, sameSite: 'lax', path: '/' })
+        }
+    })
+
     test('the login response never contains tokens', async () => {
         const client = new TestClient()
         const response = await client.post(login, 'auth/login', {

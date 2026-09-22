@@ -5,7 +5,7 @@ import { ensureTestUsers, TEST_PASSWORD, type TestRole } from './integration'
 
 // The handlers read the session through next/headers `cookies()`. In a test there is no Next request scope, so each call
 // runs inside an AsyncLocalStorage that carries THAT client's cookie jar: several clients can be used concurrently.
-type Jar = Map<string, string>
+type Jar = Map<string, string> & { options?: Map<string, Record<string, unknown>> }
 const jars = new AsyncLocalStorage<Jar>()
 
 void mock.module('next/headers', () => ({
@@ -19,6 +19,9 @@ void mock.module('next/headers', () => ({
                 const expired = options?.maxAge === 0 || (options?.expires && options.expires.getTime() <= Date.now())
                 if (value === '' || expired) jar.delete(name)
                 else jar.set(name, value)
+                // Kept so tests can assert on the attributes (HttpOnly, SameSite, ...).
+                jar.options ??= new Map()
+                jar.options.set(name, { ...options })
             }
         }
     }
@@ -47,6 +50,11 @@ interface CallOptions {
 
 export class TestClient {
     readonly jar: Jar = new Map()
+
+    /** Attributes of the cookies the server set for this client (name -> options). */
+    get cookieOptions(): Map<string, Record<string, unknown>> {
+        return this.jar.options ?? new Map()
+    }
 
     async call(handler: Handler, method: string, path: string, options: CallOptions = {}): Promise<ApiResponse> {
         const headers: Record<string, string> = { host: 'localhost:3000', ...options.headers }

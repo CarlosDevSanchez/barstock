@@ -1,6 +1,7 @@
 import 'server-only'
 import { createServerClient } from '@supabase/ssr'
 import { cookies } from 'next/headers'
+import { sessionCookieOptions } from '@/lib/auth/cookie-options'
 import { clientEnv } from '@/lib/env/client'
 import type { Database } from '@/types/database'
 
@@ -17,7 +18,9 @@ export async function createSupabaseServerClient(): Promise<AppSupabaseClient> {
             getAll: () => cookieStore.getAll(),
             setAll: cookiesToSet => {
                 try {
-                    for (const { name, value, options } of cookiesToSet) cookieStore.set(name, value, options)
+                    for (const { name, value, options } of cookiesToSet) {
+                        cookieStore.set(name, value, sessionCookieOptions(options))
+                    }
                 } catch {
                     // Called from a Server Component, where cookies are read-only: proxy.ts refreshes the session.
                 }

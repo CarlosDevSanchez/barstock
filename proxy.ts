@@ -1,6 +1,7 @@
 import { createServerClient } from '@supabase/ssr'
 import { NextResponse, type NextRequest } from 'next/server'
 import { z } from 'zod'
+import { sessionCookieOptions } from '@/lib/auth/cookie-options'
 import { roleAtLeast, USER_ROLES, type UserRole } from '@/lib/auth/roles'
 import { clientEnv } from '@/lib/env/client'
 
@@ -37,7 +38,9 @@ export async function proxy(request: NextRequest) {
             setAll: cookiesToSet => {
                 for (const { name, value } of cookiesToSet) request.cookies.set(name, value)
                 response = NextResponse.next({ request })
-                for (const { name, value, options } of cookiesToSet) response.cookies.set(name, value, options)
+                for (const { name, value, options } of cookiesToSet) {
+                    response.cookies.set(name, value, sessionCookieOptions(options))
+                }
             }
         }
     })
