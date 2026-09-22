@@ -20,8 +20,8 @@
 | Campo | Regla |
 |---|---|
 | `name` | 1–200 caracteres, sin espacios sobrantes |
-| `sku` | 1–64, **único** (409 al duplicar; también entre borrados lógicos) |
-| `barcode` | opcional, ≤ 64, **único** si existe |
+| `sku` | 1–64, **único** (409 con `details.field = 'sku'`; también entre borrados lógicos). El formulario marca el campo y sugiere `<sku>-2` |
+| `barcode` | opcional, ≤ 64, **único** si existe (409 con `details.field = 'barcode'`: el formulario marca el código de barras, no el SKU) |
 | `cost_price`, `selling_price` | `NUMERIC(14,2)`, ≥ 0; se redondea a la escala de la moneda de la tienda (0 decimales en COP, 2 en USD); la API rechaza más precisión de la permitida |
 | `tax_rate` | **fracción** `NUMERIC(6,4)` entre 0 y 1 en la API (`0.10`); el formulario la muestra y recibe como **porcentaje** (`taxRatePercent`) |
 | `is_active` | `boolean`; **no hay control en el formulario** (solo API/BD) |
@@ -43,7 +43,7 @@ Un producto nuevo recibe su fila de `inventory` con cantidad 0 por trigger; el s
   tamaño máximo de 2 MB (`lib/server/storage.ts::validateImage`); `413`/`415` si no pasa.
 - La imagen se guarda en un bucket **privado** de Cloudflare R2 con una clave generada por el servidor
   (`products/{productId}/{uuid}.webp|jpg|png`, columna `products.image_key` con `CHECK` de formato); **el cliente nunca elige ni ve la
-  clave**. `listProducts`/`getProduct` la traducen a una URL firmada de 1 hora (`image_url`); sin las 4 variables `R2_*`
+  clave**. `listProducts`/`getProduct` la traducen a una URL firmada de 12 horas (`image_url`; la hora de firma se redondea a la hora para que el navegador pueda cachearla, y un fallo de carga se recuerda por URL, así que una URL nueva tras recargar la lista vuelve a mostrar la imagen); sin las 4 variables `R2_*`
   ([variables de entorno](../05-guias/variables-de-entorno.md)) el endpoint responde `503 storage_not_configured` y la UI oculta el
   selector.
 - Reemplazar una imagen borra la anterior; si la subida se completa pero la escritura en BD falla, se borra el objeto recién subido

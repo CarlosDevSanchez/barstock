@@ -19,15 +19,18 @@ Una orden reembolsada muestra fecha y **motivo** del reembolso.
 
 ## Ticket de 80 mm (Fase 5, `components/orders/receipt-ticket.tsx`)
 "Print" (`window.print()`) oculta la vista normal y el `AppShell` (`print:hidden`) e imprime en su lugar un ticket
-térmico de 80 mm: nombre y NIT de la tienda, dirección y teléfono, «COMPROBANTE DE VENTA — No es factura
+térmico de 80 mm: logo de la tienda si hay uno subido (`store_logo_url`, ≤ 48 mm de ancho), nombre y NIT de la tienda, dirección y teléfono, «COMPROBANTE DE VENTA — No es factura
 electrónica», número de orden, fecha y hora en `settings.timezone`, cliente (o "Walk-in Customer"), forma de pago,
 vendedor, tabla de líneas (cantidad/detalle/IVA %/total), subtotal/IVA/descuento/total, cantidad de ítems, **detalle
 de impuestos agrupado por tasa** (`taxBreakdown` en `lib/receipt.ts`, tomando la instantánea `order_items.tax_rate`),
 pagos, sello **REEMBOLSADA** si aplica, y `receipt_template.header/footer`.
 **No es una factura electrónica** (D21, [decisiones pendientes](../06-roadmap/decisiones-pendientes.md)): sin CUFE,
 código QR, resolución DIAN ni recibido/cambio (el efectivo entregado no se guarda). `order_items.tax_rate` es una
-instantánea que un trigger `before insert` copia de `products.tax_rate` al vender — **no** interviene en el cálculo
-de `create_sale` (sigue siendo el mismo: precio × tasa por línea, redondeado). Filas anteriores a la migración
+instantánea de la tasa **realmente cobrada** — **no** interviene en el cálculo (sigue siendo precio × tasa por línea,
+redondeado). `create_sale` escribe la tasa que usó para la línea y `_close_tab` la de `tab_items` (congelada al añadir el
+producto a la cuenta, no la actual del producto); ambas desde `20260923000004_fix_cross_task_integration.sql`, que
+además corrigió las órdenes ya cerradas desde una cuenta. El trigger `before insert` que copia `products.tax_rate`
+queda solo como respaldo si alguien inserta sin tasa. Filas anteriores a la migración
 `20260923000002_receipt.sql` se rellenaron con `round(tax / nullif(unit_price*quantity - discount, 0), 4)`.
 
 ## Reembolso

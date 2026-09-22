@@ -22,7 +22,7 @@ Plantilla versionada: [`.env.example`](../../.env.example). Copiarla a `.env.loc
 Las cuatro variables `R2_*` se validan juntas con `superRefine` en `lib/env/schema.ts`: **las cuatro o ninguna**. Sin ellas, `next
 dev`/`next build` funcionan igual (a diferencia de las otras variables, que son obligatorias), y `lib/server/storage.ts` responde
 `503 storage_not_configured` en los endpoints de imagen (`app/api/v1/products/[id]/image`, `app/api/v1/settings/logo`); la UI oculta el
-selector de imagen en ese caso. El bucket es **privado**: las imágenes se sirven con URL firmada (1 h), nunca públicas. El token de R2
+selector de imagen en ese caso. El bucket es **privado**: las imágenes se sirven con URL firmada (12 h), nunca públicas. El token de R2
 debe estar limitado a ese único bucket con permiso "Object Read & Write" (no se crea el token real en este repositorio, solo se
 documenta el requisito).
 
@@ -62,8 +62,10 @@ documenta el requisito).
 `next.config.ts` añade CSP, `frame-ancestors 'none'`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, HSTS y
 `Permissions-Policy`. `connect-src` incluye el origen de `NEXT_PUBLIC_SUPABASE_URL` **mientras el navegador siga llamando a Supabase
 directamente**; se retira cuando la UI solo hable con `/api/v1` (Paso 5). `script-src` conserva `'unsafe-inline'`: una CSP con nonce
-obligaría a renderizar dinámicamente todas las páginas. `img-src` añade `https://<R2_ACCOUNT_ID>.r2.cloudflarestorage.com` **solo
-cuando `R2_ACCOUNT_ID` está definido** (derivado del entorno en `next.config.ts`; con el grupo `R2_*` ausente no añade nada).
+obligaría a renderizar dinámicamente todas las páginas. `img-src` permite siempre `https://*.r2.cloudflarestorage.com` (patrón fijo de
+R2, no un secreto). **No** se deriva de `R2_ACCOUNT_ID`: `next.config.ts` se evalúa en el *build* y la imagen Docker se construye sin las
+variables `R2_*` (llegan al arrancar el contenedor), así que un origen derivado quedaba fuera de la CSP y el navegador bloqueaba las
+imágenes en silencio.
 
 ## Rotación y compromiso de claves
 

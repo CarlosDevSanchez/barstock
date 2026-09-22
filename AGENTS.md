@@ -53,6 +53,7 @@ en zsh, entrecomillar los globs. Más en [`docs/05-guias/comandos.md`](docs/05-g
 - **El navegador solo habla con `/api/v1`** (Route Handlers + `lib/server/services`); las páginas son Client Components que usan `lib/api/*` y
   `useApiQuery`, y el layout del dashboard es un Server Component. Detalle: [`docs/01-arquitectura/08-api.md`](docs/01-arquitectura/08-api.md).
   El lint prohíbe importar `@supabase/*` y `lib/server` desde `app/` y `components/`.
+  **Excepción:** las imágenes de producto y el logo se descargan directamente de Cloudflare R2 con URL firmadas (bucket privado) que emite el servidor; subirlas y borrarlas sí pasa por `/api/v1`.
 - **Base de datos: RLS por rol** (`admin ≥ manager ≥ cashier`), usuario inactivo sin acceso, alta solo por invitación,
   ventas/reembolsos/stock **solo vía RPC transaccionales** (`create_sale`, `refund_order`, `adjust_inventory`)
   ([`docs/02-base-de-datos/`](docs/02-base-de-datos/03-rls-y-politicas.md)).
@@ -126,10 +127,11 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 | Recuperar contraseña | Funciona: `/forgot-password` → correo → `/auth/confirm` → `/reset-password` | [H4](docs/04-auditoria/hallazgos/H4-flujos-incompletos.md) |
 | Dashboard/Reportes | Corregido: agregan en SQL, sin reembolsos, umbral por fila y zona horaria de `settings`. "Loyalty Points" = `floor(total_spent)` derivado (D7, sin validar) | [dashboard](docs/03-modulos/dashboard.md), [reportes](docs/03-modulos/reportes.md) |
 | Órdenes de compra, gastos, variantes | Solo esquema: sin API, UI ni reposición de stock al recibir | [proveedores](docs/03-modulos/proveedores-y-compras.md) |
-| Carrito | Persiste solo ids y cantidades y se vacía en el logout; el total mostrado es una vista previa | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
+| Carrito | Persiste solo ids y cantidades y se vacía en el logout; el total mostrado es una vista previa. La burbuja del carrito está **siempre visible** (con «0» si está vacío) | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
 | Cuentas abiertas (`tabs`) | El stock baja **al añadir** el producto a la cuenta, no al cerrarla; quitar un ítem (gerente+) o anular la repone. Anular solo funciona **sin pagos** | [cuentas-abiertas](docs/03-modulos/cuentas-abiertas.md) |
 | `next build` / `next dev` | Fallan si falta alguna de las 4 variables (el error nombra cuál). `next dev` no debe escribir en `AGENTS.md` (`agentRules: false`) | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
 | Impresión | `window.print()` en el detalle de orden imprime un ticket térmico de 80 mm **no fiscal** (D21: sin CUFE/QR/DIAN) | [UI](docs/01-arquitectura/06-ui-y-diseno.md), [órdenes](docs/03-modulos/ordenes-y-reembolsos.md) |
+| Imágenes R2 | URL firmadas de 12 h (hora de firma redondeada a la hora para que el navegador las cachee). La CSP (`img-src`) permite `https://*.r2.cloudflarestorage.com` **fijo**: `next.config.ts` se evalúa en el *build* y la imagen Docker se construye sin `R2_*`; derivar el origen de `R2_ACCOUNT_ID` hacía que el navegador bloqueara las imágenes en silencio. Sin las 4 variables, los endpoints de imagen responden 503 | [API](docs/01-arquitectura/08-api.md), [productos](docs/03-modulos/productos.md) |
 | Cookies de sesión | `@supabase/ssr` las crea `httpOnly: false`; `lib/auth/cookie-options.ts` las fuerza a `HttpOnly` (y `Secure` cuando `APP_URL` es https). Mantenerlo | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
 | Formularios de auth | Enviados antes de hidratar hacen un `GET` nativo y **ponen la contraseña en la URL**: `method="post"` + botón deshabilitado hasta `useHydrated()` | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
 | Alta de usuarios | Solo por invitación. Un perfil nace **activo únicamente si el servidor le asignó rol** (`app_metadata`); `user_metadata` no se usa. Un usuario desactivado no puede entrar aunque su sesión siga válida | [usuarios](docs/03-modulos/usuarios.md) |

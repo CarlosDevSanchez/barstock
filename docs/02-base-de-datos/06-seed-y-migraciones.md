@@ -16,6 +16,10 @@
 | `…06_locale_and_money.sql` | `profiles.locale`; `currency_decimals` / `money_scale`; columnas de dinero → `NUMERIC(14,2)`; `create_sale` con redondeo según la moneda de la tienda |
 | `…07_top_products.sql` | `top_selling_products` (RPC `SECURITY DEFINER`, panel de venta rápida del POS) |
 | `…08_tabs.sql` | `tabs`, `tab_members`, `tab_items`, `tab_payments`, `orders.tab_id`, enum `tab_status`, RLS y sus RPC ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)) |
+| `20260923000001_soft_delete_people.sql` | `deleted_at` en `customers` y `suppliers`, trigger `guard_soft_delete` (solo admin borra/restaura), `create_sale`/`open_tab` rechazan clientes borrados ([RLS](03-rls-y-politicas.md)) |
+| `20260923000002_receipt.sql` | `order_items.tax_rate` (tasa aplicada, informativa para el ticket) con trigger de respaldo y *backfill*; claves `store_tax_id` y `store_logo_key` en `settings` |
+| `20260923000003_product_image_key.sql` | `products.image_key` (clave R2 generada por el servidor, con `CHECK` de formato); `image_url` queda en desuso |
+| `20260923000004_fix_cross_task_integration.sql` | `_close_tab` y `create_sale` escriben `order_items.tax_rate` explícitamente (la de `tab_items`, congelada al añadir, en vez de la actual del producto); *backfill* de las órdenes cerradas desde una cuenta |
 
 `supabase/legacy/` conserva `schema.sql` y `fix_rls_policies.sql` como historia (**no ejecutar**). `fix_rls_policies.sql` no se migra: `…03`
 elimina todas las políticas existentes, incluidas las que ese parche haya creado en una base ya desplegada.
