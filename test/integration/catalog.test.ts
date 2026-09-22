@@ -84,6 +84,21 @@ describe('products', () => {
         const response = await manager.post(createProduct, 'products', { body: { name: 'b', sku, selling_price: 1 } })
         expect(response.status).toBe(409)
         expect(response.text).not.toMatch(/products_sku_key|duplicate key/)
+        expect(errorOf(response).details).toEqual({ field: 'sku' })
+    })
+
+    test('duplicate barcode is a 409 that names the barcode field (not the SKU), without leaking the value', async () => {
+        const barcode = uniq('BC')
+        await manager.post(createProduct, 'products', {
+            body: { name: 'a', sku: uniq('SKU'), barcode, selling_price: 1 }
+        })
+        const response = await manager.post(createProduct, 'products', {
+            body: { name: 'b', sku: uniq('SKU'), barcode, selling_price: 1 }
+        })
+        expect(response.status).toBe(409)
+        expect(errorOf(response).details).toEqual({ field: 'barcode' })
+        expect(response.text).not.toMatch(/products_barcode_key|duplicate key/)
+        expect(response.text).not.toContain(barcode)
     })
 
     test('validation errors are 422 with per-field details', async () => {

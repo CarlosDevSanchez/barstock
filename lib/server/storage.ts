@@ -96,6 +96,28 @@ export function validateImage(bytes: Uint8Array): ImageValidation {
     return { ok: false, reason: 'invalid_type' }
 }
 
+// ---- Signed URL lifetime -----------------------------------------------------------------------------------------
+
+/**
+ * 12 h: a POS left open for a whole shift keeps its images (the product list is refetched far more often than that,
+ * each time with a fresh URL). Longer would widen the window in which a leaked URL still works (the bucket itself
+ * stays private); R2 would accept up to 7 days.
+ */
+export const SIGNED_URL_TTL_SECONDS = 12 * 60 * 60
+
+/** Signing time granularity: every URL signed within the same hour is byte-identical. */
+const PRESIGN_WINDOW_MS = 60 * 60 * 1000
+
+/**
+ * The SigV4 `X-Amz-Date` (`YYYYMMDDTHHMMSSZ`) floored to the hour. A fresh timestamp on every read would make each
+ * list refetch return a new URL: the browser could never cache a thumbnail and would re-download all of them. With
+ * the floor, a URL stays stable for up to an hour and is still valid for at least TTL - 1 h (11 h) after it is served.
+ */
+export function presignDatetime(now: Date): string {
+    const floored = new Date(Math.floor(now.getTime() / PRESIGN_WINDOW_MS) * PRESIGN_WINDOW_MS)
+    return floored.toISOString().replace(/[:-]|\.\d{3}/g, '')
+}
+
 // ---- R2 backend (Cloudflare's S3-compatible API, signed with aws4fetch) ----------------------------------------
 
 class R2Storage implements StorageBackend {
@@ -126,8 +148,12 @@ class R2Storage implements StorageBackend {
     async signedGetUrl(key: string, ttlSeconds: number): Promise<string> {
         const url = new URL(`${this.base}/${key}`)
         url.searchParams.set('X-Amz-Expires', String(ttlSeconds))
-        // `sign()` only computes the HMAC signature over the request: it never touches the network.
-        const signed = await this.client.sign(url.toString(), { method: 'GET', aws: { signQuery: true } })
+        // `sign()` only computes the HMAC signature over the request: it never touches the network. The signing
+        // time is floored (presignDatetime) so every read within the same window gets the SAME url.
+        const signed = await this.client.sign(url.toString(), {
+            method: 'GET',
+            aws: { signQuery: true, datetime: presignDatetime(new Date()) }
+        })
         return signed.url
     }
 }
@@ -167,7 +193,7 @@ export async function deleteObject(key: string): Promise<void> {
     await backend().deleteObject(key)
 }
 
-export async function signedGetUrl(key: string, ttlSeconds = 3600): Promise<string> {
+export async function signedGetUrl(key: string, ttlSeconds = SIGNED_URL_TTL_SECONDS): Promise<string> {
     return backend().signedGetUrl(key, ttlSeconds)
 }
 
@@ -175,7 +201,10 @@ export async function signedGetUrl(key: string, ttlSeconds = 3600): Promise<stri
  * Null-safe convenience for read services (`listProducts`, `getProduct`, `getSettings`): no key, or storage not
  * configured, just means no image yet — never an error the caller has to handle.
  */
-export async function trySignedGetUrl(key: string | null | undefined, ttlSeconds = 3600): Promise<string | null> {
+export async function trySignedGetUrl(
+    key: string | null | undefined,
+    ttlSeconds = SIGNED_URL_TTL_SECONDS
+): Promise<string | null> {
     if (!key || !isStorageConfigured()) return null
     return signedGetUrl(key, ttlSeconds)
 }

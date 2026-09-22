@@ -195,6 +195,7 @@
     "skuHelp": "Sugerido a partir del nombre; puedes cambiarlo",
     "regenerateSku": "Regenerar",
     "skuConflict": "Este SKU ya está en uso. Prueba con «{suggestion}».",
+    "barcodeConflict": "Este código de barras ya lo usa otro producto.",
     "barcode": "Código de barras",
     "category": "Categoría",
     "selectCategory": "Seleccionar categoría",

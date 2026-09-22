@@ -180,4 +180,25 @@ describe('ReceiptTicket', () => {
         )
         expect(screen.getByText('REFUNDED')).toBeTruthy()
     })
+
+    test('prints the store logo in the header when one is uploaded', () => {
+        const logoUrl = 'https://acct.r2.cloudflarestorage.com/bucket/settings/logo.webp?X-Amz-Signature=abc'
+        render(
+            <IntlProvider>
+                <ReceiptTicket order={baseOrder} settings={{ ...testSettings, store_logo_url: logoUrl }} />
+            </IntlProvider>
+        )
+        const logo = screen.getByTestId('receipt-logo')
+        expect(logo.getAttribute('src')).toBe(logoUrl)
+    })
+
+    test('renders no logo image when none is uploaded', () => {
+        render(
+            <IntlProvider>
+                <ReceiptTicket order={baseOrder} settings={testSettings} />
+            </IntlProvider>
+        )
+        expect(screen.queryByTestId('receipt-logo')).toBeNull()
+        expect(screen.getByTestId('receipt-ticket').querySelector('img')).toBeNull()
+    })
 })

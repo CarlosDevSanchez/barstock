@@ -20,6 +20,19 @@ describe('fromDatabaseError', () => {
         expect(error.code).toBe(appCode as AppError['code'])
     })
 
+    test('a unique violation on a known constraint names only the API field, never the constraint', () => {
+        const dup = (constraint: string) =>
+            fromDatabaseError({
+                code: '23505',
+                message: `duplicate key value violates unique constraint "${constraint}"`,
+                details: 'Key (x)=(secret-value) already exists.'
+            })
+        expect(dup('products_sku_key').details).toEqual({ field: 'sku' })
+        expect(dup('products_barcode_key').details).toEqual({ field: 'barcode' })
+        expect(dup('some_other_key').details).toBeUndefined()
+        expect(JSON.stringify(dup('products_barcode_key'))).not.toMatch(/products_barcode_key|secret-value/)
+    })
+
     test('never leaks raw driver messages', () => {
         for (const [code] of cases) {
             expect(fromDatabaseError({ code, message: 'raw driver text: secret_table' }).message).not.toContain(

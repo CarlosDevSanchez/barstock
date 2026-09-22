@@ -69,6 +69,26 @@ describe('ProductCard', () => {
         expect(box?.querySelector('svg')).toBeTruthy()
     })
 
+    test('a fresh URL after a failed (e.g. expired signed) one shows the image again on the same mounted card', () => {
+        const view = (image_url: string) => (
+            <IntlProvider>
+                <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
+                    <ProductCard product={product({ name: 'Refetched', image_url })} onAdd={() => {}} />
+                </SessionProvider>
+            </IntlProvider>
+        )
+        const { rerender } = render(view('https://example.com/p.jpg?X-Amz-Signature=old'))
+        fireEvent.error(screen.getByAltText(''))
+        expect(screen.queryByAltText('')).toBeNull()
+
+        // Same URL again (no refetch yet): still the fallback, no retry loop.
+        rerender(view('https://example.com/p.jpg?X-Amz-Signature=old'))
+        expect(screen.queryByAltText('')).toBeNull()
+
+        rerender(view('https://example.com/p.jpg?X-Amz-Signature=new'))
+        expect(screen.getByAltText('').getAttribute('src')).toBe('https://example.com/p.jpg?X-Amz-Signature=new')
+    })
+
     test('without an image, the placeholder box has the same fixed aspect ratio as a filled one', () => {
         renderCard({ name: 'No Image', image_url: null })
         const card = screen.getByRole('button', { name: 'Add No Image to cart' })

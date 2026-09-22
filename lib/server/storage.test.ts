@@ -4,8 +4,11 @@ import {
     isStorageConfigured,
     logoImageKey,
     MAX_IMAGE_BYTES,
+    presignDatetime,
     productImageKey,
     setStorageBackendForTesting,
+    SIGNED_URL_TTL_SECONDS,
+    signedGetUrl,
     STORAGE_UNCONFIGURED_FOR_TESTING,
     validateImage
 } from './storage'
@@ -80,5 +83,21 @@ describe('test seam (setStorageBackendForTesting)', () => {
 
         setStorageBackendForTesting(STORAGE_UNCONFIGURED_FOR_TESTING)
         expect(isStorageConfigured()).toBe(false)
+    })
+})
+
+describe('signed URL lifetime and stability', () => {
+    afterEach(() => setStorageBackendForTesting(null))
+
+    test('defaults to a 12 h TTL, long enough for a POS left open all shift', async () => {
+        expect(SIGNED_URL_TTL_SECONDS).toBe(12 * 60 * 60)
+        setStorageBackendForTesting(new InMemoryStorage())
+        expect(await signedGetUrl('products/a/b.webp')).toContain('X-Amz-Expires=43200')
+    })
+
+    test('the signing time is floored to the hour, so reads within the same hour get the same (cacheable) URL', () => {
+        expect(presignDatetime(new Date('2026-09-22T14:00:00.000Z'))).toBe('20260922T140000Z')
+        expect(presignDatetime(new Date('2026-09-22T14:59:59.999Z'))).toBe('20260922T140000Z')
+        expect(presignDatetime(new Date('2026-09-22T15:00:00.000Z'))).toBe('20260922T150000Z')
     })
 })

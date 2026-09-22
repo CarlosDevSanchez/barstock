@@ -215,7 +215,7 @@ describe('SKU suggestion', () => {
 
     test('a duplicate SKU (409) surfaces as a field error with a "-2" suggestion', async () => {
         create.mockImplementationOnce(async () => {
-            throw new ApiError(409, 'conflict', 'A record with the same unique value already exists')
+            throw new ApiError(409, 'conflict', 'A record with the same unique value already exists', { field: 'sku' })
         })
         const dialog = await openNewProduct()
         type('Product Name *', 'Widget')
@@ -226,6 +226,42 @@ describe('SKU suggestion', () => {
 
         expect(await within(dialog).findByText('This SKU is already in use. Try "W-1-2".')).toBeTruthy()
         expect(within(dialog).getByText('Add New Product')).toBeTruthy() // dialog stayed open
+    })
+
+    test('a duplicate barcode (409) is pinned on the barcode field, not blamed on the SKU', async () => {
+        create.mockImplementationOnce(async () => {
+            throw new ApiError(409, 'conflict', 'A record with the same unique value already exists', {
+                field: 'barcode'
+            })
+        })
+        const dialog = await openNewProduct()
+        type('Product Name *', 'Widget')
+        type('SKU *', 'W-1')
+        type('Barcode', '7701234567890')
+        type('Cost Price *', '4')
+        type('Selling Price *', '9.5')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create Product' }))
+
+        expect(await within(dialog).findByText('This barcode is already used by another product.')).toBeTruthy()
+        expect(within(dialog).queryByText(/This SKU is already in use/)).toBeNull()
+        expect(within(dialog).getByText('Add New Product')).toBeTruthy()
+    })
+
+    test('a 409 that names no known field is not blamed on the SKU or the barcode', async () => {
+        create.mockImplementationOnce(async () => {
+            throw new ApiError(409, 'conflict', 'A record with the same unique value already exists')
+        })
+        const dialog = await openNewProduct()
+        type('Product Name *', 'Widget')
+        type('SKU *', 'W-1')
+        type('Cost Price *', '4')
+        type('Selling Price *', '9.5')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create Product' }))
+
+        await waitFor(() => expect(create).toHaveBeenCalled())
+        expect(within(dialog).queryByText(/This SKU is already in use/)).toBeNull()
+        expect(within(dialog).queryByText(/This barcode is already used/)).toBeNull()
+        expect(within(dialog).getByText('Add New Product')).toBeTruthy()
     })
 })
 

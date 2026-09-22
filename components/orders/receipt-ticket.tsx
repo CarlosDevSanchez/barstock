@@ -5,11 +5,11 @@ import { taxBreakdown } from '@/lib/receipt'
 import { formatMoney } from '@/lib/money'
 import { moneyLocale } from '@/lib/i18n/config'
 import type { OrderDetail } from '@/lib/api/orders'
-import type { SettingsInput } from '@/lib/validation/resources'
+import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 
 interface ReceiptTicketProps {
     order: OrderDetail
-    settings: SettingsInput
+    settings: SettingsWithLogoUrl
 }
 
 /**
@@ -42,6 +42,16 @@ export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
             data-testid="receipt-ticket"
         >
             <div className="text-center space-y-0.5">
+                {settings.store_logo_url && (
+                    // eslint-disable-next-line @next/next/no-img-element -- signed R2 URL, printed as-is (thermal = B/W)
+                    <img
+                        src={settings.store_logo_url}
+                        alt=""
+                        className="mx-auto mb-1 h-auto object-contain"
+                        style={{ maxWidth: '48mm', maxHeight: '24mm' }}
+                        data-testid="receipt-logo"
+                    />
+                )}
                 <p className="text-sm font-bold">{settings.store_name}</p>
                 {settings.store_tax_id && <p>NIT {settings.store_tax_id}</p>}
                 {settings.store_address && <p>{settings.store_address}</p>}

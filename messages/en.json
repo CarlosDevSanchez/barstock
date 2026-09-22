@@ -195,6 +195,7 @@
     "skuHelp": "Suggested from the name; you can change it",
     "regenerateSku": "Regenerate",
     "skuConflict": "This SKU is already in use. Try \"{suggestion}\".",
+    "barcodeConflict": "This barcode is already used by another product.",
     "barcode": "Barcode",
     "category": "Category",
     "selectCategory": "Select category",

@@ -39,6 +39,7 @@ import { productCreateSchema } from '@/lib/validation/resources'
 import type { Tables } from '@/types/database'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { useImageFallback } from '@/hooks/use-image-fallback'
 import { usePagination } from '@/hooks/use-pagination'
 
 // The API stores the tax rate as a fraction (0.10); people type a percentage (10).
@@ -121,11 +122,17 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                 toast.success(t('created'))
             }
         } catch (error: unknown) {
-            // The API turns a duplicate SKU (Postgres 23505) into a 409; surface it on the SKU field
-            // with a ready-to-use alternative instead of a generic toast.
-            if (error instanceof ApiError && error.status === 409) {
+            // A duplicate SKU or barcode (Postgres 23505) is a 409 whose details name the field
+            // (lib/server/errors.ts). Pin it on that field (with a ready-to-use alternative for the SKU); any
+            // other conflict falls through to the generic toast.
+            const conflictField = error instanceof ApiError && error.status === 409 ? conflictFieldOf(error) : null
+            if (conflictField === 'sku') {
                 const suggestion = `${form.getValues('sku')}-2`
                 form.setError('sku', { type: 'conflict', message: t('skuConflict', { suggestion }) })
+                return
+            }
+            if (conflictField === 'barcode') {
+                form.setError('barcode', { type: 'conflict', message: t('barcodeConflict') })
                 return
             }
             toast.error(errorMessage(error, t('saveFailed')))
@@ -238,10 +245,16 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
     )
 }
 
+/** The form field a 409 unique-violation points at (`details.field`, set by lib/server/errors.ts), if any. */
+function conflictFieldOf(error: ApiError): string | null {
+    const details = error.details
+    if (typeof details !== 'object' || details === null || !('field' in details)) return null
+    return typeof details.field === 'string' ? details.field : null
+}
+
 /** 40px thumbnail for the products table: falls back to the reserve icon when there is no image, or it fails to load. */
 function ProductThumbnail({ product }: { product: ProductListItem }) {
-    const [failed, setFailed] = useState(false)
-    const showImage = !!product.image_url && !failed
+    const { showImage, onError } = useImageFallback(product.image_url)
 
     return (
         <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
@@ -253,7 +266,7 @@ function ProductThumbnail({ product }: { product: ProductListItem }) {
                     loading="lazy"
                     decoding="async"
                     className="h-full w-full object-cover"
-                    onError={() => setFailed(true)}
+                    onError={onError}
                 />
             ) : (
                 <Package className="h-4 w-4 text-emerald-600" />

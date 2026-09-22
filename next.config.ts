@@ -3,13 +3,15 @@ import createNextIntlPlugin from 'next-intl/plugin'
 import { parseEnv, serverEnvSchema } from './lib/env/schema'
 
 // Fail fast (dev and build) naming any missing variable, instead of `supabaseUrl is required` deep inside a page.
-const env = parseEnv(serverEnvSchema, process.env)
+parseEnv(serverEnvSchema, process.env)
 const isDev = process.env.NODE_ENV === 'development'
 
 // Product/logo images are signed R2 URLs, fetched directly from Cloudflare (never proxied through this origin):
-// img-src needs that host. R2_ACCOUNT_ID is optional as a group (lib/env/schema.ts), so this must not throw when
-// it is absent — the extra origin is just omitted, same as the image endpoints answering 503 in that case.
-const r2ImageOrigin = env.R2_ACCOUNT_ID ? ` https://${env.R2_ACCOUNT_ID}.r2.cloudflarestorage.com` : ''
+// img-src needs that host. It is the fixed R2 endpoint pattern, NOT derived from R2_ACCOUNT_ID: this file (and so
+// the CSP) is evaluated at BUILD time, and the Docker image is built without the R2 secrets (they arrive at
+// container start). Deriving it from the env would ship a CSP without R2 and the browser would silently block
+// every image while uploads still work. The bucket stays private: only signed URLs load.
+const r2ImageOrigin = ' https://*.r2.cloudflarestorage.com'
 
 // Everything is self-hosted (fonts come from next/font). Next.js needs inline scripts/styles for hydration;
 // a nonce-based CSP would force dynamic rendering of every page, so 'unsafe-inline' stays for now.

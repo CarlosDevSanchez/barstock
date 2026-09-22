@@ -1,11 +1,11 @@
 'use client'
 
-import { useState } from 'react'
 import { ShoppingCart } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Badge } from '@/components/ui/badge'
 import { Card, CardContent } from '@/components/ui/card'
 import { useMoney } from '@/components/session-provider'
+import { useImageFallback } from '@/hooks/use-image-fallback'
 import type { ProductListItem } from '@/lib/api/products'
 
 interface ProductCardProps {
@@ -20,10 +20,9 @@ interface ProductCardProps {
 export function ProductCard({ product, onAdd }: ProductCardProps) {
     const t = useTranslations('pos')
     const money = useMoney()
-    const [imageFailed, setImageFailed] = useState(false)
+    const { showImage, onError: onImageError } = useImageFallback(product.image_url)
     // stock null = no inventory row, which the database refuses to sell.
     const soldOut = product.stock === null || product.stock <= 0
-    const showImage = !!product.image_url && !imageFailed
 
     return (
         <Card
@@ -52,7 +51,7 @@ export function ProductCard({ product, onAdd }: ProductCardProps) {
                         loading="lazy"
                         decoding="async"
                         className="h-full w-full object-cover"
-                        onError={() => setImageFailed(true)}
+                        onError={onImageError}
                     />
                 ) : (
                     <ShoppingCart className="w-6 h-6 text-emerald-600/30 group-hover:text-emerald-600/50 transition-colors" />

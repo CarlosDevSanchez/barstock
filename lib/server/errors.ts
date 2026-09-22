@@ -49,7 +49,7 @@ export const forbidden = (message = 'You are not allowed to do this') => new App
 export const tooManyRequests = (message = 'Too many attempts, try again later') =>
     new AppError('too_many_requests', message)
 export const notFound = (message = 'Not found') => new AppError('not_found', message)
-export const conflict = (message: string) => new AppError('conflict', message)
+export const conflict = (message: string, details?: unknown) => new AppError('conflict', message, details)
 export const unprocessable = (message: string) => new AppError('unprocessable', message)
 export const payloadTooLarge = (message = 'File is too large') => new AppError('payload_too_large', message)
 export const unsupportedMediaType = (message = 'Unsupported file type') =>
@@ -70,6 +70,23 @@ export function isDatabaseError(value: unknown): value is DatabaseError {
 }
 
 /**
+ * Unique constraints whose violation the UI can pin to a form field. Only the API field name goes back to the client
+ * (`details: { field }`), never the constraint name, the raw message or the duplicated value. Anything not listed
+ * stays a plain 409 without details, and the UI falls back to a generic toast.
+ */
+const UNIQUE_CONSTRAINT_FIELDS: Record<string, string> = {
+    products_sku_key: 'sku',
+    products_barcode_key: 'barcode'
+}
+
+/** `duplicate key value violates unique constraint "products_sku_key"` -> `{ field: 'sku' }`, or undefined. */
+function uniqueViolationDetails(message: string): { field: string } | undefined {
+    const constraint = /unique constraint "([^"]+)"/.exec(message)?.[1]
+    const field = constraint ? UNIQUE_CONSTRAINT_FIELDS[constraint] : undefined
+    return field ? { field } : undefined
+}
+
+/**
  * Maps a Postgres/PostgREST error to an AppError without leaking raw driver messages.
  * The exceptions are P0001 (business rule) and P0002 (not found) raised by our own RPCs, e.g. `Insufficient stock for "X"`:
  * those messages are authored by us for the client.
@@ -77,7 +94,7 @@ export function isDatabaseError(value: unknown): value is DatabaseError {
 export function fromDatabaseError(error: DatabaseError): AppError {
     switch (error.code) {
         case '23505':
-            return conflict('A record with the same unique value already exists')
+            return conflict('A record with the same unique value already exists', uniqueViolationDetails(error.message))
         case '23503':
             return conflict('The record is referenced by, or refers to, another record')
         case '23514':
