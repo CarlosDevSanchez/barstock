@@ -1,11 +1,11 @@
 import { beforeAll, describe, expect, test } from 'bun:test'
 import { DELETE as deleteCategory, PATCH as patchCategory } from '@/app/api/v1/categories/[id]/route'
 import { GET as listCategories, POST as createCategory } from '@/app/api/v1/categories/route'
-import { GET as getCustomer, PATCH as patchCustomer } from '@/app/api/v1/customers/[id]/route'
+import { DELETE as deleteCustomer, GET as getCustomer, PATCH as patchCustomer } from '@/app/api/v1/customers/[id]/route'
 import { GET as listCustomers, POST as createCustomer } from '@/app/api/v1/customers/route'
 import { DELETE as deleteProduct, GET as getProduct, PATCH as patchProduct } from '@/app/api/v1/products/[id]/route'
 import { GET as listProducts, POST as createProduct } from '@/app/api/v1/products/route'
-import { GET as getSupplier, PATCH as patchSupplier } from '@/app/api/v1/suppliers/[id]/route'
+import { DELETE as deleteSupplier, GET as getSupplier, PATCH as patchSupplier } from '@/app/api/v1/suppliers/[id]/route'
 import { GET as listSuppliers, POST as createSupplier } from '@/app/api/v1/suppliers/route'
 import { adminClient, createProduct as makeProduct, ensureTestUsers, uniq } from '../helpers/integration'
 import { dataOf, errorOf, loginAs, TestClient, type ApiResponse } from '../helpers/http'
@@ -280,6 +280,22 @@ describe('customers', () => {
         const id = crypto.randomUUID()
         expect((await cashier.get(getCustomer, `customers/${id}`, { params: { id } })).status).toBe(404)
     })
+
+    test('deleting a customer is admin-only (API layer); it then disappears from GET and the list, history kept', async () => {
+        const created = await cashier.post(createCustomer, 'customers', { body: { name: uniq('DelCu') } })
+        const id = dataOf<{ id: string }>(created).id
+        const params = { id }
+        expect((await cashier.delete(deleteCustomer, `customers/${id}`, { params })).status).toBe(403)
+        expect((await manager.delete(deleteCustomer, `customers/${id}`, { params })).status).toBe(403)
+        expect((await admin.delete(deleteCustomer, `customers/${id}`, { params })).status).toBe(204)
+        expect((await cashier.get(getCustomer, `customers/${id}`, { params })).status).toBe(404)
+        expect((await admin.delete(deleteCustomer, `customers/${id}`, { params })).status).toBe(404)
+        const { data } = await adminClient().from('customers').select('deleted_at, is_active').eq('id', id).single()
+        expect(data?.deleted_at).not.toBeNull()
+        expect(data?.is_active).toBe(false)
+        const search = list<{ id: string }>(await manager.get(listCustomers, `customers?q=DelCu`))
+        expect(search.data.some(row => row.id === id)).toBe(false)
+    })
 })
 
 describe('suppliers', () => {
@@ -303,5 +319,18 @@ describe('suppliers', () => {
                 phone: '555'
             })
         }
+    })
+
+    test('deleting a supplier is admin-only (API layer): a manager gets 403, an admin gets 204', async () => {
+        const created = await manager.post(createSupplier, 'suppliers', { body: { name: uniq('DelSup') } })
+        const id = dataOf<{ id: string }>(created).id
+        const params = { id }
+        expect((await cashier.delete(deleteSupplier, `suppliers/${id}`, { params })).status).toBe(403)
+        expect((await manager.delete(deleteSupplier, `suppliers/${id}`, { params })).status).toBe(403)
+        expect((await admin.delete(deleteSupplier, `suppliers/${id}`, { params })).status).toBe(204)
+        expect((await manager.get(getSupplier, `suppliers/${id}`, { params })).status).toBe(404)
+        expect((await admin.delete(deleteSupplier, `suppliers/${id}`, { params })).status).toBe(404)
+        const search = list<{ id: string }>(await manager.get(listSuppliers, `suppliers?q=DelSup`))
+        expect(search.data.some(row => row.id === id)).toBe(false)
     })
 })

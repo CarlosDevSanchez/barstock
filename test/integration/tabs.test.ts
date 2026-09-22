@@ -7,7 +7,16 @@ import { POST as payTab } from '@/app/api/v1/tabs/[id]/payments/route'
 import { POST as voidTab } from '@/app/api/v1/tabs/[id]/void/route'
 import { GET as getOrder } from '@/app/api/v1/orders/[id]/route'
 import { POST as refund } from '@/app/api/v1/orders/[id]/refund/route'
-import { createProduct, ensureTestUsers, pinStoreCurrency, signedInClient, stockOf, uniq } from '../helpers/integration'
+import {
+    adminClient,
+    createCustomer,
+    createProduct,
+    ensureTestUsers,
+    pinStoreCurrency,
+    signedInClient,
+    stockOf,
+    uniq
+} from '../helpers/integration'
 import { dataOf, errorOf, loginAs, TestClient } from '../helpers/http'
 
 let cashier: TestClient
@@ -73,6 +82,15 @@ describe('POST /tabs (open_tab)', () => {
 
         const list = (await cashier.get(getTab, 'tabs?status=open')).json<{ data: Array<{ id: string }> }>()
         expect(list.data.some(row => row.id === tab.id)).toBe(true)
+    })
+
+    test('rejects a soft-deleted customer the same way it rejects an inactive one', async () => {
+        const customer = await createCustomer()
+        await adminClient().from('customers').update({ deleted_at: new Date().toISOString() }).eq('id', customer.id)
+
+        const response = await open(cashier, { label: uniq('Table'), customer_id: customer.id })
+        expect(response.status).toBe(422)
+        expect(errorOf(response).message).toBe('Customer not available')
     })
 })
 

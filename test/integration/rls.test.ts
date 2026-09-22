@@ -396,6 +396,87 @@ describe('role matrix on catalog, people and settings', () => {
     })
 })
 
+describe('guard_soft_delete: only admins may set deleted_at on customers or suppliers', () => {
+    // These call PostgREST directly (like the rest of this file): they prove the DATABASE enforces it, not just the
+    // admin-only DELETE route. Without the trigger from 20260923000001_soft_delete_people.sql, a cashier's UPDATE on
+    // customers would succeed (customers_update already lets a cashier UPDATE any granted column — name/email/phone/
+    // address/is_active, and once the migration grants it, deleted_at too), and a manager's UPDATE on suppliers would
+    // succeed (suppliers_update lets a manager UPDATE any column: there is no column-level grant restricting it,
+    // unlike customers). See the task report for the before/after run that confirms this.
+    test('a cashier cannot soft-delete a customer; an admin can', async () => {
+        const customer = await createCustomer()
+        const cashierAttempt = await cashier
+            .from('customers')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', customer.id)
+        expect(cashierAttempt.error?.code).toBe(PERMISSION_DENIED)
+
+        const managerAttempt = await manager
+            .from('customers')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', customer.id)
+        expect(managerAttempt.error?.code).toBe(PERMISSION_DENIED)
+
+        const stillThere = await service().from('customers').select('deleted_at').eq('id', customer.id).single()
+        expect(stillThere.data?.deleted_at).toBeNull()
+
+        const adminAttempt = await admin
+            .from('customers')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', customer.id)
+            .select('deleted_at')
+            .single()
+        expect(adminAttempt.data?.deleted_at).not.toBeNull()
+    })
+
+    test('a manager cannot soft-delete a supplier; an admin can', async () => {
+        const { data: supplier } = await service()
+            .from('suppliers')
+            .insert({ name: uniq('Sup') })
+            .select()
+            .single()
+        const id = supplier?.id ?? ''
+
+        const managerAttempt = await manager
+            .from('suppliers')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', id)
+        expect(managerAttempt.error?.code).toBe(PERMISSION_DENIED)
+
+        // A cashier cannot UPDATE a supplier row at all (suppliers_update requires manager+): RLS hides the row
+        // entirely, so this is 0 rows silently affected, not a 42501 — the guard trigger is never even reached.
+        const cashierAttempt = await cashier
+            .from('suppliers')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', id)
+            .select()
+        expect(cashierAttempt.data ?? []).toHaveLength(0)
+
+        const stillThere = await service().from('suppliers').select('deleted_at').eq('id', id).single()
+        expect(stillThere.data?.deleted_at).toBeNull()
+
+        const adminAttempt = await admin
+            .from('suppliers')
+            .update({ deleted_at: new Date().toISOString() })
+            .eq('id', id)
+            .select('deleted_at')
+            .single()
+        expect(adminAttempt.data?.deleted_at).not.toBeNull()
+    })
+
+    test('an unrelated update (e.g. renaming) never touches deleted_at and is unaffected by the guard', async () => {
+        const customer = await createCustomer()
+        const renamed = await cashier
+            .from('customers')
+            .update({ name: 'Renamed by cashier' })
+            .eq('id', customer.id)
+            .select('name, deleted_at')
+            .single()
+        expect(renamed.error).toBeNull()
+        expect(renamed.data).toEqual({ name: 'Renamed by cashier', deleted_at: null })
+    })
+})
+
 describe('order visibility', () => {
     test('a cashier sees only their own orders, items and payments; managers see all', async () => {
         const product = await createProduct({ stock: 10 })

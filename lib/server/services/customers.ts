@@ -10,7 +10,11 @@ export async function listCustomers(
     supabase: AppSupabaseClient,
     { page, pageSize, q }: Pagination
 ): Promise<Page<Tables<'customers'>>> {
-    let query = supabase.from('customers').select('*', { count: 'exact' }).order('created_at', { ascending: false })
+    let query = supabase
+        .from('customers')
+        .select('*', { count: 'exact' })
+        .is('deleted_at', null)
+        .order('created_at', { ascending: false })
     const filter = searchFilter(q, ['name', 'email', 'phone'])
     if (filter) query = query.or(filter)
 
@@ -21,7 +25,12 @@ export async function listCustomers(
 }
 
 export async function getCustomer(supabase: AppSupabaseClient, id: string): Promise<Tables<'customers'>> {
-    const { data, error } = await supabase.from('customers').select('*').eq('id', id).maybeSingle()
+    const { data, error } = await supabase
+        .from('customers')
+        .select('*')
+        .eq('id', id)
+        .is('deleted_at', null)
+        .maybeSingle()
     assertNoError(error)
     if (!data) throw notFound('Customer not found')
     return data
@@ -38,8 +47,27 @@ export async function updateCustomer(
     id: string,
     patch: CustomerUpdate
 ): Promise<Tables<'customers'>> {
-    const { data, error } = await supabase.from('customers').update(patch).eq('id', id).select().maybeSingle()
+    const { data, error } = await supabase
+        .from('customers')
+        .update(patch)
+        .eq('id', id)
+        .is('deleted_at', null)
+        .select()
+        .maybeSingle()
     assertNoError(error)
     if (!data) throw notFound('Customer not found')
     return data
+}
+
+/** Soft delete: order history keeps pointing at the customer. Admin only (RLS trigger guard_soft_delete). */
+export async function deleteCustomer(supabase: AppSupabaseClient, id: string): Promise<void> {
+    const { data, error } = await supabase
+        .from('customers')
+        .update({ deleted_at: new Date().toISOString(), is_active: false })
+        .eq('id', id)
+        .is('deleted_at', null)
+        .select('id')
+        .maybeSingle()
+    assertNoError(error)
+    if (!data) throw notFound('Customer not found')
 }

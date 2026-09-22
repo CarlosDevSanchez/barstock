@@ -6,7 +6,7 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Search, Users } from 'lucide-react'
+import { Edit, Plus, Search, Trash2, Users } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -14,34 +14,63 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Form } from '@/components/ui/form'
-import { TextField } from '@/components/form-fields'
+import { ConfirmDialog } from '@/components/confirm-dialog'
+import { SwitchField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
-import { useMoney } from '@/components/session-provider'
+import { useMoney, useSession } from '@/components/session-provider'
 import { errorMessage } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
+import { roleAtLeast } from '@/lib/auth/roles'
 import { customerCreateSchema } from '@/lib/validation/resources'
+import type { Tables } from '@/types/database'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePagination } from '@/hooks/use-pagination'
 
-function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+type Customer = Tables<'customers'>
+
+const emptyValues = () => ({ name: '', email: '', phone: '', address: '', is_active: true })
+
+function valuesFor(customer: Customer | null) {
+    if (!customer) return emptyValues()
+    return {
+        name: customer.name,
+        email: customer.email ?? '',
+        phone: customer.phone ?? '',
+        address: customer.address ?? '',
+        is_active: customer.is_active
+    }
+}
+
+interface CustomerDialogProps {
+    customer: Customer | null
+    onClose: () => void
+    onSaved: () => void
+}
+
+export function CustomerDialog({ customer, onClose, onSaved }: CustomerDialogProps) {
     const t = useTranslations('customers')
     const tc = useTranslations('common')
     const form = useForm({
         resolver: zodResolver(customerCreateSchema),
-        defaultValues: { name: '', email: '', phone: '', address: '' }
+        defaultValues: valuesFor(customer)
     })
     const submitting = form.formState.isSubmitting
 
     const onSubmit = form.handleSubmit(async values => {
         try {
-            await customersApi.create(values)
-            toast.success(t('added'))
+            if (customer) {
+                await customersApi.update(customer.id, values)
+                toast.success(t('updated'))
+            } else {
+                await customersApi.create(values)
+                toast.success(t('added'))
+            }
             onSaved()
         } catch (error: unknown) {
-            toast.error(errorMessage(error, t('addFailed')))
+            toast.error(errorMessage(error, customer ? t('updateFailed') : t('addFailed')))
         }
     })
 
@@ -49,7 +78,7 @@ function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
         <Dialog open onOpenChange={open => !open && onClose()}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>{t('addTitle')}</DialogTitle>
+                    <DialogTitle>{customer ? t('editTitle') : t('addTitle')}</DialogTitle>
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate>
@@ -58,13 +87,14 @@ function CustomerDialog({ onClose, onSaved }: { onClose: () => void; onSaved: ()
                             <TextField name="email" label={t('email')} type="email" />
                             <TextField name="phone" label={t('phone')} />
                             <TextField name="address" label={t('address')} />
+                            {customer && <SwitchField name="is_active" label={tc('active')} />}
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={onClose}>
                                 {tc('cancel')}
                             </Button>
                             <Button type="submit" disabled={submitting}>
-                                {submitting ? tc('saving') : t('addCustomer')}
+                                {submitting ? tc('saving') : customer ? t('updateCustomer') : t('addCustomer')}
                             </Button>
                         </DialogFooter>
                     </form>
@@ -79,9 +109,13 @@ export default function CustomersPage() {
     const tc = useTranslations('common')
     const router = useRouter()
     const money = useMoney()
+    const { user } = useSession()
+    const canDelete = roleAtLeast(user.role, 'admin')
     const [searchQuery, setSearchQuery] = useState('')
     const { page, pageSize, setPage, setPageSize, reset } = usePagination()
-    const [showDialog, setShowDialog] = useState(false)
+    // undefined = closed, null = creating, customer = editing
+    const [editing, setEditing] = useState<Customer | null | undefined>(undefined)
+    const [toDelete, setToDelete] = useState<Customer | null>(null)
     const search = useDebouncedValue(searchQuery)
 
     const customers = useApiQuery(
@@ -96,7 +130,7 @@ export default function CustomersPage() {
                     <h1 className="text-3xl font-bold">{t('title')}</h1>
                     <p className="text-muted-foreground">{t('subtitle')}</p>
                 </div>
-                <Button onClick={() => setShowDialog(true)}>
+                <Button onClick={() => setEditing(null)}>
                     <Plus className="mr-2 h-4 w-4" />
                     {t('addCustomer')}
                 </Button>
@@ -149,6 +183,7 @@ export default function CustomersPage() {
                                     <TableHead>{t('colLoyalty')}</TableHead>
                                     <TableHead>{t('colTotalSpent')}</TableHead>
                                     <TableHead>{t('colStatus')}</TableHead>
+                                    <TableHead className="text-right">{tc('actions')}</TableHead>
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
@@ -174,6 +209,35 @@ export default function CustomersPage() {
                                                 {customer.is_active ? tc('active') : tc('inactive')}
                                             </Badge>
                                         </TableCell>
+                                        <TableCell className="text-right">
+                                            <div className="flex justify-end gap-2">
+                                                <Button
+                                                    size="sm"
+                                                    variant="ghost"
+                                                    aria-label={t('editAria', { name: customer.name })}
+                                                    onClick={e => {
+                                                        e.stopPropagation()
+                                                        setEditing(customer)
+                                                    }}
+                                                >
+                                                    <Edit className="h-4 w-4" />
+                                                </Button>
+                                                {canDelete && (
+                                                    <Button
+                                                        size="sm"
+                                                        variant="ghost"
+                                                        className="text-red-600 hover:text-red-700"
+                                                        aria-label={t('deleteAria', { name: customer.name })}
+                                                        onClick={e => {
+                                                            e.stopPropagation()
+                                                            setToDelete(customer)
+                                                        }}
+                                                    >
+                                                        <Trash2 className="h-4 w-4" />
+                                                    </Button>
+                                                )}
+                                            </div>
+                                        </TableCell>
                                     </TableRow>
                                 ))}
                             </TableBody>
@@ -192,15 +256,40 @@ export default function CustomersPage() {
                 )}
             </Card>
 
-            {showDialog && (
+            {editing !== undefined && (
                 <CustomerDialog
-                    onClose={() => setShowDialog(false)}
+                    key={editing?.id ?? 'new'}
+                    customer={editing}
+                    onClose={() => setEditing(undefined)}
                     onSaved={() => {
-                        setShowDialog(false)
+                        setEditing(undefined)
                         customers.reload()
                     }}
                 />
             )}
+
+            <ConfirmDialog
+                open={toDelete !== null}
+                onOpenChange={open => !open && setToDelete(null)}
+                title={t('deleteTitle')}
+                description={
+                    <>
+                        <strong>{toDelete?.name}</strong> {t('deleteBody')}
+                    </>
+                }
+                confirmLabel={tc('delete')}
+                onConfirm={async () => {
+                    if (!toDelete) return
+                    try {
+                        await customersApi.remove(toDelete.id)
+                        toast.success(t('deleted'))
+                        customers.reload()
+                    } catch (error: unknown) {
+                        toast.error(errorMessage(error, t('deleteFailed')))
+                        throw error
+                    }
+                }}
+            />
         </div>
     )
 }

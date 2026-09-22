@@ -148,6 +148,21 @@ describe('POST /sales', () => {
         expect(await stockOf(product.id)).toBe(5)
     })
 
+    test('rejects a soft-deleted customer the same way it rejects an unknown one', async () => {
+        const product = await createProduct({ stock: 5 })
+        const customer = await createCustomer()
+        await adminClient().from('customers').update({ deleted_at: new Date().toISOString() }).eq('id', customer.id)
+
+        const response = await sale(cashier, {
+            payment_method: 'cash',
+            customer_id: customer.id,
+            items: [{ product_id: product.id, quantity: 1 }]
+        })
+        expect(response.status).toBe(422)
+        expect(errorOf(response).message).toBe('Customer not available')
+        expect(await stockOf(product.id)).toBe(5)
+    })
+
     test('a discount larger than the order is refused', async () => {
         const product = await createProduct({ selling_price: 10, stock: 5 })
         const response = await sale(cashier, {

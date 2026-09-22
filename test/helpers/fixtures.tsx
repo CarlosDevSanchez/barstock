@@ -4,6 +4,7 @@ import type { SessionUser } from '@/components/session-provider'
 import type { AppLocale } from '@/lib/i18n/config'
 import type { ProductListItem } from '@/lib/api/products'
 import type { SettingsInput } from '@/lib/validation/resources'
+import type { Tables } from '@/types/database'
 import en from '@/messages/en.json'
 import es from '@/messages/es.json'
 
@@ -56,6 +57,40 @@ export function product(overrides: Partial<ProductListItem> = {}): ProductListIt
         updated_at: '2026-01-01T00:00:00Z',
         category: null,
         stock: 5,
+        ...overrides
+    }
+}
+
+export function customer(overrides: Partial<Tables<'customers'>> = {}): Tables<'customers'> {
+    return {
+        id: crypto.randomUUID(),
+        name: 'Jane Doe',
+        email: 'jane@example.com',
+        phone: '555-0100',
+        address: null,
+        is_active: true,
+        loyalty_points: 0,
+        total_spent: 0,
+        deleted_at: null,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
+        ...overrides
+    }
+}
+
+export function supplier(overrides: Partial<Tables<'suppliers'>> = {}): Tables<'suppliers'> {
+    return {
+        id: crypto.randomUUID(),
+        name: 'Acme Supply Co',
+        contact_person: 'John Smith',
+        email: 'john@acme.example',
+        phone: '555-0200',
+        address: null,
+        notes: null,
+        is_active: true,
+        deleted_at: null,
+        created_at: '2026-01-01T00:00:00Z',
+        updated_at: '2026-01-01T00:00:00Z',
         ...overrides
     }
 }

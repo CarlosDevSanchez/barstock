@@ -1,10 +1,11 @@
 'use client'
 
+import { useState } from 'react'
 import { useParams, useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { useLocale, useTranslations } from 'next-intl'
-import { ArrowLeft, ShoppingBag, TrendingUp } from 'lucide-react'
+import { ArrowLeft, Edit, ShoppingBag, TrendingUp } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -18,6 +19,7 @@ import { customersApi } from '@/lib/api/customers'
 import { ordersApi } from '@/lib/api/orders'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { usePagination } from '@/hooks/use-pagination'
+import { CustomerDialog } from '../page'
 
 export default function CustomerDetailPage() {
     const t = useTranslations('customers')
@@ -28,6 +30,7 @@ export default function CustomerDetailPage() {
     const router = useRouter()
     const money = useMoney()
     const { page, pageSize, setPage, setPageSize } = usePagination()
+    const [editing, setEditing] = useState(false)
 
     const customerQuery = useApiQuery(signal => customersApi.get(params.id, signal), `customer:${params.id}`)
     // Cashiers only receive their own orders (RLS); managers and admins receive all of them.
@@ -77,19 +80,25 @@ export default function CustomerDetailPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center gap-4">
-                <Button
-                    variant="ghost"
-                    size="icon"
-                    aria-label={t('backAria')}
-                    onClick={() => router.push('/customers')}
-                >
-                    <ArrowLeft className="h-5 w-5" />
-                </Button>
-                <div>
-                    <h1 className="text-3xl font-bold">{customer.name}</h1>
-                    <p className="text-muted-foreground">{t('detailsSubtitle')}</p>
+            <div className="flex items-center justify-between gap-4">
+                <div className="flex items-center gap-4">
+                    <Button
+                        variant="ghost"
+                        size="icon"
+                        aria-label={t('backAria')}
+                        onClick={() => router.push('/customers')}
+                    >
+                        <ArrowLeft className="h-5 w-5" />
+                    </Button>
+                    <div>
+                        <h1 className="text-3xl font-bold">{customer.name}</h1>
+                        <p className="text-muted-foreground">{t('detailsSubtitle')}</p>
+                    </div>
                 </div>
+                <Button variant="outline" onClick={() => setEditing(true)}>
+                    <Edit className="mr-2 h-4 w-4" />
+                    {tc('edit')}
+                </Button>
             </div>
 
             <div className="grid gap-4 md:grid-cols-4">
@@ -230,6 +239,17 @@ export default function CustomerDetailPage() {
                     )}
                 </CardContent>
             </Card>
+
+            {editing && (
+                <CustomerDialog
+                    customer={customer}
+                    onClose={() => setEditing(false)}
+                    onSaved={() => {
+                        setEditing(false)
+                        customerQuery.reload()
+                    }}
+                />
+            )}
         </div>
     )
 }
