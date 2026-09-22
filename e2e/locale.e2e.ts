@@ -11,7 +11,8 @@ test('login and dashboard default to Spanish without an EN cookie', async ({ pag
     await adminClient().from('profiles').update({ locale: 'es' }).eq('id', users.cashier.id)
 
     await page.goto('/login')
-    await expect(page.getByRole('heading', { name: 'Bienvenido de nuevo' })).toBeVisible()
+    // CardTitle is a div, not a heading role.
+    await expect(page.getByText('Bienvenido de nuevo')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Iniciar sesión' })).toBeEnabled()
 
     await page.getByLabel('Correo').fill('cashier@barstock.test')
@@ -52,6 +53,6 @@ test('switching language in the menu persists on the next login', async ({ page 
 test('English cookie on the login page keeps e2e helpers on EN labels', async ({ page }) => {
     await pinEnglish(page)
     await page.goto('/login')
-    await expect(page.getByRole('heading', { name: 'Welcome Back' })).toBeVisible()
+    await expect(page.getByText('Welcome Back')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
 })

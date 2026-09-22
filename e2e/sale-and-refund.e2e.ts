@@ -1,6 +1,15 @@
 import { expect, test } from '@playwright/test'
-import { createProduct, stockOf, uniq } from '../test/helpers/integration'
+import { createProduct, pinStoreCurrency, stockOf, uniq } from '../test/helpers/integration'
 import { newSession } from './helpers'
+
+// Money assertions below expect two decimals; the seed defaults to COP (whole pesos).
+let restoreCurrency: (() => Promise<void>) | undefined
+test.beforeAll(async () => {
+    restoreCurrency = await pinStoreCurrency('USD')
+})
+test.afterAll(async () => {
+    await restoreCurrency?.()
+})
 
 test('a sale takes stock, a manager refunds it, the stock comes back', async ({ browser }) => {
     const product = await createProduct({ name: uniq('E2E Beer'), selling_price: 20, tax_rate: 0.1, stock: 10 })
@@ -65,6 +74,6 @@ test('a manager adjusts stock with a reason, and cannot take it below zero', asy
 
     await page.getByLabel('Change (units) *').fill('12')
     await page.getByRole('button', { name: 'Apply adjustment' }).click()
-    await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Stock updated' })).toBeVisible()
+    await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'stock is now' })).toBeVisible()
     expect(await stockOf(product.id)).toBe(15)
 })
