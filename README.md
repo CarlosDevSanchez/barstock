@@ -1,327 +1,102 @@
-# POS + Inventory Management SaaS
+# barstock — Punto de venta e inventario
 
-A modern, full-stack Point of Sale and Inventory Management System built with Next.js 14, Supabase, and TypeScript.
+Aplicación web de **punto de venta e inventario** para un solo negocio: catálogo, caja, órdenes y reembolsos, clientes, proveedores, stock, reportes, ajustes y gestión de usuarios con roles.
+Next.js (App Router) + Supabase (Postgres, Auth, PostgREST) + TypeScript.
 
-## 🚀 Features
+> ## Estado: apta para pruebas, **no desplegada**
+> La **etapa 1** (rama `feat/etapa-1-base`) corrigió los hallazgos críticos de la [auditoría](docs/04-auditoria/README.md): autorización por rol (RLS + API), cobro y reembolso transaccionales,
+> dependencias sin vulnerabilidades, validación, sesión segura, pruebas automáticas (264) y CI. Todo está verificado **contra una base local**.
+>
+> **Aún no se ha aplicado a la base real ni se ha ejecutado el CI en GitHub**, y hay reglas de negocio (impuestos, fidelidad, descuentos, stock) aplicadas como **supuestos sin validar** con el negocio.
+> Antes de manejar dinero real: [pasos pendientes](docs/06-roadmap/plan-de-remediacion.md#estado-tras-la-etapa-1) y [supuestos por validar](docs/06-roadmap/decisiones-pendientes.md).
 
-### Authentication
-- ✅ Login / Register / Forgot Password
-- ✅ Role-based access control (Admin, Manager, Cashier)
-- ✅ Protected routes with middleware
+## Qué incluye
 
-### Dashboard
-- ✅ Real-time revenue statistics
-- ✅ Sales charts (last 7 days)
-- ✅ Top selling products
-- ✅ Low stock alerts
+| Área | Funciones |
+|---|---|
+| **Acceso** | Login, recuperar contraseña, **alta solo por invitación** de un admin, sesión en cookies `HttpOnly`, roles `cashier` < `manager` < `admin` |
+| **Caja (POS)** | Búsqueda por nombre/SKU/código, carrito, cliente opcional, descuento, efectivo/tarjeta/e-wallet. **El precio, el impuesto y el total los calcula la base de datos**; el cobro es una sola transacción |
+| **Órdenes** | Historial (el cajero ve solo las suyas), detalle, **reembolso total idempotente** con motivo (repone el stock) |
+| **Catálogo e inventario** | Productos y categorías; stock con **ajustes con motivo**, alertas de stock bajo por artículo, borrado lógico de productos |
+| **Personas** | Clientes (fidelidad y gasto **derivados** de las ventas), proveedores, usuarios |
+| **Reportes** | Dashboard y reportes por rango de fechas, agregados en SQL, en la zona horaria de la tienda |
+| **Ajustes** | Nombre, moneda, zona horaria, tasa de impuesto por defecto, umbral de stock (persisten) |
 
-### POS System
-- ✅ Product search and filtering
-- ✅ Shopping cart with Zustand state management
-- ✅ Customer selection
-- ✅ Discount and tax calculation
-- ✅ Multiple payment methods (Cash, Card, E-Wallet)
-- ✅ Order completion with inventory updates
-- ✅ Receipt printing support
+No incluye todavía: órdenes de compra y gastos (solo esquema), variantes en el POS, recibo impreso, pagos mixtos ni vuelto, modo offline, multi-sucursal. Límites por módulo en [`docs/03-modulos/`](docs/03-modulos/).
 
-### Product Management
-- ✅ Full CRUD operations
-- ✅ Category management
-- ✅ SKU and barcode support
-- ✅ Product variants (size, color)
-- ✅ Cost and selling price tracking
-- ✅ Active/inactive status
+## Cómo funciona (en 60 segundos)
 
-### Inventory
-- ✅ Real-time stock level monitoring
-- ✅ Low stock alerts
-- ✅ Inventory value calculation
-- ✅ Transaction history logging
-- ✅ Automatic stock updates on sales
+```
+navegador ─ fetch /api/v1 ─▶ proxy.ts ─▶ Route Handlers (route(): origen, rol, zod) ─▶ servicios ─▶ Supabase (JWT del usuario) ─▶ RLS + RPC
+```
 
-### Orders
-- ✅ Complete order history
-- ✅ Order status tracking
-- ✅ Customer information
-- ✅ Invoice generation (ready)
+- El navegador **nunca** habla con Supabase ni recibe tokens; el lint prohíbe importarlo desde `app/` y `components/`.
+- **Dos capas de autorización independientes**: el rol se comprueba en cada endpoint y RLS decide los datos.
+- Lo que toca dinero o stock vive en la BD: RPC `create_sale`, `refund_order`, `adjust_inventory`; totales de clientes por trigger; reportes en SQL.
+- Detalle: [visión general](docs/01-arquitectura/01-vision-general.md), [API](docs/01-arquitectura/08-api.md), [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md), [RLS](docs/02-base-de-datos/03-rls-y-politicas.md).
 
-### Customers
-- ✅ Customer database
-- ✅ Loyalty points tracking
-- ✅ Total spent tracking
-- ✅ Purchase history (ready)
+## Puesta en marcha
 
-### Suppliers
-- ✅ Supplier management
-- ✅ Contact information
-- ✅ Purchase order system (ready)
-
-### Reports
-- ✅ Sales analytics
-- ✅ Revenue charts
-- ✅ Best sellers report
-- ✅ Profit analysis (ready)
-
-### Settings
-- ✅ Store information
-- ✅ Tax rate configuration
-- ✅ Currency selection
-- ✅ Low stock threshold
-
-## 🛠️ Tech Stack
-
-- **Framework:** Next.js 14 (App Router)
-- **Language:** TypeScript
-- **Database:** Supabase (PostgreSQL)
-- **Authentication:** Supabase Auth
-- **UI:** TailwindCSS + shadcn/ui
-- **Icons:** Lucide React
-- **Charts:** Recharts
-- **State Management:** Zustand
-- **Forms:** React Hook Form + Zod (ready)
-- **Notifications:** Sonner
-- **Date Handling:** date-fns
-
-## 📦 Installation
-
-### Prerequisites
-- Node.js 18+ installed
-- A Supabase account and project
-
-### 1. Clone the repository
+Requisitos: **Bun ≥ 1.4.1**, **Node ≥ 20.9** (`.nvmrc` fija 24), **Docker Desktop** y la **Supabase CLI** (`brew install supabase/tap/supabase`).
 
 ```bash
-cd "c:\Pos System"
+bun install --frozen-lockfile           # respeta bun.lock (versiones exactas)
+bun run db:start                        # Supabase local: aplica migraciones y seed (Docker activo)
+supabase status -o env                  # API_URL, ANON_KEY, SERVICE_ROLE_KEY
+cp .env.example .env.local              # y rellenar las 4 variables (ver docs/05-guias/variables-de-entorno.md)
+bun run dev                             # http://localhost:3000
 ```
 
-### 2. Install dependencies
+No hay registro público: el primer admin se crea con la API de administración de Auth ([guía](docs/05-guias/setup-local.md#6-crear-el-primer-usuario-admin)); los demás, invitándolos desde `/users`.
+Los correos de invitación y recuperación llegan a Mailpit (<http://127.0.0.1:54324>).
 
-```bash
-npm install
-```
+Si falta una variable de entorno, `next dev` y `next build` fallan **nombrándola**. La clave `SUPABASE_SERVICE_ROLE_KEY` salta RLS: solo la usa el servidor para invitar usuarios y **nunca** debe ir en una variable `NEXT_PUBLIC_*`.
 
-### 3. Set up Supabase
+## Comandos
 
-1. Create a new project at [supabase.com](https://supabase.com)
-2. Run the SQL schema:
-   - Go to your Supabase project → SQL Editor
-   - Copy and paste the contents of `supabase/schema.sql`
-   - Execute the SQL
-3. (Optional) Load seed data:
-   - Copy and paste the contents of `supabase/seed.sql`
-   - Execute the SQL
+| Comando | Qué hace |
+|---|---|
+| `bun run dev` · `build` · `start` | Desarrollo, build de producción, servidor |
+| `bun run check` | `typecheck` → `lint` → `test` → `build` |
+| `bun run lint` · `typecheck` · `format:check` | ESLint (`--max-warnings 0`), `tsc --noEmit`, Prettier |
+| `bun run test` | Unitarias + componentes + integración (necesita `db:start`) |
+| `bun run test:unit` · `test:components` · `test:integration` | Cada nivel por separado |
+| `bun run test:coverage` | Con umbral ≥ 80 % en `lib/server` y `lib/validation` |
+| `bun run test:e2e` | Playwright contra el build de producción (`bunx playwright install chromium` una vez) |
+| `bun audit` | Vulnerabilidades de dependencias |
+| `bun run db:start` · `db:reset` · `db:types` | Supabase local, recrear la BD, regenerar `types/database.ts` |
 
-### 4. Configure environment variables
+Más en [`docs/05-guias/comandos.md`](docs/05-guias/comandos.md).
 
-Copy `.env.local.example` to `.env.local`:
+## Pruebas y CI
 
-```bash
-cp .env.local.example .env.local
-```
+**264 pruebas** (107 unitarias, 21 de componentes, 123 de integración contra Supabase local y 13 e2e con Playwright). Incluyen escalada de privilegios, permisos por rol, el flujo de invitación con el correo real y **concurrencia**
+(dos ventas de la última unidad, ráfagas de ventas, reembolsos simultáneos), y cada protección se verificó **rompiéndola a propósito**. Las pruebas de integración **se niegan a correr contra un Supabase que no sea local**.
+`.github/workflows/ci.yml` ejecuta todo en cada PR. Detalle: [testing](docs/05-guias/testing.md).
 
-Update `.env.local` with your Supabase credentials:
-
-```env
-NEXT_PUBLIC_SUPABASE_URL=your_supabase_project_url
-NEXT_PUBLIC_SUPABASE_ANON_KEY=your_supabase_anon_key
-```
-
-You can find these in your Supabase project settings → API.
-
-### 5. Run the development server
-
-```bash
-npm run dev
-```
-
-Open [http://localhost:3000](http://localhost:3000) in your browser.
-
-## 🎨 Design System
-
-- **Primary Color:** Emerald (#10B981)
-- **Secondary Color:** Slate Gray
-- **Border Radius:** rounded-2xl (1rem)
-- **Card Style:** Soft shadows with glassmorphism
-- **Typography:** Geist Sans & Geist Mono
-- **Dark Mode:** Full support with theme toggle
-
-## 📁 Project Structure
+## Estructura
 
 ```
-c:\Pos System/
-├── app/
-│   ├── (auth)/              # Authentication pages
-│   │   ├── login/
-│   │   ├── register/
-│   │   └── forgot-password/
-│   ├── (dashboard)/         # Protected dashboard routes
-│   │   ├── dashboard/       # Main dashboard
-│   │   ├── pos/             # Point of Sale
-│   │   ├── products/        # Product management
-│   │   ├── inventory/       # Inventory tracking
-│   │   ├── orders/          # Order history
-│   │   ├── customers/       # Customer database
-│   │   ├── suppliers/       # Supplier management
-│   │   ├── reports/         # Analytics & reports
-│   │   ├── settings/        # System settings
-│   │   └── layout.tsx       # Dashboard layout
-│   ├── layout.tsx           # Root layout
-│   └── page.tsx             # Home page (redirects)
-├── components/
-│   ├── ui/                  # shadcn/ui components
-│   ├── layout/              # Layout components
-│   └── theme-provider.tsx   # Dark mode provider
-├── lib/
-│   ├── supabase/
-│   │   └── client.ts        # Supabase client
-│   ├── utils.ts             # Utility functions
-│   └── constants.ts         # App constants
-├── stores/
-│   ├── cart.ts              # POS cart store
-│   ├── auth.ts              # Auth store
-│   └── settings.ts          # Settings store
-├── types/
-│   └── index.ts             # TypeScript types
-├── supabase/
-│   ├── schema.sql           # Database schema
-│   └── seed.sql             # Seed data
-└── package.json
+app/(auth)  app/(dashboard)   Páginas (Client Components; el layout del dashboard es Server Component)
+app/api/v1                    Route Handlers (route()/publicRoute())
+components/  hooks/           UI compartida; shadcn en components/ui
+lib/server                    Servicios, autenticación, errores (SOLO servidor)
+lib/validation  lib/api       Esquemas zod compartidos · cliente fetch del navegador
+supabase/migrations           Baseline, integridad, roles/RLS, RPC, reportes  (+ seed.sql, templates/, legacy/)
+test/  e2e/  scripts/         Pruebas y umbral de cobertura
+docs/                         Documentación interna (índice en docs/README.md)
 ```
 
-## 🔐 Default User Accounts
+## Documentación
 
-After running the seed SQL, you can create test accounts:
+Todo está en [`docs/`](docs/README.md): arquitectura, base de datos, módulos, [auditoría técnica](docs/04-auditoria/README.md) (con el estado de cada hallazgo), guías y roadmap.
+Para agentes de IA: [`AGENTS.md`](AGENTS.md) (reglas duras y trampas conocidas) y [`CLAUDE.md`](CLAUDE.md).
 
-1. Go to `/register`
-2. Create an account with any email
-3. Select role: Admin, Manager, or Cashier
+## Seguridad
 
-**Note:** Email verification is required. Check your Supabase Auth settings to disable it for testing or use the Supabase dashboard to verify users manually.
+Reglas que no se negocian (completas en [`AGENTS.md`](AGENTS.md) §6): nada que decida dinero, stock o permisos se calcula en el cliente; toda tabla nueva con RLS por rol; nunca `service_role` en el cliente;
+no ejecutar SQL de escritura contra el proyecto real; no subir `.env*` ni claves. Para reportar una vulnerabilidad, contacta al propietario del repositorio en privado.
 
-## 🎯 Usage Guide
+## Licencia
 
-### 1. Creating Products
-
-1. Navigate to **Products** page
-2. Click "Add Product"
-3. Fill in product details (name, SKU, prices, category)
-4. Set cost price and selling price
-5. Save
-
-### 2. Managing Inventory
-
-1. Products automatically get inventory records
-2. View stock levels in **Inventory** page
-3. Low stock items are highlighted
-4. Set custom low stock thresholds
-
-### 3. Making Sales (POS)
-
-1. Go to **POS** page
-2. Search or browse products
-3. Click products to add to cart
-4. Adjust quantities using +/- buttons
-5. (Optional) Select customer
-6. Set discount if needed
-7. Click "Checkout"
-8. Select payment method
-9. Complete order
-
-### 4. Viewing Reports
-
-1. Navigate to **Dashboard** for overview
-2. Check **Reports** for detailed analytics
-3. Monitor sales trends and top products
-
-## 🚀 Deployment
-
-### Deploy to Vercel
-
-```bash
-npm run build
-vercel --prod
-```
-
-Make sure to add environment variables in Vercel dashboard.
-
-## 📝 Database Schema
-
-The system uses 14+ tables:
-
-- `profiles` - User profiles and roles
-- `categories` - Product categories
-- `products` - Product catalog
-- `product_variants` - Size/color variants
-- `inventory` - Stock levels
-- `inventory_transactions` - Stock movement logs
-- `suppliers` - Supplier directory
-- `purchase_orders` - Stock purchasing
-- `purchase_order_items` - PO line items
-- `customers` - Customer database
-- `orders` - Sales transactions
-- `order_items` - Order line items
-- `payments` - Payment records
-- `expenses` - Expense tracking
-- `settings` - System configuration
-
-## 🛡️ Security
-
-- Row Level Security (RLS) enabled on all tables
-- Role-based access control
-- Protected routes with authentication middleware
-- Secure password hashing via Supabase Auth
-
-## 🔄 Realtime Features (Ready for implementation)
-
-The foundation supports realtime updates:
-
-- Inventory level changes
-- New orders
-- Low stock alerts
-
-## ⌨️ Keyboard Shortcuts (Ready for implementation)
-
-- `Ctrl/Cmd + K` - Search products
-- `Ctrl/Cmd + N` - New order
-- `Ctrl/Cmd + P` - Print receipt
-
-## 📱 Responsive Design
-
-- ✅ Mobile (375px+)
-- ✅ Tablet (768px+)
-- ✅ Desktop (1280px+)
-- ✅ Mobile POS optimized layout
-
-## 🤝 Contributing
-
-This is a fully-featured production-ready POS system. You can extend it with:
-
-- Print receipt templates
-- Advanced reporting
-- Multi-location support
-- Barcode scanner integration
-- Offline mode with service workers
-- Email notifications
-- Backup and restore
-
-## 📄 License
-
-MIT License - Feel free to use for commercial projects
-
-## 🆘 Support
-
-For issues or questions:
-1. Check the Supabase logs
-2. Verify environment variables
-3. Ensure database schema is properly set up
-
-## 🎉 Acknowledgments
-
-- Built with [Next.js](https://nextjs.org/)
-- Powered by [Supabase](https://supabase.com/)
-- UI components from [shadcn/ui](https://ui.shadcn.com/)
-- Icons by [Lucide](https://lucide.dev/)
-
----
-
-**Happy Selling! 🛒**
+**Sin definir.** Este README declaraba MIT, pero el repositorio no tiene archivo `LICENSE`; la licencia está pendiente de decidir con el propietario (D20).

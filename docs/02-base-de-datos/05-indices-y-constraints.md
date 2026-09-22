@@ -1,80 +1,58 @@
 # Índices y constraints
 
-> Fuente: `supabase/schema.sql:241-249` y definiciones de tabla · Confianza: **[Verificado]** contra el SQL. Sin `EXPLAIN` real (no hay acceso a la base).
->
-> **Cambios de la etapa 1 (migraciones `…02`–`…04`), posteriores al commit `54962b9`:** este documento describe la **baseline**; encima se aplicó:
-> `products.tax_rate` `NUMERIC(6,4)` (fracción 0–1) y `NOT NULL`; `products.deleted_at` (borrado lógico); `profiles.is_active`;
-> `orders.refunded_at/refunded_by/refund_reason`; `created_at`/`updated_at` y las FKs de pertenencia `NOT NULL`; `CHECK` en cantidades,
-> precios e importes; `profiles.id ON DELETE CASCADE`. Detalle en [seed y migraciones](06-seed-y-migraciones.md).
+> Extraído de `pg_indexes` y `pg_constraint` de la BD local tras las 5 migraciones · Confianza: **[Verificado]**. **Sin `EXPLAIN` real**: no hay una base con datos de producción; el rendimiento con volumen real es **[Por verificar]**.
 
-## Índices explícitos (9)
+## Índices (además de las PK)
 
-| Índice | Tabla(columna) | Comentario |
+| Tabla | Índice | Para qué |
 |---|---|---|
-| `idx_products_category` | `products(category_id)` | Útil |
-| `idx_products_sku` | `products(sku)` | **Redundante**: `UNIQUE` ya crea un índice |
-| `idx_products_barcode` | `products(barcode)` | **Redundante**: idem |
-| `idx_inventory_product` | `inventory(product_id)` | **Redundante** con el índice de `UNIQUE(product_id, variant_id)` (prefijo `product_id`) |
-| `idx_orders_customer` | `orders(customer_id)` | Útil |
-| `idx_orders_created_at` | `orders(created_at)` | Útil (dashboard y reportes filtran por fecha) |
-| `idx_order_items_order` | `order_items(order_id)` | Útil |
-| `idx_payments_order` | `payments(order_id)` | Útil |
-| `idx_po_supplier` | `purchase_orders(supplier_id)` | Útil |
+| `products` | `products_sku_key`, `products_barcode_key` (UNIQUE), `idx_products_category` | Unicidad y filtro por categoría |
+| `product_variants` | `…_sku_key`, `…_barcode_key` (UNIQUE), `idx_product_variants_product` | FK |
+| `inventory` | **`inventory_product_without_variant_key`** (UNIQUE parcial `WHERE variant_id IS NULL`), `unique_inventory (product_id, variant_id)`, `idx_inventory_product`, `idx_inventory_variant` (parcial) | Un solo inventario por producto sin variante; FKs |
+| `inventory_transactions` | `idx_inventory_transactions_inventory_created (inventory_id, created_at)`, `idx_inventory_transactions_reference` | Historial por artículo y búsqueda por orden |
+| `orders` | `orders_order_number_key` (UNIQUE), **`idx_orders_status_created_at (status, created_at)`**, **`idx_orders_created_by_created_at (created_by, created_at)`**, `idx_orders_customer`, `idx_orders_created_at` | Reportes (`completed` + rango), órdenes del cajero, historial del cliente |
+| `order_items` | `idx_order_items_order`, **`idx_order_items_product`** | FK y "top productos" |
+| `payments` | `idx_payments_order` | FK |
+| `customers` | `customers_email_key` (UNIQUE) | |
+| `profiles` | `profiles_email_key` (UNIQUE) | |
+| `settings` | `settings_key_key` (UNIQUE) | |
+| `categories` | `idx_categories_parent` | FK |
+| `purchase_orders` / `_items` | `purchase_orders_po_number_key`, `idx_po_supplier`, `idx_purchase_order_items_order` | |
 
-## Índices implícitos (por `UNIQUE`/`PK`)
+Se eliminaron `idx_products_sku` e `idx_products_barcode` (redundantes con los `UNIQUE`).
 
-`profiles.email`, `products.sku`, `products.barcode`, `product_variants.sku`, `product_variants.barcode`,
-`inventory(product_id, variant_id)`, `purchase_orders.po_number`, `orders.order_number`, `customers.email`,
-`settings.key` y todas las PK.
+## Constraints de integridad
 
-## Índices faltantes recomendados
-
-| Índice propuesto | Motivo |
+| Tabla | `CHECK` |
 |---|---|
-| `orders(status, created_at)` (compuesto) | El dashboard y los reportes filtran `status='completed'` **y** rango de fechas |
-| `order_items(product_id)` | "Top productos" agrupa por producto; además acelera el chequeo de FK al borrar productos |
-| `inventory(variant_id)` | FK sin índice |
-| `inventory_transactions(inventory_id)` y `(reference_id)` | FK y búsqueda por orden |
-| `orders(created_by)` | FK y reportes por cajero |
-| `purchase_order_items(purchase_order_id)` | FK sin índice |
-| `expenses(date)` | Cuando exista la UI de gastos |
-| Índice **parcial único** `inventory(product_id) WHERE variant_id IS NULL` | Corrige los duplicados por `NULL` (alternativa: `UNIQUE NULLS NOT DISTINCT` en PG 15+) |
-| `products(is_active)` parcial | El POS consulta `is_active = true` |
-| `pg_trgm` GIN sobre `products(name)` | Solo si se pasa la búsqueda al servidor (`ilike`) |
+| `products` | `cost_price ≥ 0`, `selling_price ≥ 0`, `tax_rate BETWEEN 0 AND 1` |
+| `product_variants` | precios nulos o `≥ 0` |
+| `inventory` | `quantity ≥ 0` (**nunca stock negativo**), `low_stock_threshold ≥ 0` |
+| `inventory_transactions` | `transaction_type IN ('purchase','sale','adjustment','return')`, `quantity ≠ 0` |
+| `customers` | `loyalty_points ≥ 0`, `total_spent ≥ 0` |
+| `orders` | importes `≥ 0`; **`total = subtotal − discount + tax`** (`NOT VALID`) |
+| `order_items` | `quantity > 0`, importes `≥ 0`; **`total = unit_price × quantity − discount + tax`** (`NOT VALID`) |
+| `payments`, `expenses` | `amount ≥ 0` |
+| `purchase_orders` / `_items` | `total_amount ≥ 0`; `quantity > 0`, `unit_price ≥ 0` |
 
-## Constraints faltantes recomendados
+**`NOT VALID`:** las dos comprobaciones aritméticas se crearon así para no bloquear una base con órdenes antiguas (calculadas en el cliente con impuestos inconsistentes, [H3](../04-auditoria/hallazgos/H3-impuestos-y-dinero.md)).
+Se **exigen en toda fila nueva o modificada**; tras depurar los datos, `ALTER TABLE … VALIDATE CONSTRAINT …` las valida también para el histórico. En una base creada desde cero permanecen `NOT VALID` pero sin filas que las incumplan.
+Probado: una orden o línea con la aritmética rota es rechazada (`rls.test.ts`).
 
-| Tabla.columna | Constraint | Por qué |
-|---|---|---|
-| `inventory.quantity` | `CHECK (quantity >= 0)` | Hoy puede quedar negativo (no hay control de stock) |
-| `inventory.low_stock_threshold` | `CHECK (>= 0)` | |
-| `products.cost_price / selling_price` | `CHECK (>= 0)` | |
-| `products.tax_rate` | Cambiar a `NUMERIC(6,4)` + `CHECK (BETWEEN 0 AND 1)` | `NUMERIC(5,2)` no guarda 7,5 % como `0.075` |
-| `orders.subtotal / discount / tax / total` | `CHECK (>= 0)` y `CHECK (total = subtotal - discount + tax)` | Hoy el cliente puede enviar cualquier valor |
-| `order_items.quantity` | `CHECK (> 0)` | El carrito permite cantidad 0 |
-| `order_items.total` | Columna derivada o `CHECK` | Solo `purchase_order_items.total` es `GENERATED` |
-| `payments.amount` | `CHECK (> 0)` | |
-| `inventory_transactions.transaction_type` | `CHECK IN (...)` o enum | Hoy es TEXT libre |
-| `expenses.category` | enum o `CHECK` | TEXT libre |
-| FKs de pertenencia | `NOT NULL` en `inventory.product_id`, `order_items.order_id`, `payments.order_id`, `product_variants.product_id`, `purchase_order_items.purchase_order_id` | Evita filas huérfanas |
-| `profiles.id` → `auth.users` | `ON DELETE CASCADE` | Permite dar de baja usuarios |
+**`NOT NULL`:** FKs de pertenencia (`inventory.product_id`, `inventory_transactions.inventory_id`, `order_items.order_id/product_id`, `payments.order_id`, `product_variants.product_id`, `purchase_order_items.purchase_order_id/product_id`), `created_at`/`updated_at`, `is_active` y contadores con default.
 
-## Rendimiento: lo observable sin base real
+**Claves foráneas:** `profiles.id → auth.users` **CASCADE**; hijos de propiedad (`product_variants`, `inventory`, `inventory_transactions`, `order_items`, `payments`, `purchase_order_items`) con **CASCADE**; referencias de catálogo/personas (`products.category_id`, `orders.customer_id`, `order_items.product_id`…) **NO ACTION** (protegen el historial).
 
-- Las queries del dashboard/reportes hacen `select total from orders where created_at >= … and status = 'completed'`
-  hasta 9 veces por carga del dashboard (2 sumas + 7 días) y 7 en reportes. Con el índice compuesto
-  propuesto y una vista/RPC agregada, se reduce a 1–2 consultas.
-- La búsqueda en `/products`, `/orders`, `/inventory`, `/customers` es **en memoria** tras descargar la tabla
-  completa: no usa índices y no escala.
-- No se puede evaluar N+1 clásico (no hay ORM), pero sí **N consultas por bucle**: el checkout hace 1–3
-  consultas por ítem del carrito y el reembolso 1–2.
-- **[Por verificar]** en Supabase: `Reports → Query Performance` y `pg_stat_statements` para consultas lentas
-  reales; `pg_stat_user_indexes` para índices sin uso.
+## Rendimiento: qué se mejoró y qué falta
+
+- Dashboard y reportes ya **agregan en SQL** (1 llamada, antes 9 y 7) apoyándose en `idx_orders_status_created_at`; las búsquedas y la paginación son **en servidor**.
+- El checkout es una sola transacción con 2 sentencias por línea (`UPDATE inventory` con bloqueo de fila, `INSERT`s); ventas concurrentes se serializan **por producto**, no globalmente.
+- **[Por verificar]** con datos reales: `pg_stat_statements` / *Query Performance* de Supabase; índices sin uso con:
 
 ```sql
--- Índices sin uso (ejecutar tras algunas semanas de tráfico real)
 select relname as tabla, indexrelname as indice, idx_scan
-from pg_stat_user_indexes
-where schemaname = 'public'
-order by idx_scan asc, relname;
+from pg_stat_user_indexes where schemaname = 'public' order by idx_scan asc, relname;
 ```
+
+- Pendiente si el volumen lo pide: índice `pg_trgm` GIN sobre `products(name)` para `ilike '%…%'`, `orders(customer_id, created_at)` para historiales largos, y `expenses(date)` cuando exista la UI de gastos.
+- `inventory?low=true` filtra en memoria (hasta 1000 filas): con miles de artículos convendría una vista o una función.

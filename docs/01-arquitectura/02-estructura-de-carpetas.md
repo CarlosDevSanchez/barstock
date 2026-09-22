@@ -1,98 +1,75 @@
 # Estructura de carpetas
 
-> Base: commit `54962b9` · 61 archivos versionados · Confianza: **[Verificado]**
+> Actualizado tras la etapa 1 · Confianza: **[Verificado]** (`git ls-files`).
 
 ```
 barstock/
-├── AGENTS.md                  # Guía para agentes de IA (raíz)
-├── CLAUDE.md                  # Instrucciones específicas de Claude Code (raíz)
-├── README.md                  # README original (parcialmente inexacto: ver auditoría)
-├── docs/                      # ESTA documentación
-├── app/                       # Rutas (App Router)
-│   ├── layout.tsx             # Layout raíz: fuentes Geist, ThemeProvider, Toaster (44 líneas)
-│   ├── page.tsx               # redirect('/login')
-│   ├── globals.css            # Tailwind 4 + tokens de tema shadcn
-│   ├── favicon.ico
-│   ├── (auth)/                # Rutas públicas
-│   │   ├── login/page.tsx            (113)
-│   │   ├── register/page.tsx         (162)
-│   │   └── forgot-password/page.tsx  (112)
-│   └── (dashboard)/           # Rutas con sidebar
-│       ├── layout.tsx                (222)  Guarda de sesión + navegación
-│       ├── dashboard/page.tsx        (277)
-│       ├── pos/page.tsx              (419)  ← archivo más grande y más crítico
-│       ├── products/page.tsx         (332)
-│       ├── categories/page.tsx       (242)
-│       ├── inventory/page.tsx        (137)
-│       ├── orders/page.tsx           (121)
-│       ├── orders/[id]/page.tsx      (252)
-│       ├── customers/page.tsx        (186)
-│       ├── customers/[id]/page.tsx   (208)
-│       ├── suppliers/page.tsx        (172)
-│       ├── reports/page.tsx          (308)
-│       └── settings/page.tsx         (123)
+├── AGENTS.md · CLAUDE.md          # Guías para agentes (raíz)
+├── README.md                      # Estado real, puesta en marcha y mapa
+├── docs/                          # ESTA documentación
+├── proxy.ts                       # Sesión + guarda de rutas y de roles
+├── next.config.ts                 # Validación de entorno + headers de seguridad
+├── app/
+│   ├── layout.tsx · page.tsx · globals.css
+│   ├── (auth)/                    # login, forgot-password, reset-password (públicas / con sesión de enlace)
+│   ├── (dashboard)/               # layout servidor + 13 páginas: dashboard, pos, products, categories, inventory,
+│   │                              #   orders(+[id]), customers(+[id]), suppliers, reports, settings, users
+│   ├── auth/confirm/route.ts      # Canjea el token del correo (verifyOtp) y crea la sesión
+│   └── api/v1/**/route.ts         # 25 Route Handlers, todos con route()/publicRoute()
 ├── components/
-│   ├── theme-provider.tsx     # Wrapper de next-themes (11)
-│   └── ui/                    # shadcn/ui: 16 componentes (ver "Código sin uso")
+│   ├── app-shell.tsx              # Navegación filtrada por rol, menú de usuario, logout
+│   ├── session-provider.tsx       # useSession() y useMoney()
+│   ├── confirm-dialog.tsx · form-fields.tsx · pagination.tsx · query-error.tsx · page-spinner.tsx
+│   ├── theme-provider.tsx
+│   └── ui/                        # shadcn (17 componentes)
+├── hooks/                         # useApiQuery, useDebouncedValue, useHydrated
 ├── lib/
-│   ├── supabase/client.ts     # Único cliente Supabase, singleton de módulo (6)
-│   ├── utils.ts               # cn() = clsx + tailwind-merge (6)
-│   └── constants.ts           # Constantes de dominio (35) — SIN IMPORTS
-├── stores/                    # Zustand
-│   ├── auth.ts                # Perfil del usuario y helpers de rol (25)
-│   ├── cart.ts                # Carrito del POS, persistido (109)
-│   └── settings.ts            # Ajustes de tienda, persistido (37) — SIN IMPORTS
-├── types/index.ts             # Tipos manuales del esquema (214)
+│   ├── server/                    # SOLO servidor (import 'server-only'): http (route), auth, errors, supabase, supabase-admin,
+│   │   └── services/              #   y un servicio por recurso
+│   ├── validation/                # zod compartido: common, resources, reports
+│   ├── api/                       # cliente fetch del navegador + un módulo por recurso
+│   ├── env/                       # zod del entorno: schema, client, server
+│   ├── auth/roles.ts · money.ts · dates.ts · cart-preview.ts · utils.ts
+├── stores/cart.ts                 # Único store: ids y cantidades del carrito
+├── types/                         # database.ts (GENERADO) · index.ts (derivado)
 ├── supabase/
-│   ├── schema.sql             # Esquema completo (392)
-│   ├── fix_rls_policies.sql   # Parche de RLS, se ejecuta DESPUÉS del schema (82)
-│   └── seed.sql               # Datos de ejemplo (62)
-├── public/                    # 5 SVG del scaffold de create-next-app, sin uso
-├── components.json            # Configuración de shadcn
-├── eslint.config.mjs          # ESLint 9 flat config (next core-web-vitals + typescript)
-├── next.config.ts             # Vacío
-├── postcss.config.mjs         # @tailwindcss/postcss
-├── tsconfig.json              # strict, alias @/* → ./*
-├── package.json / bun.lock / bunfig.toml
-└── .claude/settings.local.json  # Habilita el MCP `code-review-graph`
+│   ├── config.toml                # Auth cerrada, plantillas de correo, puertos
+│   ├── migrations/                # baseline + integridad + roles/RLS + RPC + reportes
+│   ├── templates/                 # Correos de invitación y recuperación
+│   ├── seed.sql                   # Datos de ejemplo (sin usuarios)
+│   └── legacy/                    # SQL histórico, NO ejecutar
+├── test/                          # helpers, integration/, components/, setup.ts
+├── e2e/ · playwright.config.ts    # Playwright (*.e2e.ts)
+├── scripts/coverage-check.ts      # Umbral de cobertura fusionando los informes
+├── .github/                       # ci.yml y dependabot.yml
+├── package.json · bun.lock · bunfig.toml · .nvmrc · .env.example
+└── tsconfig.json · eslint.config.mjs · .prettierrc.json · postcss.config.mjs · components.json
 ```
+
+Los tests unitarios viven junto al código (`*.test.ts` en `lib/`, `stores/`).
 
 ## Responsabilidad por carpeta
 
-| Carpeta | Debe contener | Hoy contiene |
+| Carpeta | Contiene | Reglas |
 |---|---|---|
-| `app/` | Rutas y su composición | Rutas **y** toda la lógica de datos y de negocio (páginas de 120–420 líneas) |
-| `components/ui/` | Primitivas shadcn sin lógica | Correcto |
-| `components/` (resto) | Componentes de dominio reutilizables | Solo `theme-provider`. **No existe** `components/layout/` aunque el README lo lista |
-| `lib/` | Utilidades y clientes | Cliente Supabase, `cn`, constantes sin uso |
-| `stores/` | Estado global de cliente | 3 stores |
-| `types/` | Contratos de datos | Un solo archivo escrito a mano, sin generación desde el esquema |
-| `supabase/` | SQL | 3 scripts sueltos, sin carpeta `migrations/` |
+| `app/(auth)`, `app/(dashboard)` | Páginas: composición e interacción | **No** importan `@supabase/*`, `@/lib/supabase` ni `@/lib/server` (lint). Solo `lib/api/*` |
+| `app/api/v1` | Route Handlers finos: `route({ role, body, query, params, handler })` | Sin lógica: delegan en un servicio |
+| `lib/server` | Servicios, autenticación, errores, clientes Supabase | Solo servidor; nunca importable desde UI |
+| `lib/validation` | Esquemas zod compartidos | Solo columnas escribibles; sin `.default()` (rompe `PATCH`); `''` → `null` |
+| `lib/api` | Cliente tipado del navegador | Un módulo por recurso |
+| `components/ui` | Primitivas shadcn | Sin lógica; excluidas de Prettier (estilo upstream) |
+| `supabase/migrations` | SQL versionado | No editar una migración ya aplicada fuera de local |
+| `types/database.ts` | Generado (`bun run db:types`) | No editar a mano; se regenera tras cada migración |
 
-## Código sin uso [Verificado]
+## Código sin uso
 
-| Elemento | Evidencia | Acción sugerida |
-|---|---|---|
-| `lib/constants.ts` | Ningún archivo lo importa | Usarlo (`ROLES`, `ORDER_STATUS`, `TAX_RATE_DEFAULT`) o borrarlo |
-| `stores/settings.ts` | Ningún archivo lo importa; `/settings` usa `useState` local | Conectar a la tabla `settings` o borrar |
-| `components/ui/form.tsx`, `components/ui/tabs.tsx` | 0 importaciones | Borrar, o usar `form.tsx` al introducir validación |
-| `zod`, `react-hook-form`, `@hookform/resolvers` | 0 importaciones | Usarlas en [H2](../04-auditoria/hallazgos/H2-sin-validacion.md) |
-| `public/*.svg` (5) | 0 referencias | Borrar |
-| `useAuthStore.isAdmin / isManager / canManageProducts` | Solo se definen; nunca se llaman | Usarlos para gatear UI (además de RLS) |
-| Imports muertos | ESLint reporta 10 warnings | `eslint --fix` |
-
-## Duplicación notable
-
-- `app/(dashboard)/layout.tsx:86-213` repite el markup de navegación y el menú de usuario **dos veces**
-  (sidebar de escritorio y drawer móvil). Candidatos a `<SidebarNav>` y `<UserMenu>`.
-- El spinner de carga (`animate-spin … border-emerald-600`) está copiado en 5 archivos
-  (`layout.tsx`, `dashboard`, `reports`, `orders/[id]`, `customers/[id]`).
-- Cada página reimplementa: `useState` de lista + `useState` de búsqueda + `fetchX()` + filtro en cliente.
-- La lógica de "precio efectivo" `item.variant?.selling_price ?? item.product.selling_price`
-  aparece 4 veces entre `cart.ts` y `pos/page.tsx`.
+| Elemento | Estado |
+|---|---|
+| `components/ui/tabs.tsx` | 0 importaciones (shadcn lo trajo; borrar o usar) |
+| `public/*.svg` (5) | Restos de `create-next-app`, sin referencias |
+| `purchase_orders`, `purchase_order_items`, `expenses`, `product_variants` | Solo esquema: sin API ni UI (etapa 2) |
+| `receipt_template` (ajustes) | Se guarda y se edita, pero nadie imprime un recibo con él |
 
 ## Convenciones de ubicación para código nuevo
 
-Ver [convenciones-de-codigo.md](../05-guias/convenciones-de-codigo.md). Resumen: lógica de datos en
-`lib/data/<recurso>.ts`, esquemas zod en `lib/validation/`, componentes de dominio en
-`components/<dominio>/`, SQL versionado en `supabase/migrations/`.
+Ver [convenciones-de-codigo.md](../05-guias/convenciones-de-codigo.md) y "Cómo añadir un recurso" en [API](08-api.md).

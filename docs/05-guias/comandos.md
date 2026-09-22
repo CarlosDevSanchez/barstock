@@ -62,15 +62,15 @@ Mailpit (correos de invitación y restablecer contraseña): <http://127.0.0.1:54
 
 ## Consultas SQL de diagnóstico (SQL Editor)
 
-Ver [RLS](../02-base-de-datos/03-rls-y-politicas.md#cómo-auditar-el-estado-real-ejecutar-en-el-sql-editor-de-supabase),
+Ver [RLS](../02-base-de-datos/03-rls-y-politicas.md#cómo-auditar-el-estado-real),
 [índices](../02-base-de-datos/05-indices-y-constraints.md) y las consultas de integridad de
-[verificar-checkout](verificar-checkout.md#consultas-de-integridad).
+[verificar-checkout](verificar-checkout.md#a-antes-de-migrar-los-datos-cumplen-las-reglas-nuevas).
 
 ## Grafo de código (`code-review-graph`, MCP)
 
 Configurado en `.claude/settings.local.json`; los agentes lo usan antes de leer archivos (ver `CLAUDE.md`).
 Reconstrucción completa: herramienta MCP `build_or_update_graph_tool` con `full_rebuild: true`.
-Última construcción documentada: 48 archivos, 259 nodos, 2036 aristas, 19 comunidades, 52 flujos.
+Última construcción documentada (tras la etapa 1): 164 archivos, 1159 nodos, 11 203 aristas, 11 comunidades, 116 flujos.
 
 ## Trampas conocidas
 

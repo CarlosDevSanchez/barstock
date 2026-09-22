@@ -1,53 +1,16 @@
 # Módulo: Proveedores y compras
 
-> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
-> lógica de negocio vive en RPC de la BD: ver [API](../01-arquitectura/08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+> Actualizado tras la etapa 1 · `app/(dashboard)/suppliers/page.tsx` · API `suppliers`, `suppliers/[id]` · Confianza: **[Verificado]** (`catalog.test.ts`, `rls.test.ts`).
 
-> Archivo: `app/(dashboard)/suppliers/page.tsx` (172 líneas) · Base: commit `54962b9`
+## Proveedores (hecho)
+- **Quién:** gerente y admin (los cajeros no ven la sección: `proxy.ts` los redirige, la API responde `403` y RLS devuelve 0 filas).
+- Lista paginada con búsqueda por nombre, contacto o email; alta con nombre*, persona de contacto, email, teléfono y dirección (`''` → `null`).
+- `PATCH /suppliers/{id}` existe en la API; **la UI solo permite crear**. Borrado físico solo admin (sin UI).
 
-## Proveedores — `/suppliers`
+## Órdenes de compra y gastos (solo esquema)
+`purchase_orders`, `purchase_order_items` y `expenses` existen con sus `CHECK`, índices y RLS (gerente lee/escribe; admin borra; gastos: gerente lee y crea, admin edita y borra),
+pero **no hay API ni pantalla**, y recibir una compra **no repone stock** todavía. Es trabajo de la **etapa 2** (UI de órdenes de compra y gastos).
 
-- Lista `suppliers` (`created_at desc`), buscador en memoria por nombre, tarjeta con el total.
-- **Solo alta y lectura.** Formulario: `name`, `contact_person`, `email`, `phone`, `address`. No incluye
-  `notes` ni `is_active` (columnas existentes). Sin editar ni borrar.
-- Errores de alta se muestran con el mensaje crudo de Postgres.
+Diseño previsto: `purchase_orders` con líneas → recibir = RPC transaccional que suma stock y registra `purchase` en `inventory_transactions`, igual que `adjust_inventory`.
 
-## Órdenes de compra — **no implementadas en la UI**
-
-Las tablas `purchase_orders` y `purchase_order_items` existen (con enum `po_status`, columnas
-`ordered_by`, `received_by`, `total` generado en los ítems), pero **ningún archivo de la app las consulta**
-(verificado por búsqueda de `from('purchase_orders')`). El README las lista como "Purchase order system (ready)":
-solo está listo el **esquema**.
-
-Tampoco hay UI para `expenses` ni para `settings`.
-
-## Flujo previsto (no construido)
-
-```mermaid
-stateDiagram-v2
-    [*] --> draft
-    draft --> pending: enviar al proveedor
-    pending --> received: recibir mercancía (suma stock)
-    pending --> cancelled
-    draft --> cancelled
-    received --> [*]
-```
-
-Al pasar a `received` debería: sumar `inventory.quantity` por ítem, registrar `inventory_transactions`
-de tipo `purchase`, poner `received_by`/`received_at`, y actualizar `last_restocked_at`. Todo en una
-transacción (RPC `receive_purchase_order`).
-
-## Defectos y riesgos
-
-| # | Detalle |
-|---|---|
-| 1 | Sin edición/borrado/desactivación de proveedores |
-| 2 | Sin flujo de compras: la única forma de aumentar stock es SQL manual |
-| 3 | RLS `ALL` para cualquier usuario autenticado sobre proveedores y compras |
-| 4 | Sin unicidad de nombre/email de proveedor |
-| 5 | `catch (error: any)` (lint) |
-
-## Prioridad
-
-Media. Sin recepción de compras, el inventario no puede mantenerse desde la aplicación; conviene
-construir junto con la pantalla de ajustes de [inventario](inventario.md).
+Relacionados: [Inventario](inventario.md), [plan de remediación](../06-roadmap/plan-de-remediacion.md).

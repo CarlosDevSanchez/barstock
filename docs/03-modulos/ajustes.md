@@ -1,50 +1,31 @@
 # Módulo: Ajustes
 
-> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
-> lógica de negocio vive en RPC de la BD: ver [API](../01-arquitectura/08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+> Actualizado tras la etapa 1 · `app/(dashboard)/settings/page.tsx` · API `GET/PATCH /settings` · Servicio `services/settings.ts` · Confianza: **[Verificado]** (`admin.test.ts`, `rls.test.ts`, e2e).
 
-> Archivo: `app/(dashboard)/settings/page.tsx` (123 líneas) · Base: commit `54962b9`
+Antes: la pantalla era decorativa (no persistía nada) y había tres fuentes de "ajustes" desconectadas. Ahora hay **una**: la tabla `settings` (D11: solo BD).
 
-## Estado: **decorativo — no persiste nada**
+## Quién
+**Todos** los usuarios activos **leen** (necesitan moneda y nombre de tienda); **solo el admin escribe** (`403` a otros; RLS también). La pantalla es solo para admin (`proxy.ts`).
 
-`handleSave` solo ejecuta `toast.success('Settings saved successfully!')` (`:23-25`). No escribe en la
-tabla `settings`, ni en `useSettingsStore`, ni en `localStorage`. Al recargar, los valores vuelven a los
-predeterminados hardcodeados.
-
-## Campos (estado local con `useState`)
-
-| Campo | Valor inicial | Unidad / nota |
+## Claves (una fila JSONB por clave)
+| Clave | Validación | Dónde se usa |
 |---|---|---|
-| `storeName` | `POS Inventory System` | |
-| `storeAddress` | `123 Main Street, City, Country` | dato de ejemplo |
-| `storePhone` | `+1234567890` | dato de ejemplo |
-| `storeEmail` | `info@posystem.com` | dato de ejemplo |
-| `taxRate` | `'10'` | **Porcentaje** (10). El carrito usa **fracción** (`0.1`); `products.tax_rate` también es fracción |
-| `currency` | `USD` | Opciones USD/EUR/GBP; la UI muestra `$` fijo sin importar la selección |
-| `lowStockThreshold` | `'10'` | El dashboard usa 10 fijo; el inventario usa el umbral por fila |
+| `store_name`, `store_address`, `store_phone`, `store_email` | texto (email válido o vacío) | Nombre en la barra lateral |
+| `currency` | código ISO 4217 **existente** (`Intl.supportedValuesOf`) | **Todo el dinero de la UI** (`useMoney`) |
+| `timezone` | zona IANA válida | Agrupación por días en dashboard y reportes (SQL) |
+| `tax_rate` | fracción 0–1 (el formulario usa %) | **Tasa por defecto al crear un producto** (cada producto conserva la suya; **no interviene en las ventas**) |
+| `low_stock_threshold` | entero ≥ 0 | Umbral de la fila de inventario de los **productos nuevos** (los existentes conservan el suyo) |
+| `receipt_template` | `{ header, footer }` (≤ 200) | Se guarda; **nadie imprime aún un recibo con él** |
 
-## Tres fuentes de "ajustes" desconectadas
+Si una clave falta o su valor es inválido, el servicio devuelve el **valor por defecto** (`SETTINGS_DEFAULTS`) en lugar de romper la app (probado). `PATCH` acepta un subconjunto y hace *upsert* por clave.
 
-| Fuente | Dónde | ¿La lee alguien? |
-|---|---|---|
-| Tabla `settings` (seed: 8 claves) | Supabase | **No** |
-| `useSettingsStore` (`stores/settings.ts`) | `localStorage['pos-settings']` | **No** (0 importaciones) |
-| Estado local de `/settings` | Memoria de la página | Solo esta página |
+## Comportamiento
+- El **layout servidor** lee los ajustes y los pasa por `SessionProvider`. Tras guardar, `router.refresh()` los propaga (el nombre de la tienda y la moneda cambian sin recargar).
+- El botón "Save Settings" solo se activa si hay cambios.
 
-Y los valores realmente efectivos están **hardcodeados**: tasa `0.1` en `stores/cart.ts:30` y
-`products/page.tsx`, umbral `10` en `dashboard/page.tsx:63`, nombre "POS System" en `layout.tsx`,
-moneda `$` en todo el JSX. `lib/constants.ts` define `TAX_RATE_DEFAULT`, `CURRENCY`, `APP_NAME`,
-sin uso.
+## Límites conocidos
+- Sin auditoría de cambios de ajustes (quién y cuándo).
+- Una moneda por instalación (D4); sin formato regional configurable (usa `en-US` con la moneda elegida).
+- Cambiar la zona horaria o la moneda no reexpresa datos históricos: solo cómo se agrupan y se muestran.
 
-## Riesgos
-
-- Un usuario cree que cambió la tasa de impuesto o el umbral y **no tiene ningún efecto**.
-- Cualquier usuario autenticado accede a la pantalla (sin gating por rol) y, por RLS, podría escribir `settings` por API.
-
-## Diseño objetivo
-
-1. Una sola fuente de verdad: la tabla `settings` (clave/valor JSONB, ya existe), con RLS solo-admin para escribir.
-2. Lectura al iniciar sesión, cacheada en un provider/store **no persistente** (o con revalidación).
-3. Consumidores: tasa por defecto, umbral de bajo stock, moneda/formatos, cabecera y pie del recibo (`receipt_template`).
-4. Validación con zod (porcentaje 0–100, moneda de una lista, umbral entero ≥ 0).
-5. Decidir unidad única para tasas (fracción recomendada) — ver [decisiones-pendientes](../06-roadmap/decisiones-pendientes.md).
+Relacionados: [Dashboard](dashboard.md), [Reportes](reportes.md), [Productos](productos.md), [decisiones pendientes](../06-roadmap/decisiones-pendientes.md) (D4, D11).

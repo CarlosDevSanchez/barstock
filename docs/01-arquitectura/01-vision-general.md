@@ -1,90 +1,85 @@
 # Visión general de la arquitectura
 
-> Base: commit `54962b9` · Confianza: **[Verificado]** salvo indicación.
+> Actualizado tras la etapa 1. Confianza: **[Verificado]** salvo indicación (código, pruebas y BD local; nada de esto se ha aplicado aún a la base real
+> ni se ha desplegado).
 
 ## Qué es
 
-Aplicación web de **punto de venta e inventario** para un solo negocio (no hay `tenant_id`/`store_id`
-en el esquema: es *single-tenant*). Cubre: catálogo, ventas en caja, órdenes y reembolsos, clientes,
-proveedores, stock y reportes básicos.
+Aplicación web de **punto de venta e inventario** para un solo negocio (no hay `tenant_id`/`store_id`: es *single-tenant*, decisión D2 pendiente).
+Cubre catálogo, caja, órdenes y reembolsos, clientes, proveedores, stock, reportes, ajustes y gestión de usuarios.
 
 ## Modelo de ejecución (lo más importante de entender)
 
 ```mermaid
 flowchart LR
-    B["Navegador<br/>(15 páginas + layout 'use client')"] -- "supabase-js<br/>anon key + JWT" --> P["PostgREST<br/>(Supabase)"]
-    P --> D[("PostgreSQL<br/>RLS + triggers")]
-    B -- "Auth (email/password)" --> A["Supabase Auth<br/>(GoTrue)"]
-    A --> D
-    N["Servidor Next.js<br/>(solo sirve JS/HTML estático)"] -. "sin lógica" .-> B
+    B["Navegador<br/>Client Components"] -- "fetch /api/v1<br/>cookie de sesión" --> P["proxy.ts<br/>sesión + guarda de rutas"]
+    P --> R["Route Handlers<br/>route(): origen, rol, zod"]
+    R --> S["lib/server/services"]
+    S -- "JWT del usuario" --> PG["PostgREST"]
+    PG --> D[("PostgreSQL<br/>RLS + RPC transaccionales + triggers")]
+    R -- "auth.admin (solo invitar)" --> A["Supabase Auth"]
+    P -- "getUser()" --> A
+    L["Layout del dashboard<br/>Server Component"] -- "getSession()" --> A
 ```
 
-- **No hay backend propio.** No existen `app/api/`, Server Actions ni `middleware.ts`/`proxy.ts`.
-- **Toda la lógica de negocio corre en el navegador**: cálculo de totales, creación de orden, descuento
-  de stock, reembolso, agregación de reportes.
-- **El único control de acceso del lado servidor es RLS** en Postgres. Como las políticas vigentes
-  permiten todo a cualquier usuario autenticado, en la práctica **no hay autorización**
-  (ver [hallazgo C1](../04-auditoria/hallazgos/C1-rls-permisivo.md)).
-- Next.js se usa como bundler y router. Ningún Server Component consulta datos.
+- **El navegador no habla con Supabase**: solo con `/api/v1`. El lint prohíbe importar `@supabase/*` y `lib/server` desde `app/` y `components/`
+  (única excepción, el layout del dashboard, que es un Server Component).
+- **Dos capas de autorización independientes:** el rol se comprueba en `route()` y **RLS** decide los datos con el JWT del usuario. Ninguna de las dos
+  confía en la otra.
+- **La lógica de negocio vive en la base de datos** cuando toca dinero o stock: `create_sale`, `refund_order` y `adjust_inventory` son RPC
+  transaccionales; los totales de clientes se derivan por trigger; los reportes se agregan en SQL. El cliente solo muestra una **vista previa** del carrito.
+- **Sesión en cookies** (`@supabase/ssr`), no en `localStorage`. Detalle en [autenticación](03-autenticacion-y-sesion.md).
+- Next.js hace de servidor de API, de renderizado del layout y de bundler.
 
 ## Stack
 
-| Capa | Tecnología | Versión (`package.json`) | Notas |
-|---|---|---|---|
-| Framework | Next.js (App Router, Turbopack) | `16.1.6` | Tiene advisories; ver [dependencias](../04-auditoria/dependencias-npm-audit.md) |
-| UI runtime | React | `19.2.3` | |
-| Lenguaje | TypeScript | `^5` | `strict: true` |
-| Estilos | Tailwind CSS | `^4` | vía `@tailwindcss/postcss`, sin `tailwind.config` |
-| Componentes | shadcn/ui (estilo `new-york`) + Radix | varias `^1.x`/`^2.x` | 16 componentes en `components/ui/` |
-| Backend | Supabase (Postgres, Auth, PostgREST) | `@supabase/supabase-js ^2.93.3` | cliente único en `lib/supabase/client.ts` |
-| Estado | Zustand | `^5.0.10` | 3 stores; 2 con `persist` |
-| Gráficas | Recharts | `^3.7.0` | solo en `/dashboard` |
-| Fechas | date-fns | `^4.1.0` | |
-| Notificaciones | Sonner | `^2.0.7` | |
-| Tema | next-themes | `^0.4.6` | claro/oscuro/sistema |
-| Iconos | lucide-react | `^0.563.0` | |
-| Validación | zod `^4.3.6`, react-hook-form `^7.71.1`, `@hookform/resolvers` | — | **Instaladas pero sin ningún import** en `app/`, `lib/`, `stores/` |
+Las versiones son **exactas** (`package.json`, `bun.lock`); aquí solo las líneas mayores.
+
+| Capa | Tecnología | Notas |
+|---|---|---|
+| Runtime / paquetes | Bun 1.4 (Node ≥ 20.9 para Next y Playwright) | `bunfig.toml`: versiones exactas, sin scripts de instalación (`trustedDependencies` vacío) |
+| Framework | Next.js 16 (App Router, Turbopack), React 19 | `proxy.ts` (antes `middleware`), Route Handlers, headers de seguridad en `next.config.ts` |
+| Lenguaje | TypeScript 5 (`strict`, `noUncheckedIndexedAccess`) | Tipos de la BD **generados** (`types/database.ts`) |
+| Backend | Supabase local/hospedado: Postgres 17, Auth, PostgREST | `@supabase/supabase-js` + `@supabase/ssr`; migraciones en `supabase/migrations/` |
+| Validación | zod 4 | Esquemas **compartidos** cliente/servidor (`lib/validation`) y del entorno (`lib/env`) |
+| Formularios | react-hook-form + `@hookform/resolvers` | Con el mismo esquema zod que valida el servidor |
+| UI | Tailwind CSS 4, shadcn/ui (`new-york`) sobre Radix, lucide-react, Sonner, next-themes, Recharts | [UI](06-ui-y-diseno.md) |
+| Estado de cliente | Zustand (solo el carrito), contexto de sesión, `useApiQuery` | [Estado](04-estado-cliente.md) |
+| Pruebas | `bun test`, happy-dom + Testing Library, Playwright | [Testing](../05-guias/testing.md) |
+| CI | GitHub Actions + Dependabot | [Tooling](07-configuracion-y-tooling.md) |
 
 ## Mapa de rutas
 
-Grupos de rutas: `(auth)` (públicas) y `(dashboard)` (con layout de sidebar).
+Grupos: `(auth)` (públicas) y `(dashboard)` (layout con navegación). "Rol" = mínimo necesario; `proxy.ts` redirige y la API vuelve a comprobarlo.
 
-| Ruta | Archivo | Propósito | Protección |
+| Ruta | Rol | Propósito | Módulo |
 |---|---|---|---|
-| `/` | `app/page.tsx` | `redirect('/login')` | — |
-| `/login` | `app/(auth)/login/page.tsx` | Inicio de sesión | pública |
-| `/register` | `app/(auth)/register/page.tsx` | Alta de usuario | pública |
-| `/forgot-password` | `app/(auth)/forgot-password/page.tsx` | Envía email de recuperación | pública |
-| `/reset-password` | **no existe** | Destino del enlace del email | — (**404**) |
-| `/dashboard` | `app/(dashboard)/dashboard/page.tsx` | KPIs y gráficas | guarda cliente |
-| `/pos` | `app/(dashboard)/pos/page.tsx` | Caja | guarda cliente |
-| `/products` | `…/products/page.tsx` | CRUD de productos | guarda cliente |
-| `/categories` | `…/categories/page.tsx` | CRUD de categorías | guarda cliente |
-| `/inventory` | `…/inventory/page.tsx` | Stock (solo lectura) | guarda cliente |
-| `/orders` | `…/orders/page.tsx` | Historial de ventas | guarda cliente |
-| `/orders/[id]` | `…/orders/[id]/page.tsx` | Detalle, imprimir, reembolsar | guarda cliente |
-| `/customers` | `…/customers/page.tsx` | Alta y listado | guarda cliente |
-| `/customers/[id]` | `…/customers/[id]/page.tsx` | Detalle e historial | guarda cliente |
-| `/suppliers` | `…/suppliers/page.tsx` | Alta y listado | guarda cliente |
-| `/reports` | `…/reports/page.tsx` | Reportes | guarda cliente |
-| `/settings` | `…/settings/page.tsx` | Ajustes (no persisten) | guarda cliente |
-
-"Guarda cliente" = `app/(dashboard)/layout.tsx:44-67` comprueba la sesión en un `useEffect` y redirige.
-No hay verificación en el servidor ni por rol. Detalle en [autenticación](03-autenticacion-y-sesion.md).
+| `/` | — | `redirect('/login')` | — |
+| `/login`, `/forgot-password` | pública | Acceso y recuperación | [autenticación](03-autenticacion-y-sesion.md) |
+| `/reset-password` | sesión | Elegir contraseña (invitación o recuperación) | [autenticación](03-autenticacion-y-sesion.md) |
+| `/auth/confirm` | pública | Canjea el enlace del correo por una sesión y redirige | [autenticación](03-autenticacion-y-sesion.md) |
+| `/dashboard` | cajero | KPIs, ventas de 7 días, top productos, stock bajo | [dashboard](../03-modulos/dashboard.md) |
+| `/pos` | cajero | Caja | [pos-checkout](../03-modulos/pos-checkout.md) |
+| `/products`, `/categories` | cajero (lectura) · gerente (escritura) | Catálogo | [productos](../03-modulos/productos.md), [categorías](../03-modulos/categorias.md) |
+| `/inventory` | cajero (lectura) · gerente (ajuste) | Stock | [inventario](../03-modulos/inventario.md) |
+| `/orders`, `/orders/[id]` | cajero (las suyas) · gerente (todas y reembolso) | Historial y reembolsos | [órdenes](../03-modulos/ordenes-y-reembolsos.md) |
+| `/customers`, `/customers/[id]` | cajero | Clientes | [clientes](../03-modulos/clientes.md) |
+| `/suppliers` | gerente | Proveedores | [proveedores](../03-modulos/proveedores-y-compras.md) |
+| `/reports` | gerente | Reportes por rango de fechas | [reportes](../03-modulos/reportes.md) |
+| `/settings` | admin | Ajustes de la tienda | [ajustes](../03-modulos/ajustes.md) |
+| `/users` | admin | Invitar, cambiar rol, desactivar | [usuarios](../03-modulos/usuarios.md) |
 
 ## Flujos principales
 
-1. **Acceso:** `/login` → `signInWithPassword` → `/dashboard` → el layout carga `profiles` y llena `useAuthStore`.
-2. **Venta:** `/pos` → clic en producto → `useCartStore.addItem` → Checkout → 5+ llamadas a Supabase
-   desde el navegador. Ver [pos-checkout](../03-modulos/pos-checkout.md).
-3. **Reembolso:** `/orders/[id]` → `update orders.status` → bucle de reposición de stock.
-   Ver [ordenes-y-reembolsos](../03-modulos/ordenes-y-reembolsos.md).
+1. **Acceso:** `/login` → `POST /api/v1/auth/login` (cookies de sesión) → `/dashboard`; el layout servidor resuelve usuario y ajustes.
+2. **Venta:** `/pos` → el cajero añade productos (solo ids y cantidades) → `POST /api/v1/sales` → `create_sale` en **una** transacción → orden con totales de la BD.
+3. **Reembolso:** `/orders/[id]` (gerente) → `POST /orders/{id}/refund` → `refund_order`: marca la orden, repone stock y registra el movimiento; es idempotente.
+4. **Alta de usuario:** admin invita → correo → `/auth/confirm` → `/reset-password` → sesión activa con el rol asignado.
 
-## Límites y riesgos estructurales
+## Límites conocidos
 
-- Sin transacciones: las operaciones multi-tabla no son atómicas ([C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md)).
-- Sin validación de entrada ([H2](../04-auditoria/hallazgos/H2-sin-validacion.md)).
-- Sin monitoreo. *(Estado anterior: tampoco había tests, CI ni migraciones versionadas; desde la etapa 1 existen: ver [testing](../05-guias/testing.md) y [tooling](07-configuracion-y-tooling.md).)*
-- Sin paginación: cada lista descarga toda la tabla.
-
-Para la dirección propuesta, ver [`06-roadmap/`](../06-roadmap/plan-de-remediacion.md).
+- **No probado en producción.** Las migraciones no se han aplicado a la base real y no hay despliegue (D13). Pasos en [migraciones](../02-base-de-datos/06-seed-y-migraciones.md).
+- **Reglas de negocio sin validar** con el negocio: fiscalidad (D3), fidelidad (D7), stock (D9), descuentos (D6). Ver [decisiones pendientes](../06-roadmap/decisiones-pendientes.md).
+- Sin recibo (solo `window.print()`), sin pagos mixtos ni vuelto (D5), sin variantes en el POS (D10), sin operación offline (D16), sin monitoreo.
+- Órdenes de compra y gastos: solo esquema, sin API ni UI (etapa 2).
+- Detalle de límites por módulo en `docs/03-modulos/`.

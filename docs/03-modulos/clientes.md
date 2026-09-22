@@ -1,47 +1,20 @@
 # Módulo: Clientes
 
-> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
-> lógica de negocio vive en RPC de la BD: ver [API](../01-arquitectura/08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+> Actualizado tras la etapa 1 · `app/(dashboard)/customers/page.tsx`, `customers/[id]/page.tsx` · API `customers`, `customers/[id]` · Confianza: **[Verificado]** (`catalog.test.ts`, `rls.test.ts`, `rpc.test.ts`).
 
-> Archivos: `app/(dashboard)/customers/page.tsx` (186), `app/(dashboard)/customers/[id]/page.tsx` (208) · Base: commit `54962b9`
+- **Quién:** cualquier usuario activo lee, crea y edita datos de contacto; **solo admin** puede borrar (sin UI de borrado).
+- **Lista:** paginada, búsqueda por nombre, email o teléfono; muestra puntos de fidelidad y gasto total.
+- **Alta:** nombre*, email, teléfono, dirección. `email: ''` → `null`; el email es **único** (409, sin distinguir mayúsculas porque el esquema lo pasa a minúsculas).
+- **Detalle:** gasto total, nº de órdenes, puntos, estado, contacto e **historial de compras** (`GET /orders?customer_id=`). **Un cajero solo ve sus propias órdenes** (RLS), así que su historial de un cliente puede estar incompleto.
 
-## Listado — `/customers`
+## Campos derivados (no editables)
+`total_spent` y `loyalty_points` **los calcula un trigger** a partir de las órdenes `completed` (D7, sin validar): `total_spent = Σ total`, `loyalty_points = floor(total_spent)`. **Un reembolso los resta.**
+Ningún cliente de la API puede escribirlos: están fuera del esquema zod y de los privilegios por columna de la BD (`rls.test.ts`). Al migrar una base existente, los valores manuales previos se **sustituyen**.
 
-- `customers` (`created_at desc`), sin paginar. Buscador en memoria por nombre, email y teléfono.
-- Tarjeta con el total de clientes. Tabla: nombre, email, teléfono, puntos, total gastado, estado.
-- Cada fila navega a `/customers/[id]`.
-- **Solo alta y lectura**: no hay editar ni borrar ni activar/desactivar (el import `Edit` no se usa).
-- Alta (`Dialog`): `name` (obligatorio), `email`, `phone`, `address`. Estado inicial de todos = `''`.
+## Límites conocidos
+- Sin edición ni borrado desde la UI (la API tiene `PATCH`); sin desactivar clientes desde la pantalla (el POS solo ofrece los activos).
+- El selector del POS carga los 100 más recientes.
+- Datos personales sin política de retención ni consentimiento (D14).
+- Sin canje de puntos (D7).
 
-## Detalle — `/customers/[id]`
-
-- `customers` por id (`.single()`) y `orders` del cliente (`created_at desc`).
-- Tarjetas: Total Spent (`customer.total_spent`, valor **guardado**, no calculado), órdenes completadas
-  ("N of M total", con `M = orders.length`, `:71-72,104-105`), Loyalty Points (`customer.loyalty_points`) y
-  estado. Tabla de órdenes con enlace al detalle de cada una.
-- Inconsistencia: el "Total Spent" guardado puede no coincidir con la suma real de las órdenes completadas
-  del mismo cliente que la propia pantalla lista debajo.
-
-## Defectos y riesgos
-
-| # | Detalle | Efecto |
-|---|---|---|
-| 1 | `email: ''` se inserta como cadena vacía en una columna `UNIQUE` **[Inferido]** | El **segundo** cliente sin email choca con `customers_email_key`. Convertir `''` → `null` |
-| 2 | Nada actualiza `total_spent` ni `loyalty_points` al vender/reembolsar | Los valores mostrados son los del seed o manuales; "Top customers" en reportes es engañoso ([reportes](reportes.md)) |
-| 3 | Sin edición, borrado ni desactivación | Datos erróneos no se pueden corregir desde la UI |
-| 4 | Sin validación de teléfono/email más allá de `type="email"` | |
-| 5 | **Datos personales visibles y modificables por cualquier usuario autenticado** (RLS `ALL`) | Riesgo de privacidad/cumplimiento ([C1](../04-auditoria/hallazgos/C1-rls-permisivo.md)) |
-| 6 | En el POS el selector muestra `nombre - teléfono` (queda un guion colgante si no hay teléfono) | Cosmético |
-| 7 | Sin paginación ni búsqueda en servidor | No escala con miles de clientes |
-| 8 | Sin política de retención/eliminación de datos personales | Definir según normativa aplicable |
-
-## Reglas de negocio pendientes de definir
-
-Ver [decisiones-pendientes](../06-roadmap/decisiones-pendientes.md): ¿cómo se acumulan y canjean los puntos?
-(el reporte los deriva como `floor(total_spent)`, sin base en el código de ventas), ¿los reembolsos restan
-puntos y gasto?
-
-## Recomendación técnica
-
-Mantener `total_spent`/`loyalty_points` **derivados**: mediante trigger sobre `orders` o vista
-(`select customer_id, sum(total) … where status='completed'`), no como columnas editables por el cliente.
+Relacionados: [POS](pos-checkout.md), [Órdenes](ordenes-y-reembolsos.md).

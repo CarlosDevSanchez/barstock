@@ -1,90 +1,71 @@
 # UI y sistema de diseño
 
-> Base: commit `54962b9` · Confianza: **[Verificado]**
+> Actualizado tras la etapa 1. Confianza: **[Verificado]** (código y recorridos en Chromium); la accesibilidad **no** se ha auditado con herramientas.
 
 ## Tecnología
 
-- **Tailwind CSS 4** (sin `tailwind.config`): `app/globals.css` importa `tailwindcss` y `tw-animate-css`,
-  define `@custom-variant dark (&:is(.dark *))` y expone los tokens con `@theme inline`
-  (`--color-background`, `--color-primary`, `--radius-*`, `--color-sidebar-*`, `--color-chart-1..5`).
-- **shadcn/ui**, estilo `new-york`, `baseColor: neutral`, `cssVariables: true`, `rsc: true`, iconos
-  `lucide` (`components.json`). Alias: `@/components`, `@/components/ui`, `@/lib`, `@/lib/utils`, `@/hooks`
-  (la carpeta `hooks/` no existe).
-- **Tipografía:** Geist Sans y Geist Mono vía `next/font/google` (`app/layout.tsx`), expuestas como
-  `--font-geist-sans` y `--font-geist-mono`.
-- **Tema:** `next-themes` con `attribute="class"`, `defaultTheme="light"`, `enableSystem`,
-  `disableTransitionOnChange`. El conmutador está en el menú de usuario del layout
-  (`layout.tsx:133-136`). `suppressHydrationWarning` en `<html>`.
+- **Tailwind CSS 4** (sin `tailwind.config`): `app/globals.css` importa `tailwindcss` y `tw-animate-css`, define `@custom-variant dark (&:is(.dark *))` y expone los tokens con
+  `@theme inline` (`--color-background`, `--color-primary`, `--radius-*`, `--color-sidebar-*`, `--color-chart-1..5`).
+- **shadcn/ui**, estilo `new-york`, `baseColor: neutral`, `cssVariables: true`, iconos `lucide` (`components.json`). Alias: `@/components`, `@/components/ui`, `@/lib`, `@/hooks`.
+  Los archivos de `components/ui/` se excluyen de Prettier para conservar el estilo de upstream.
+- **Tipografía:** Geist Sans y Geist Mono vía `next/font/google` (`--font-geist-sans`, `--font-geist-mono`).
+- **Tema:** `next-themes` (`attribute="class"`, `defaultTheme="light"`, `enableSystem`); el conmutador está en el menú de usuario.
 
 ## Lenguaje visual
 
-| Elemento | Valor observado |
+| Elemento | Valor |
 |---|---|
-| Color primario | Emerald (`#10B981` en gráficas; clases `emerald-600/700`, `emerald-100`, `dark:emerald-900/30`) |
-| Superficies | `bg-card`, fondo de contenido `bg-slate-50 dark:bg-slate-900` (`layout.tsx:216`) |
-| Radios | `rounded-2xl` en tarjetas, `rounded-xl` en filas y botones de navegación |
-| Estados | Rojo para bajo stock/reembolso/eliminar; naranja para advertencia; púrpura/azul/naranja para KPIs secundarios |
-| Idioma de la interfaz | **Inglés** (etiquetas, toasts, placeholders). La documentación está en español. |
-| Moneda | Símbolo `$` fijo en JSX (`${x.toFixed(2)}`), sin `Intl.NumberFormat` ni relación con el ajuste de moneda |
+| Color primario | Emerald (`emerald-600/700`, `emerald-100`, `dark:emerald-900/30`; `#10B981` en gráficas) |
+| Superficies | `bg-card`; fondo de contenido `bg-slate-50 dark:bg-slate-900` |
+| Radios | `rounded-2xl` en tarjetas, `rounded-xl` en filas y navegación |
+| Estados | Rojo: bajo stock, reembolso, eliminar. Naranja: advertencia. Púrpura/azul/naranja: KPIs secundarios |
+| Idioma de la interfaz | **Inglés** (decisión D12 pendiente); la documentación está en español |
+| Dinero | `useMoney()` → `Intl.NumberFormat` con la moneda de **Ajustes** (antes, `$` fijo). El servidor devuelve números; nunca se formatea en el servidor |
+| Nombre de la tienda | `settings.store_name` (sidebar), antes "POS System" fijo |
 
-## Componentes `components/ui/`
+## Componentes compartidos
 
-16 archivos. Uso real (importaciones desde `app/` y `components/`):
+Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 
-| Componente | Archivos que lo usan |
+| Componente | Para qué |
 |---|---|
-| `card` | 15 |
-| `button` | 14 |
-| `input` | 11 |
-| `badge`, `label`, `table` | 9 c/u |
-| `dialog` | 5 |
-| `select` | 4 |
-| `separator` | 2 |
-| `avatar`, `dropdown-menu`, `scroll-area`, `sheet`, `sonner` | 1 c/u |
-| `form`, `tabs` | **0** |
+| `AppShell` | Navegación lateral/móvil **filtrada por rol**, menú de usuario (tema, logout que vacía el carrito) |
+| `ConfirmDialog` | Sustituye a `window.confirm()`: `AlertDialog` accesible que muestra progreso y no se cierra si falla |
+| `TextField`, `SelectField` | Campos de `react-hook-form` con etiqueta y mensaje de error asociados (`htmlFor`/`aria-describedby` por `FormControl`) |
+| `Pagination` | Anterior/siguiente con "Page x of y · N results"; oculta si cabe en una página |
+| `QueryError`, `PageSpinner` | Error con "Try again" y spinner (antes copiado en 5 archivos) |
 
 ## Layout del dashboard
 
-`app/(dashboard)/layout.tsx`:
+`app/(dashboard)/layout.tsx` es un **Server Component** (sesión + ajustes) que monta `AppShell`:
 
-- **Escritorio (`lg+`):** sidebar fijo de `w-64` con logo "POS System", 10 enlaces y menú de usuario
-  (Avatar con inicial + rol, Perfil, cambiar tema, Logout). "Profile" es un ítem **sin acción**.
+- **Escritorio (`lg+`):** sidebar de `w-64` con el nombre de la tienda, los enlaces permitidos al rol y el menú de usuario (inicial, nombre o email, rol).
 - **Móvil:** cabecera con `Sheet` lateral (mismos enlaces) y menú de usuario.
-- **Resalte de ruta activa:** `pathname === item.href` (igualdad exacta). Rutas hijas como
-  `/orders/[id]` **no** resaltan "Orders".
-- El nombre "POS System" está hardcodeado; `APP_NAME` en `lib/constants.ts` no se usa.
+- Resalte de ruta activa por **igualdad exacta** (`pathname === href`): `/orders/[id]` no resalta "Orders" (pendiente menor).
+- El markup de navegación sigue duplicado entre escritorio y móvil (candidato a `<SidebarNav>`).
 
-## Patrones de pantalla repetidos
+## Patrones de pantalla
 
-1. **Listado:** cabecera (`h1` + descripción + botón "Add"), tarjetas KPI, tarjeta con buscador y `Table`.
-2. **Alta/edición:** `Dialog` con `useState` de un objeto `formData` y `handleSubmit` que hace insert o update.
-3. **Detalle:** botón volver (`ArrowLeft`), tarjetas de información, tabla de ítems.
-4. **Carga:** spinner esmeralda a pantalla completa (5 copias).
-5. **Notificaciones:** `toast.success/error` de Sonner, posición `top-right`, `richColors`.
-6. **Confirmaciones destructivas:** `window.confirm()` (borrar producto, borrar categoría, reembolsar,
-   imprimir recibo). Debería ser `AlertDialog`.
+1. **Listado:** cabecera (`h1` + descripción + botón "Add" solo si el rol puede escribir), buscador con *debounce*, tabla, paginación en servidor, estado vacío y de error.
+2. **Alta/edición:** `Dialog` con `react-hook-form` + el **mismo esquema zod que valida el servidor**; los errores salen bajo cada campo (`Required`, `Must be 0 or more`…),
+   los del servidor en un `toast`. El diálogo se monta al abrirse (`key` por producto), así que el formulario siempre parte del valor guardado.
+3. **Detalle:** botón volver (`aria-label`), tarjetas de información, tabla.
+4. **Confirmaciones destructivas:** `ConfirmDialog` (borrar producto/categoría, desactivar usuario); el reembolso pide **motivo** en un diálogo propio.
+5. **Notificaciones:** `toast` de Sonner (`top-right`, `richColors`).
+6. **Formularios de autenticación:** `method="post"` y botón deshabilitado hasta hidratar (ver [autenticación](03-autenticacion-y-sesion.md)).
 
 ## Impresión
-
-`window.print()` en `/pos` (tras el cobro) y en `/orders/[id]`. En detalle de orden se usan utilidades
-`print:hidden` / `print:space-y-4` para ocultar controles. **No hay plantilla de recibo**; se imprime la
-página. En `/pos`, `window.print()` se ejecuta **después de `clearCart()`** (`pos/page.tsx:168-175`), por lo
-que **[Inferido]** imprime la pantalla del POS con el carrito ya vaciado, no un recibo con lo vendido. `receipt_template` existe en el seed pero nadie lo lee.
+Solo el detalle de orden usa `window.print()` (con `print:hidden`/`print:space-y-4` para ocultar controles). **No hay plantilla de recibo**; `receipt_template` de Ajustes se guarda
+pero no se imprime (D15). El POS ya no llama a `window.print()`.
 
 ## Accesibilidad y responsive
-
-- **[Verificado]** Hay 36 usos de `<Label>` en `app/` y solo 18 `htmlFor`, concentrados en login,
-  registro, recuperar contraseña, productos y categorías. El POS, ajustes, clientes y proveedores tienen
-  etiquetas sin asociar a su control.
-- **[Verificado]** 0 usos de `aria-label` en `app/`. Hay botones de solo icono (`size="icon"`, 7 en
-  `app/`) sin nombre accesible: cantidad +/− y borrar en el POS, volver en los detalles.
-- **[Inferido]** Diseño responsive con `grid`/`flex` y breakpoints `sm/md/lg`; el POS colapsa a una
-  columna. No se probó en dispositivos.
-- Sin pruebas visuales ni de accesibilidad automatizadas.
+- Etiquetas y errores de formulario asociados a su control por `FormControl`; los botones de solo icono llevan `aria-label` (cantidad +/−, quitar, editar, borrar, volver, página anterior/siguiente).
+- El catálogo del POS es navegable con teclado (`role="button"`, `Enter`/`Espacio`) y marca `aria-disabled` los productos sin stock.
+- **[Inferido]** Diseño responsive con `grid`/`flex` y breakpoints `sm/md/lg`; el POS colapsa a una columna. No se ha probado en dispositivos ni con lectores de pantalla.
+- Sin auditoría automatizada de accesibilidad ni pruebas visuales.
 
 ## Reglas para UI nueva
-
-- Reutilizar `components/ui/*`; no crear estilos ad hoc para tarjetas/botones.
-- Extraer `LoadingSpinner`, `PageHeader`, `ConfirmDialog` antes de copiar por sexta vez.
-- Formatear dinero con `Intl.NumberFormat` usando la moneda de ajustes.
-- Añadir `aria-label` a botones de icono.
+- Reutilizar `components/ui/*` y los compartidos de arriba; no crear estilos ad hoc para tarjetas o botones.
+- Dinero siempre con `useMoney()`; nunca `$${x.toFixed(2)}`.
+- Botones de icono con `aria-label`; confirmaciones con `ConfirmDialog`, nunca `window.confirm()`.
+- Los formularios reutilizan el esquema del servidor; la conversión de presentación (p. ej. porcentaje → fracción) vive en el esquema (`taxRatePercent`), no en el componente.

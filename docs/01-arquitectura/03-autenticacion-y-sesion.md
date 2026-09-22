@@ -1,86 +1,86 @@
 # Autenticación, sesión y roles
 
-> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
-> lógica de negocio vive en RPC de la BD: ver [API](08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
-
-> Base: commit `54962b9` · Confianza: **[Verificado]** en código; comportamiento de Supabase Auth **[Por verificar]** (configuración del proyecto).
+> Actualizado tras la etapa 1. Confianza: **[Verificado]** (`test/integration/auth.test.ts`, `proxy.test.ts`, `rls.test.ts`, `e2e/roles.e2e.ts`, `e2e/invitation.e2e.ts`).
 
 ## Resumen
 
-Autenticación con **Supabase Auth (email + contraseña)** ejecutada 100 % desde el navegador. La sesión
-la gestiona `supabase-js` (almacenamiento en `localStorage`, **no** cookies `httpOnly`). No hay
-verificación de sesión en el servidor. Los roles existen en datos pero **no gobiernan ningún acceso**.
+- Supabase Auth (email + contraseña) como proveedor de identidad; **la sesión vive en cookies** gestionadas por `@supabase/ssr` en el servidor.
+  El navegador nunca recibe ni guarda tokens (ni en `localStorage`): `POST /auth/login` devuelve solo `{ id, email, fullName, role }`.
+- El **rol** vive en `profiles.role` (`admin ≥ manager ≥ cashier`) y se lee de la base de datos **en cada petición**: un cambio de rol o una
+  desactivación tiene efecto inmediato, sin esperar a que caduque el JWT.
+- **Alta solo por invitación** de un admin. No existe `/register` y el registro público está desactivado.
 
-## Componentes
+## Piezas
 
-| Pieza | Archivo | Qué hace |
-|---|---|---|
-| Cliente Supabase | `lib/supabase/client.ts` | `createClient(URL!, ANON_KEY!)`, singleton de módulo. Sin validación de env. |
-| Login | `app/(auth)/login/page.tsx` | `signInWithPassword`; éxito → `router.push('/dashboard')`; error → toast con `error.message` |
-| Registro | `app/(auth)/register/page.tsx` | `signUp` con `options.data = { full_name, role }`; éxito → toast + `/login` |
-| Recuperar contraseña | `app/(auth)/forgot-password/page.tsx` | `resetPasswordForEmail` con `redirectTo = <origin>/reset-password` |
-| Guarda + carga de perfil | `app/(dashboard)/layout.tsx:44-67` | `getSession()` → si no hay sesión `router.push('/login')`; si hay, `select * from profiles where id = session.user.id` → `setUser` |
-| Logout | `app/(dashboard)/layout.tsx:69-73` | `signOut()`, `setUser(null)`, `/login` |
-| Store | `stores/auth.ts` | `user: Profile \| null` y helpers de rol |
-| Alta de perfil | `supabase/schema.sql:380-392` | Trigger `on_auth_user_created` → `handle_new_user()` |
-
-## Flujo de sesión
-
-```mermaid
-sequenceDiagram
-    participant U as Usuario
-    participant L as /login
-    participant S as Supabase Auth
-    participant D as layout (dashboard)
-    participant P as profiles (RLS)
-    U->>L: email + contraseña
-    L->>S: signInWithPassword
-    S-->>L: sesión (JWT en localStorage)
-    L->>D: router.push('/dashboard')
-    D->>S: getSession()
-    alt sin sesión
-        D->>U: router.push('/login')
-    else con sesión
-        D->>P: select * where id = uid
-        P-->>D: perfil (o null)
-        D->>D: setUser(perfil); setLoading(false)
-    end
-```
-
-## Roles
-
-`user_role` = `admin | manager | cashier` (`schema.sql:8`, `types/index.ts:2`). Default `cashier`.
-
-| Aspecto | Realidad |
+| Pieza | Función |
 |---|---|
-| Asignación en el registro | El formulario ofrece "Admin / Manager / Cashier" y lo envía en `user_metadata.role`, **pero** `handle_new_user` inserta solo `id, email, full_name` (`schema.sql:383`). El rol siempre queda `cashier`. El selector es **engañoso**, no explotable por sí solo. |
-| Cambio de rol | La política `"Users can update own profile"` (`schema.sql:276-277`) permite `UPDATE` de la **fila propia sin restringir columnas**: un usuario puede ejecutar `update({role:'admin'})` sobre sí mismo desde la consola del navegador. **[Por verificar]** contra la base real; el análisis del SQL lo respalda. |
-| Uso en UI | Solo se muestra `user.role` en el sidebar (`layout.tsx:122`). `isAdmin()`, `isManager()` y `canManageProducts()` no se invocan en ningún archivo. |
-| Uso en RLS | Las políticas por rol de `schema.sql` (productos, actualizar órdenes, ajustes) quedan **anuladas** por las políticas permisivas de `fix_rls_policies.sql`. Ver [RLS](../02-base-de-datos/03-rls-y-politicas.md). |
-| Navegación | Los 10 ítems del menú se muestran a todos (`layout.tsx:20-31`). |
+| `proxy.ts` | Refresca la sesión, redirige o responde `401` sin sesión, guarda por rol las secciones (`/settings`, `/users` admin; `/reports`, `/suppliers` gerente). **Guarda de UX**, no la frontera de seguridad |
+| `lib/server/auth.ts` | `loadSession()` → `auth.getUser()` (valida el JWT contra Auth) + lectura de `profiles`; `requireUser()`, `requireRole(min)` |
+| `route()` (`lib/server/http.ts`) | Comprueba origen → sesión y rol → validación; devuelve 401/403 |
+| Layout del dashboard (Server Component) | `getSession()`; sin sesión, `redirect('/login')`; pasa usuario y ajustes a `AppShell` |
+| RLS + trigger de `profiles` | Frontera real: aunque la API tuviera un fallo, la base de datos rechaza la operación |
 
-## Comportamientos a tener en cuenta
+## Flujos
 
-- **Guarda solo en cliente.** El HTML/JS de `/pos`, `/settings`, etc. se sirve a cualquiera; lo protegido
-  es el **dato** (por RLS, hoy permisivo). Con `loading=true` el layout no renderiza `children`, por lo que
-  las páginas no consultan datos hasta confirmar sesión.
-- **Perfil ausente no bloquea.** Si el `select` de `profiles` falla o devuelve vacío, `user` queda `null`
-  pero igual se ejecuta `setLoading(false)` y se muestra la app (`layout.tsx:59-63`). El POS entonces
-  inserta `created_by: undefined`.
-- **Sin manejo de expiración.** No hay `onAuthStateChange`; si el JWT expira con la pestaña abierta,
-  las queries devolverán vacío/error sin redirigir.
-- **Login no redirige si ya hay sesión.** Un usuario autenticado puede visitar `/login` y `/register`.
-- **Carrito y sesión.** `handleLogout` no llama a `clearCart()`; el carrito persistido en `localStorage`
-  sobrevive entre usuarios (ver [estado cliente](04-estado-cliente.md)).
-- **Política de contraseña.** Mínimo 6 caracteres comprobado en cliente (`register/page.tsx:32`);
-  el servidor aplica lo que configure Supabase. Sin protección de fuerza bruta propia.
-- **Recuperación rota.** `/reset-password` no existe: el enlace del email termina en 404 y no hay
-  pantalla para fijar la nueva contraseña ([H4](../04-auditoria/hallazgos/H4-flujos-incompletos.md)).
-- **Confirmación de email.** El toast dice "check your email to verify", pero si se exige o no depende del
-  proyecto Supabase (**[Por verificar]**). Es determinante para la gravedad de [C1](../04-auditoria/hallazgos/C1-rls-permisivo.md).
+### Login
+`/login` (react-hook-form + `loginSchema`) → `POST /api/v1/auth/login` → `signInWithPassword` con el cliente ligado al request → cookies → `/dashboard`
+(o la ruta de `?next=`, **solo si empieza por `/` y no por `//`**: nunca a una URL externa).
 
-## Diseño objetivo
+- Email desconocido y contraseña errónea dan **exactamente el mismo** `401` (no se puede averiguar qué emails existen).
+- Credenciales válidas pero cuenta desactivada: `403 "This account is disabled"` y no se crea sesión.
+- El límite de intentos es el de Supabase Auth (`429` → `too_many_requests`); no hay uno propio.
+- El botón de envío está deshabilitado hasta que React hidrata y el `<form>` usa `method="post"`: un envío previo haría un `GET` nativo y **dejaría la
+  contraseña en la URL** (ocurrió al probar).
 
-Ver [`06-roadmap/diseno-objetivo-seguridad.md`](../06-roadmap/diseno-objetivo-seguridad.md):
-`@supabase/ssr` con cookies, `proxy.ts` que redirija sin sesión, guard por rol, registro cerrado o por
-invitación, y bloqueo de la columna `role`.
+### Invitación (alta de usuario)
+1. Admin → `/users` → "Invite user" → `POST /api/v1/users/invite { email, full_name?, role }`.
+2. El servidor usa el cliente `service_role` **solo aquí**: `auth.admin.inviteUserByEmail` y después `updateUserById(app_metadata: { role })`. Si asignar el rol falla,
+   **se borra el usuario** (no queda uno sin el rol previsto).
+3. Un trigger de la BD copia el rol de `app_metadata` al perfil y lo **activa**. Un perfil nace activo **solo si el servidor le asignó rol**: quien se dé de alta
+   por otra vía (p. ej. un signup abierto en un proyecto hospedado) obtiene un `cashier` **inactivo**, sin acceso a nada. El rol se lee **solo de `app_metadata`**;
+   `user_metadata` lo puede editar el usuario y no se usa.
+4. Correo (plantilla propia en `supabase/templates/invite.html`) → enlace `/auth/confirm?token_hash=…&type=invite`.
+5. `app/auth/confirm/route.ts` canjea el token **en el servidor** (`verifyOtp`), crea la cookie de sesión y redirige a `/reset-password`. Ningún token pasa por el
+   navegador ni por un fragmento de URL. El enlace es **de un solo uso**.
+6. `/reset-password` (`POST /auth/password/reset`) fija la contraseña; luego `/dashboard`.
+
+### Recuperar contraseña
+`/forgot-password` → `POST /auth/password/forgot` (**siempre 204**, exista o no el email) → correo → `/auth/confirm?type=recovery` → `/reset-password`.
+Un escáner de correo que abra el enlace antes lo consume: el usuario pide otro.
+
+### Contraseñas
+Entre 10 y 72 caracteres (72 = límite de bcrypt), validado en el esquema (`resetPasswordSchema`) y en `minimum_password_length = 10` de Supabase.
+
+### Logout
+`POST /auth/logout` → `signOut` (revoca la sesión en el servidor) y `AppShell` **vacía el carrito**: no se deja a la siguiente persona de la caja.
+
+### Desactivar o cambiar el rol
+Admin → `/users` → `PATCH /users/{id}`. Efecto en la **siguiente petición** del usuario (`401`). No puede desactivarse a sí mismo ni quitarse el rol de admin,
+y un trigger protege al **último admin activo**. Al abrir `/login` con una sesión válida pero un perfil inactivo, `proxy.ts` **cierra la sesión** (antes había un bucle de
+redirecciones infinito `layout → /login → proxy → /dashboard`).
+
+## Cookies de sesión
+`@supabase/ssr` las crea con `httpOnly: false` (su cliente de navegador las necesita). Como el navegador aquí no usa `supabase-js`, `lib/auth/cookie-options.ts` las
+fuerza a **`HttpOnly`** (un XSS no puede leerlas), **`Secure`** en producción y conserva `SameSite=Lax` y `Path=/`. Verificado en Chromium: `document.cookie` no ve la sesión.
+
+## Defensa contra CSRF
+Las escrituras (`POST/PATCH/DELETE`) con `Origin` distinto del host servido (o `x-forwarded-host` detrás de un proxy) se rechazan con `403`; sin `Origin`
+(clientes que no son navegadores, sin cookies ambientales) se permiten. Se suma `SameSite=Lax` y que los cuerpos son JSON.
+
+## Roles: quién puede qué
+Tabla completa de RLS en [rls-y-politicas](../02-base-de-datos/03-rls-y-politicas.md); tabla de endpoints en [API](08-api.md). Resumen:
+
+| Rol | Puede |
+|---|---|
+| **cashier** | Vender, ver catálogo, stock, clientes y **sus** órdenes, ver ajustes |
+| **manager** | Todo lo anterior + escribir catálogo/proveedores, ajustar stock, reembolsar, ver todas las órdenes y reportes |
+| **admin** | Todo + ajustes, usuarios (invitar, rol, desactivar), borrado físico |
+
+## Configuración relevante (`supabase/config.toml`)
+`enable_signup = false`; el proveedor de email **debe seguir activo** (`[auth.email] enable_signup = false` desactiva también el login); `enable_confirmations = true`;
+`minimum_password_length = 10`; `site_url = http://localhost:3000`; `jwt_expiry = 3600`; plantillas de invitación y recuperación. En un proyecto hospedado
+hay que replicar estos ajustes y pegar las plantillas en *Authentication → Email Templates*.
+
+## Pendiente
+- MFA, política de complejidad de contraseñas más allá de la longitud, y rotación de claves (D19).
+- El límite de intentos de login es solo el de Auth.

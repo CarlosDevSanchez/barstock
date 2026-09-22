@@ -1,74 +1,49 @@
-# Estado del cliente (Zustand)
+# Estado en el cliente
 
-> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
-> lógica de negocio vive en RPC de la BD: ver [API](08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+> Actualizado tras la etapa 1. Confianza: **[Verificado]** (`stores/cart.test.ts`, `test/components/pos.test.tsx`).
 
-> Base: commit `54962b9` · Confianza: **[Verificado]**
+Casi no hay estado global: **los datos del servidor no se cachean en el cliente**; cada pantalla los pide a la API con `useApiQuery`.
 
-Hay tres stores en `stores/`. Solo dos persisten en `localStorage`. Uno no se usa.
+| Qué | Dónde | Persistencia |
+|---|---|---|
+| Usuario y ajustes de la tienda | `SessionProvider` (contexto), rellenado por el layout servidor | Ninguna: se recalcula en cada navegación de servidor (`router.refresh()` tras guardar ajustes) |
+| Carrito del POS | `stores/cart.ts` (Zustand + `persist`) | `localStorage['pos-cart']`, versión 2 |
+| Datos de pantallas | `useApiQuery` (estado local del componente) | Ninguna |
+| Tema claro/oscuro | `next-themes` | `localStorage` |
 
-| Store | Archivo | Persistencia (clave) | ¿Usado? |
-|---|---|---|---|
-| `useAuthStore` | `stores/auth.ts` | No | Sí: layout (`setUser`) y POS (`user.id`) |
-| `useCartStore` | `stores/cart.ts` | `localStorage['pos-cart']` | Sí: solo el POS |
-| `useSettingsStore` | `stores/settings.ts` | `localStorage['pos-settings']` | **No** (0 importaciones) |
+Se eliminaron `stores/auth.ts` y `stores/settings.ts` (el primero se hidrataba desde el cliente; el segundo no lo leía nadie).
 
-## `useAuthStore` — `stores/auth.ts`
+## Carrito (`stores/cart.ts`)
 
-```ts
-user: Profile | null
-setUser(user)
-isAdmin()            // user?.role === 'admin'
-isManager()          // user?.role === 'manager'
-canManageProducts()  // admin || manager
-```
+Guarda **solo qué se compra**: `{ productId, quantity, discount }` por línea y un descuento global. **Nunca** precios, tasas de impuesto, totales ni el objeto `Product`
+(la versión 1 persistía el producto entero y mostraba precios obsoletos; al subir a la versión 2 se descarta esa forma). Acciones: `addItem` (fusiona repetidos), `removeItem`,
+`updateQuantity` (≤ 0 elimina la línea), `updateItemDiscount`, `setGlobalDiscount`, `clearCart`. Cantidad máxima 100 000; descuentos nunca negativos.
 
-- Se hidrata en `app/(dashboard)/layout.tsx` tras leer `profiles`.
-- Los tres helpers **nunca se llaman**. Son la base natural para gatear UI, pero la seguridad real debe
-  estar en RLS.
-- No se limpia al expirar la sesión, solo en `handleLogout`.
+El POS **valora el carrito con datos en vivo**: pide `GET /products?ids=…` con los ids de las líneas (precio, tasa y stock actuales) y calcula una **vista previa**
+(`lib/cart-preview.ts`, aritmética en centavos y puntos básicos, redondeo por línea "mitad hacia arriba", descuento global después del impuesto: **igual que `create_sale`**;
+verificado contra el resultado de la BD). El total que cuenta es el que devuelve `POST /sales`.
 
-## `useCartStore` — `stores/cart.ts`
+Se **vacía** al cerrar sesión (`AppShell`) y tras una venta correcta; tras un error se conserva.
 
-Estado: `items: CartItem[]`, `discount: number` (descuento global en **moneda**, no %), `taxRate: number`
-(inicial `0.1`).
+Los bloqueos de la UI (no una garantía; el servidor decide): botón "+" deshabilitado al llegar al stock, checkout deshabilitado si una línea supera el stock, el producto está
+inactivo, no tiene fila de inventario o ya no existe.
 
-Acciones: `addItem`, `removeItem`, `updateQuantity`, `updateItemDiscount`, `setGlobalDiscount`,
-`setTaxRate`, `clearCart`. Cálculos: `getSubtotal`, `getTax`, `getTotal`.
+## `useApiQuery(fetcher, key)`
 
-### Fórmulas (fuente de verdad actual)
+- Vuelve a pedir cuando cambia `key` (poner **todas** las entradas de la petición: `JSON.stringify({ page, search })`).
+- Cancela la petición anterior y **ignora respuestas obsoletas**.
+- Conserva el último dato mientras carga (las listas no parpadean); `loading` es "la petición de la clave actual no ha terminado".
+- No llama a `setState` de forma síncrona en un efecto (regla `react-hooks/set-state-in-effect`): el resultado se guarda junto a la clave que lo produjo.
+- `reload()` fuerza otra petición (tras crear, editar, borrar).
 
-```
-precio(item)  = item.variant?.selling_price ?? item.product.selling_price
-subtotal      = Σ ( precio(item) × cantidad − item.discount )                 // cart.ts:83-89
-tax           = (subtotal − discount_global) × taxRate                        // cart.ts:91-96
-total         = subtotal − discount_global + tax                              // cart.ts:98-103
-```
+Otros hooks: `useDebouncedValue` (300 ms para buscadores) y `useHydrated` (falso hasta que React hidrata; evita envíos de formulario prematuros).
 
-### Particularidades y defectos [Verificado]
+## Contexto de sesión
 
-| # | Detalle | Ubicación | Efecto |
-|---|---|---|---|
-| 1 | `addItem` copia el arreglo pero **muta el objeto** existente (`newItems[i].quantity += quantity`) | `cart.ts:40` | Mutación de estado; riesgo de renders omitidos y de persistir un estado inconsistente |
-| 2 | Se persiste el objeto `Product` completo dentro de cada ítem | `cart.ts` (`persist`) | El **precio queda congelado** en `localStorage`; un cambio de precio no llega al carrito guardado |
-| 3 | `updateQuantity` permite 0 (`Math.max(0, q)`) sin eliminar el ítem | `cart.ts:61` | Líneas con cantidad 0 que igualmente se insertan en `order_items` |
-| 4 | `clearCart` reinicia `items` y `discount`, **no** `taxRate` | `cart.ts:81` | Correcto por diseño, pero `taxRate` persiste entre sesiones |
-| 5 | `taxRate` global (0.1) ignora `product.tax_rate` | `cart.ts:30,95` | Impuesto de la orden ≠ suma de impuestos de líneas ([H3](../04-auditoria/hallazgos/H3-impuestos-y-dinero.md)) |
-| 6 | Sin redondeo a centavos; aritmética en `number` (float) | `cart.ts:83-103` | Descuadres de centavos entre `orders.total`, suma de líneas y `payments.amount` |
-| 7 | El descuento global no tiene tope ni validación | `pos/page.tsx:333-340` | Total negativo si `discount > subtotal` |
-| 8 | No se limpia al cerrar sesión | `layout.tsx:69-73` | El siguiente usuario del equipo ve el carrito anterior |
-| 9 | `updateItemDiscount` existe pero **no hay UI** que lo invoque | `cart.ts:67-75` | Descuento por línea siempre 0 |
-| 10 | `variant` nunca se asigna desde la UI (`addItem(product)` sin variante) | `pos/page.tsx:224` | El POS solo vende productos base; las variantes no son vendibles desde la UI |
+`useSession()` devuelve `{ user, settings }`; `useMoney()` da un formateador con la moneda de los ajustes (`Intl.NumberFormat`). Lanzan un error claro si se usan fuera del
+`SessionProvider`. La navegación se filtra con `roleAtLeast(user.role, minimumRole)`.
 
-## `useSettingsStore` — `stores/settings.ts` (sin uso)
-
-Guarda `storeName`, `currency`, `taxRate`, `lowStockThreshold`, `theme` con persistencia. Duplica la
-tabla `settings` de la BD y la pantalla `/settings` no lo usa. **Decisión pendiente**: ver
-[decisiones-pendientes](../06-roadmap/decisiones-pendientes.md) (¿ajustes en BD, en store, o ambos?).
-
-## Reglas para código nuevo
-
-- No guardar objetos de dominio completos en stores persistidos: guardar **ids y cantidades**, y
-  resolver precios contra la BD al cobrar.
-- Reiniciar `cart` en logout.
-- Nunca confiar en totales calculados aquí para escribir en la BD; ver [pos-checkout](../03-modulos/pos-checkout.md).
+## Reglas
+- No copiar datos del servidor a un store: pedirlos con `useApiQuery`.
+- Lo que se persiste en el navegador no debe contener datos que el servidor tenga que decidir (precios, permisos, totales).
+- Todo estado ligado a la sesión debe vaciarse en el logout.

@@ -1,45 +1,26 @@
 # Módulo: Reportes
 
-> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
-> lógica de negocio vive en RPC de la BD: ver [API](../01-arquitectura/08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+> Actualizado tras la etapa 1 · `app/(dashboard)/reports/page.tsx` · API `GET /reports?from&to` · RPC `sales_report` · Confianza: **[Verificado]** (`admin.test.ts`: cifras exactas sobre un día aislado).
 
-> Archivo: `app/(dashboard)/reports/page.tsx` (308 líneas) · Base: commit `54962b9`
+- **Quién:** gerente y admin (`403` al cajero; `proxy.ts` lo redirige).
+- **Rango:** dos fechas (`YYYY-MM-DD`), por defecto los últimos 7 días **en la zona de Ajustes**. Máximo **366 días** (`422` si se supera o si `from > to`).
 
-## Qué muestra
+## Contenido
+| Sección | Definición |
+|---|---|
+| Ingresos, órdenes, ticket medio, impuestos, descuentos | Sobre órdenes `completed` del rango |
+| Ventas diarias | Serie por día en la zona de Ajustes, con días vacíos a 0 |
+| Top productos (10) | Por **ingresos de línea** (`Σ order_items.total`, incluye impuesto; **no** incluye el descuento global) |
+| Top clientes (5) | Nº de órdenes y gasto (`Σ orders.total`) **dentro del rango** (antes: el `total_spent` acumulado) |
+| Métodos de pago | Órdenes y monto por método |
 
-| Sección | Cálculo | Problemas |
-|---|---|---|
-| **Last 7 Days Revenue** | Σ ventas de 7 días | Etiqueta correcta |
-| **Total Orders** | Σ órdenes de esos 7 días | |
-| **Avg Order Value** | ingresos / órdenes (7 días) | Solo 7 días; sin selector de rango |
-| **Active Customers** | `topCustomers.length` | **Incorrecto**: es el tamaño de una lista de máximo 5, no clientes activos |
-| **Daily Sales** | 7 consultas en `Promise.all` con `startOfDay/endOfDay` de date-fns (hora **local**) | Correcto en zona horaria (a diferencia del dashboard) pero 7 viajes |
-| **Top 5 Best Sellers** | `order_items` con `limit(1000)` sin orden, agrupado **por nombre**, ordenado por ingresos | 1) No es el top real si hay más de 1000 líneas. 2) Agrupa por `product.name`: dos productos con el mismo nombre se fusionan. 3) Incluye ítems de órdenes **reembolsadas** |
-| **Top 5 Customers** | `customers` ordenados por `total_spent desc` limit 5 + conteo de órdenes | 1) `total_spent` **no se mantiene** (seed/manual). 2) El conteo descarga **todas** las órdenes completadas (solo `customer_id`), topado por el límite de filas de PostgREST (1000 por defecto) |
-| Columna **Loyalty Points** | `Math.floor(customer.total_spent)` (`:296`) | **No muestra `loyalty_points`**: es `total_spent` truncado, con etiqueta de puntos |
+## Reglas
+- **Se excluyen los reembolsos.** Antes el top de productos los contaba y solo miraba las primeras 100/1000 líneas sin ordenar.
+- Agregación **en SQL**; el navegador solo pinta.
+- Los límites del rango se calculan como `[00:00 del día inicial, 00:00 del día siguiente al final)` en la zona de Ajustes.
 
-## Lo que el README promete y no existe
+## Límites conocidos
+- Sin exportación (CSV/PDF), sin gastos ni utilidad (los gastos no tienen UI: etapa 2), sin comparativas.
+- Ingreso por producto incluye impuesto: para "ventas netas" habría que restarlo.
 
-- "Profit analysis (ready)": **ningún cálculo de utilidad** (`selling_price − cost_price`) en reportes.
-- "Sales analytics / Revenue charts": el reporte de ventas es una lista de 7 filas, no una gráfica (las gráficas están en el dashboard).
-- Sin exportación (CSV/PDF), sin filtros por fecha/cajero/categoría/método de pago, sin reporte de inventario, gastos ni caja.
-
-## Otros detalles
-
-- `o.total` se suma sin `Number()`; depende de que PostgREST devuelva `numeric` como número (lo hace) — riesgo de
-  precisión con valores grandes.
-- `orderItems.forEach((item: any) => …)` (lint `no-explicit-any`).
-- Estado de error: solo `console.error`; la pantalla queda vacía sin aviso.
-
-## Cómo debería ser
-
-Reportes con **rango de fechas**, calculados en SQL (`GROUP BY`) mediante vistas/RPC, excluyendo órdenes
-reembolsadas, con agrupación por `product_id`, utilidad bruta (`Σ (unit_price − cost_price) × qty`),
-desglose por método de pago y por cajero, y exportación. Permiso: gerente/admin (hoy cualquier cajero los ve).
-
-## Pruebas sugeridas
-
-1. Dos productos con el mismo nombre → aparecen separados.
-2. Orden reembolsada → no suma a ingresos ni a "best sellers".
-3. Más de 1000 líneas → los totales siguen siendo exactos.
-4. Cliente sin ventas pero con `total_spent` en seed → no aparece como "top".
+Relacionados: [Dashboard](dashboard.md), [Ajustes](ajustes.md).

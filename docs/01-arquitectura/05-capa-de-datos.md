@@ -1,78 +1,70 @@
-# Capa de datos (acceso a Supabase)
+# Capa de datos
 
-> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
-> lógica de negocio vive en RPC de la BD: ver [API](08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+> Actualizado tras la etapa 1. Confianza: **[Verificado]**. Contrato de endpoints en [API](08-api.md); modelo en [`02-base-de-datos/`](../02-base-de-datos/01-esquema-tablas.md).
 
-> Base: commit `54962b9` · Confianza: **[Verificado]**
+## Quién habla con la base de datos
 
-## Patrón actual
+Solo el servidor. El navegador usa `lib/api/*` (fetch a `/api/v1`); las páginas no importan `@supabase/*` (lo impone el lint).
 
-No hay capa de datos. **Cada página importa el cliente y consulta directamente**:
-
-```ts
-import { supabase } from '@/lib/supabase/client'
-// dentro del componente:
-const fetchX = async () => {
-    const { data } = await supabase.from('tabla').select('*')
-    setX(data || [])
-}
-useEffect(() => { fetchX() }, [])
+```
+Route Handler ──▶ servicio (lib/server/services/<recurso>.ts) ──▶ cliente Supabase del request (JWT del usuario) ──▶ RLS
+                                                              └──▶ RPC (create_sale, refund_order, adjust_inventory, dashboard_summary, sales_report)
 ```
 
-Consecuencias: queries duplicadas entre páginas, tipos casteados con `as any`, cero reutilización,
-errores ignorados, y lógica de negocio mezclada con JSX.
+Hay **dos** clientes en el servidor:
 
-## Cliente
-
-`lib/supabase/client.ts` (6 líneas): `createClient(NEXT_PUBLIC_SUPABASE_URL!, NEXT_PUBLIC_SUPABASE_ANON_KEY!)`
-al importar el módulo. Con las variables ausentes lanza `supabaseUrl is required` en la evaluación del
-módulo, lo que **rompe `next build`** al prerenderizar (ver [H5](../04-auditoria/hallazgos/H5-build-sin-env.md)).
-No hay cliente de servidor ni `@supabase/ssr`.
-
-## Queries por página
-
-| Página | Operaciones | Tablas | Observaciones |
-|---|---|---|---|
-| `layout` (dashboard) | `select *` por id `.single()` | `profiles` | Sin manejo de `error` |
-| `/pos` | `select *` `is_active=true`; `select *`; `select *` `is_active=true`; **insert** orders, order_items, payments, inventory_transactions; **update** inventory; `select *` inventory por producto | `products`, `categories`, `customers`, `orders`, `order_items`, `payments`, `inventory`, `inventory_transactions` | Checkout no transaccional ([C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md)) |
-| `/products` | `select *, category:categories(*)` orden `created_at desc`; insert/update/delete | `products`, `categories` | Sin paginar; borrado en duro |
-| `/categories` | select, insert, update, delete; `select category_id` de **todos** los productos para contar | `categories`, `products` | Conteo en cliente descargando toda la tabla |
-| `/inventory` | `select *, product:products(*)` orden `quantity asc` | `inventory`, `products` | Solo lectura |
-| `/orders` | `select *, customer:customers(*)` orden `created_at desc` | `orders`, `customers` | Sin paginar |
-| `/orders/[id]` | orden con `customer:customers(*)` y `created_by_user:profiles!orders_created_by_fkey(*)`; ítems con `product`, `variant`; **update** `orders.status`; select/update `inventory` | `orders`, `order_items`, `inventory`, `customers`, `profiles` | El embed `profiles!orders_created_by_fkey` **[Por verificar]**: esa FK apunta a `auth.users`, no a `profiles` |
-| `/customers` | select, insert | `customers` | Sin edición ni borrado |
-| `/customers/[id]` | select `.single()` + órdenes del cliente | `customers`, `orders` | |
-| `/suppliers` | select, insert | `suppliers` | Sin edición ni borrado |
-| `/dashboard` | 2 sumas de ingresos, conteo de clientes, bajo stock (`lt quantity 10`, `limit 5`), 7 queries **secuenciales** (una por día), top productos (`limit 100`) | `orders`, `customers`, `inventory`, `order_items` | Ver [dashboard](../03-modulos/dashboard.md) |
-| `/reports` | 7 queries en `Promise.all`, top productos (`limit 1000`), top clientes + **todas** las órdenes completadas | `orders`, `order_items`, `customers` | Ver [reportes](../03-modulos/reportes.md) |
-| `/settings` | ninguna | — | No persiste |
-
-Totales: **12** usos de `select('*')` y solo **4** de `limit`/`range`.
-
-## Seguridad de las consultas
-
-- **Sin inyección SQL [Verificado]:** no hay `rpc()`, ni SQL crudo, ni `.or()`/`.ilike()`/`.filter()` con
-  texto del usuario. Las búsquedas de las pantallas filtran en memoria con `Array.filter`. PostgREST
-  parametriza los valores.
-- **Riesgo real = autorización, no inyección.** Cualquier query que el cliente escriba, o que un usuario
-  forje desde la consola con el JWT, es aceptada si RLS lo permite (y hoy lo permite todo). Ver [C1](../04-auditoria/hallazgos/C1-rls-permisivo.md).
-
-## Errores conocidos del patrón
-
-| Problema | Ejemplo | Fix |
+| Cliente | Archivo | Uso |
 |---|---|---|
-| `.eq(col, null)` no filtra `NULL` (se serializa como `col=eq.null`, verificado en `postgrest-js/dist/index.mjs:432`) | `pos/page.tsx:145`, `orders/[id]/page.tsx:71` | `.is('variant_id', null)` |
-| Errores de `select` descartados (`const { data }` sin `error`) | `fetchProducts`, `fetchOrders`, `fetchInventory`… | Comprobar `error` y mostrar estado |
-| `.single()` sin manejo de "0 filas" | `pos/page.tsx:141-146` | `.maybeSingle()` y tratar la ausencia como error de negocio |
-| Casts `as any` para tipar embeds | `orders/page.tsx:30`, `orders/[id]/page.tsx:42-43`, `inventory/page.tsx:28` | Tipos generados (`supabase gen types typescript`) |
-| Límite implícito de 1000 filas de PostgREST | `/reports` top clientes | Agregar en SQL |
-| Agregaciones en el navegador | `/dashboard`, `/reports` | Vistas SQL o funciones RPC |
+| Ligado a las cookies del request (`SupabaseClient<Database>`) | `lib/server/supabase.ts` | **Todos** los servicios. Aplica RLS con el JWT del usuario |
+| `service_role` | `lib/server/supabase-admin.ts` | **Solo** `auth.admin` en `services/users.ts` (invitar). Salta RLS: nunca se pasa a otros servicios |
 
-## Dirección propuesta
+## Patrón de un servicio
 
-1. `lib/data/<recurso>.ts`: funciones tipadas (`listProducts`, `createOrder`…) que encapsulen
-   `supabase.from(...)` y devuelvan `{ data, error }` ya validado.
-2. Tipos generados desde el esquema (`supabase gen types`) en vez de `types/index.ts` manual.
-3. Escrituras multi-tabla vía RPC transaccional.
-4. Lecturas con paginación por rango y columnas explícitas.
-5. Evaluar Server Components para lecturas iniciales con `@supabase/ssr`.
+```ts
+export async function updateProduct(supabase: AppSupabaseClient, id: string, patch: ProductUpdate) {
+    const { data, error } = await supabase.from('products').update(patch).eq('id', id).is('deleted_at', null).select().maybeSingle()
+    assertNoError(error)                       // supabase-js no lanza: hay que comprobar { error }
+    if (!data) throw notFound('Product not found')   // RLS: un UPDATE/DELETE bloqueado afecta 0 filas SIN error
+    return data
+}
+```
+
+Reglas del patrón:
+
+- **Comprobar siempre `{ error }`** (`assertNoError` lo convierte en un `AppError` con el estado HTTP correcto). `try/catch` no basta.
+- **0 filas = 404**: RLS no lanza error al bloquear un `UPDATE`/`DELETE`; el servicio debe distinguirlo con `.maybeSingle()`.
+- **Nunca se confía en lo que envía el cliente para escribir**: precio, impuesto, totales y permisos los decide la BD; los esquemas zod solo dejan pasar columnas escribibles.
+- Los tipos vienen de `types/database.ts` (**generado**, `bun run db:types`). Cuidado: supabase-js infiere el tipo del `select` a partir del **literal**; concatenar strings
+  (`'a' + 'b'`) lo degrada a `string`.
+- Sin `any`: `unknown` en los `catch`; las respuestas de RPC que devuelven JSON se validan con zod (`lib/validation/reports.ts`).
+
+## Errores
+
+`lib/server/errors.ts` traduce códigos de Postgres/PostgREST a estados HTTP **sin filtrar mensajes crudos** (`23505` → 409, `23503` → 409, `23514`/`23502` → 422,
+`22P02` → 400, `42501` → 403, `PGRST116`/`P0002` → 404, `PGRST301` → 401). Excepción deliberada: `P0001` (los `RAISE EXCEPTION` de nuestros RPC, escritos para el usuario:
+`Insufficient stock for "X"`) se devuelve como 422 con su mensaje.
+
+## Listas, búsqueda y paginación
+
+- Parámetros comunes `?page&pageSize&q` (`pageSize` ≤ 100, por defecto 25) validados por `paginationSchema`; `pageRange()` da el rango de `.range(from, to)` y `count: 'exact'` el total.
+- La búsqueda usa `.or('col.ilike.%término%,…')` con el término pasado por `sanitizeSearch()` (quita `, ( ) " \ % * _`): sin esto la entrada del usuario podría inyectar filtros PostgREST.
+- Excepción: `inventory?low=true` compara dos columnas (`quantity <= low_stock_threshold`), que PostgREST no expresa; se filtra en memoria sobre hasta 1000 filas y `summary` se calcula sobre todo el conjunto.
+
+## Escrituras multi-tabla: RPC
+
+| RPC | Servicio | Garantías |
+|---|---|---|
+| `create_sale` | `services/sales.ts` | Una transacción; precio e impuesto de la BD; stock atómico y nunca negativo; líneas ordenadas contra deadlocks |
+| `refund_order` | `services/orders.ts` | Bloqueo de la orden; idempotente; repone stock una sola vez; registra el movimiento |
+| `adjust_inventory` | `services/inventory.ts` | Motivo obligatorio; nunca negativo; registra el movimiento |
+| `dashboard_summary`, `sales_report` | `services/reports.ts` | Agregación en SQL con el RLS del que llama; respuesta validada con zod |
+
+Detalle y pruebas de concurrencia en [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md) y [testing](../05-guias/testing.md).
+
+## Borrado
+Productos: **borrado lógico** (`deleted_at`, `is_active = false`): el historial de ventas sigue apuntando al producto; el SKU queda reservado. Categorías: borrado físico (las claves
+foráneas devuelven 409 si tiene productos). Órdenes, pagos y stock **no se borran** (sin privilegios de escritura); los usuarios se **desactivan**.
+
+## Tipos
+`types/database.ts` (generado) → `types/index.ts` (alias y relaciones; nunca formas de tabla escritas a mano). Tras cada migración: `bun run db:types`.
+Los enums de la BD y los del código (`USER_ROLES`, `PAYMENT_METHODS`) se comprueban entre sí en las pruebas.

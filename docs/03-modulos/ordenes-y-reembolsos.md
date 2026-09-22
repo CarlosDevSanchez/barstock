@@ -1,82 +1,42 @@
 # Módulo: Órdenes y reembolsos
 
-> ⚠️ **Describe el estado ANTERIOR a la etapa 1 (commit `54962b9`).** Desde entonces el navegador solo habla con `/api/v1`, RLS es por rol y la
-> lógica de negocio vive en RPC de la BD: ver [API](../01-arquitectura/08-api.md) y [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md). Este documento se reescribe en el Paso 8.
+> Actualizado tras la etapa 1 · `app/(dashboard)/orders/page.tsx`, `orders/[id]/page.tsx` · API `orders`, `orders/[id]`, `orders/[id]/refund` · RPC `refund_order` · Confianza: **[Verificado]** (`sales.test.ts`, `rpc.test.ts`, `rls.test.ts`, e2e).
 
-> Archivos: `app/(dashboard)/orders/page.tsx` (121), `app/(dashboard)/orders/[id]/page.tsx` (252) · Base: commit `54962b9`
-
-## Listado — `/orders`
-
-- Consulta: `orders` con `customer:customers(*)`, orden `created_at desc`, **sin paginar** (`orders/page.tsx:24-31`).
-- Búsqueda en memoria por `order_number` y nombre de cliente. Nota: `order.customer?.name.toLowerCase()` falla
-  con `TypeError` si un cliente existe pero su `name` fuera `null`; hoy `name` es `NOT NULL`, así que no ocurre.
-- Estado con `Badge`: `completed` → default, `pending` → secondary, `refunded` → destructive, resto → outline.
-- Navegación: `router.push('/orders/<id>')`.
-- Lint: `fetchOrders` se usa antes de declararse (`react-hooks/immutability`) y hay `as any` (ver [lint](../04-auditoria/lint-y-tipos.md)).
-
-## Detalle — `/orders/[id]`
-
-Carga en dos consultas (`:29-50`):
-
-1. `orders` con `customer:customers(*)` y `created_by_user:profiles!orders_created_by_fkey(*)` (`.single()`).
-2. `order_items` con `product:products(*)` y `variant:product_variants(*)` por `order_id`.
-
-Muestra: número, fecha (`format(..., 'PPp')`), estado, "Created By", datos del cliente, tabla de ítems
-(producto, variante, cantidad, precio, descuento, impuesto, total) y resumen (subtotal, descuento, impuesto, total).
-
-Observaciones:
-- **"Created By" muestra el UUID crudo** (`order.created_by || 'System'`, `:160`); el embed `created_by_user`
-  se pide pero no se usa.
-- **[Por verificar]** El embed `profiles!orders_created_by_fkey`: esa FK apunta a `auth.users`, no a `profiles`.
-  Si PostgREST no puede resolver la relación, devuelve error y `orderData` queda `null`, mostrando
-  "Order not found". El commit `54962b9` ("Fix TypeScript error … created_by field") sugiere que esto se
-  tocó recientemente. Probar abriendo una orden real.
-- Los errores de las consultas no se revisan (solo el `catch`, que nunca dispara con `supabase-js`, ya que este
-  devuelve `{ error }` en lugar de lanzar).
-- **No se muestra el pago** (método, monto): `payments` no se consulta.
-
-## Impresión
-
-`window.print()` (`:89-91`). Los controles llevan `print:hidden`. No hay plantilla de recibo ni datos de la
-tienda; ver [UI](../01-arquitectura/06-ui-y-diseno.md).
-
-## Reembolso — `handleRefund` (`:52-87`)
-
-Visible solo si `order.status === 'completed'`. Flujo:
-
-```mermaid
-flowchart TD
-    A[confirm 'refund this order?'] --> B["UPDATE orders SET status='refunded'"]
-    B --> C{error?}
-    C -- sí --> X[toast de error]
-    C -- no --> D[para cada order_item]
-    D --> E["SELECT inventory (product_id, variant_id = null)"]
-    E --> F{fila?}
-    F -- sí --> G["UPDATE inventory SET quantity = leída + vendida"]
-    F -- no --> H[se omite en silencio]
-    G --> D
-    H --> D
-    D --> I[toast éxito + recargar]
-```
-
-### Defectos [Verificado]
-
-| # | Defecto | Efecto |
+## Quién ve qué
+| Rol | Lista y detalle | Reembolsar |
 |---|---|---|
-| 1 | El estado cambia **antes** de reponer el stock, sin transacción | Si falla la reposición, la orden queda `refunded` y el stock sin devolver |
-| 2 | Mismo `eq('variant_id', null)` que el POS (`:71`) | La reposición probablemente **no encuentra la fila** y se omite en silencio |
-| 3 | Lectura-modificación-escritura del stock | Carrera con ventas simultáneas |
-| 4 | **No es idempotente** en servidor: no valida `status = 'completed'` en el `UPDATE` | Un doble clic o dos pestañas pueden reponer stock dos veces |
-| 5 | No registra `inventory_transactions` de tipo `return` | La bitácora no refleja la devolución |
-| 6 | No revierte ni marca el **pago** | `payments` sigue mostrando el cobro; el reporte de caja no cuadra |
-| 7 | No ajusta `customers.total_spent` / `loyalty_points` | (Hoy irrelevante porque nunca se suman, pero será un error al implementarlo) |
-| 8 | Sin motivo, sin quién/cuándo, sin reembolso parcial por ítem | Sin trazabilidad |
-| 9 | Cualquier usuario autenticado puede reembolsar | El diseño original limitaba `UPDATE orders` a admin/manager, pero el parche RLS lo abrió ([C1](../04-auditoria/hallazgos/C1-rls-permisivo.md)) |
-| 10 | `confirm()` nativo | Ver [UI](../01-arquitectura/06-ui-y-diseno.md) |
+| cajero | **Solo las órdenes que creó** (RLS por `created_by`); las ajenas dan `404` | ❌ |
+| gerente, admin | Todas | ✅ |
 
-## Diseño objetivo
+Las líneas (`order_items`) y los pagos (`payments`) heredan la visibilidad de su orden.
 
-`supabase.rpc('refund_order', { order_id, reason })`: en una transacción, `UPDATE orders SET status='refunded'
-WHERE id=$1 AND status='completed'` (si no afecta filas → error), reponer stock con `UPDATE … quantity = quantity + n`,
-insertar `inventory_transactions` tipo `return`, registrar el reembolso del pago, y guardar `refunded_by`/`refunded_at`/`reason`.
-Permiso: solo gerente/admin. Ver [borrador](../06-roadmap/diseno-objetivo-seguridad.md).
+## Lista
+Paginada (25), ordenada por fecha; búsqueda por **número de orden** (`ORD-YYMMDD-NNNNNN`) y filtro por estado (`completed`, `refunded`). Al pulsar una fila se abre el detalle.
+
+## Detalle
+Datos de la orden, quién la creó (nombre o email), cliente (o "Walk-in"), método y monto del pago, líneas con precio, descuento, impuesto y total, y el resumen (subtotal, impuesto, descuento, total).
+"Print" usa `window.print()` (no hay plantilla de recibo). Una orden reembolsada muestra fecha y **motivo** del reembolso.
+
+## Reembolso
+Botón **Refund** (solo si la orden está `completed` y el rol es gerente+) → diálogo con **motivo obligatorio** (≥ 3 caracteres) → `POST /orders/{id}/refund { reason }` → RPC `refund_order`:
+
+1. Bloquea la fila de la orden (`FOR UPDATE`): dos reembolsos simultáneos se serializan.
+2. **Idempotente**: si ya está `refunded`, no hace nada y responde 200 (un reintento tras un corte de red no repone dos veces).
+3. Solo reembolsa `completed`; otros estados → 422.
+4. Marca `refunded`, `refunded_at`, `refunded_by`, `refund_reason`.
+5. Repone el stock de **cada línea** y registra un movimiento `return` con el motivo.
+6. El trigger de clientes recalcula `total_spent` y `loyalty_points` (el reembolso los resta).
+
+Verificado, incluido **30 rondas × 8 reembolsos simultáneos** (sin el `FOR UPDATE` la prueba falla con stock duplicado).
+
+## Modelo
+`orders(order_number, customer_id, status, subtotal, discount, tax, total, created_by, refunded_*)` — `CHECK (total = subtotal − discount + tax)` en filas nuevas; `order_items`; `payments`.
+Estados: `completed` y `refunded` los produce la aplicación; `draft` y `pending` existen en el enum pero **no se usan**. Las órdenes **no se editan ni se borran** (privilegios revocados, incluso al admin).
+
+## Límites conocidos
+- **Reembolso total** únicamente; sin parciales por línea, ventana de tiempo ni autorización escalonada (D8).
+- No se registra un pago de devolución (el importe queda implícito en `refunded_*` y el estado).
+- La búsqueda es por número de orden, no por nombre de cliente.
+- Sin filtro por rango de fechas en la pantalla (la API acepta `from`/`to`), sin exportación.
+
+Relacionados: [POS](pos-checkout.md), [Inventario](inventario.md), [Clientes](clientes.md), [C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md).

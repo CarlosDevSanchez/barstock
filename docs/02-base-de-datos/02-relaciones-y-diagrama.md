@@ -1,10 +1,10 @@
 # Relaciones y diagrama ER
 
-> Fuente: `supabase/schema.sql` · Confianza: **[Verificado]** contra el SQL.
+> Actualizado tras la etapa 1 (extraído de `pg_constraint` de la BD local) · Confianza: **[Verificado]**.
 
 ```mermaid
 erDiagram
-    AUTH_USERS ||--o| PROFILES : "id"
+    AUTH_USERS ||--o| PROFILES : "id (CASCADE)"
     CATEGORIES ||--o{ CATEGORIES : "parent_id"
     CATEGORIES ||--o{ PRODUCTS : "category_id"
     PRODUCTS ||--o{ PRODUCT_VARIANTS : "product_id (CASCADE)"
@@ -19,7 +19,7 @@ erDiagram
     ORDERS ||--o{ PAYMENTS : "order_id (CASCADE)"
     PRODUCTS ||--o{ ORDER_ITEMS : "product_id"
     PRODUCT_VARIANTS ||--o{ ORDER_ITEMS : "variant_id"
-    AUTH_USERS ||--o{ ORDERS : "created_by"
+    AUTH_USERS ||--o{ ORDERS : "created_by / refunded_by"
     AUTH_USERS ||--o{ INVENTORY_TRANSACTIONS : "created_by"
     AUTH_USERS ||--o{ EXPENSES : "created_by"
     AUTH_USERS ||--o{ PURCHASE_ORDERS : "ordered_by / received_by"
@@ -30,21 +30,21 @@ erDiagram
 
 ## Reglas de borrado (efectos reales)
 
-| Si se borra… | Efecto | Riesgo |
+Ninguna de las tablas de ventas y stock se borra desde la API (privilegios revocados); esto es lo que hace la **base de datos** si alguien con acceso directo lo intenta:
+
+| Si se borra… | Efecto | Cómo se evita en la práctica |
 |---|---|---|
-| `products` (sin ventas) | Se borran en cascada sus `product_variants`, `inventory` y, por éstos, `inventory_transactions` | Se **destruye la bitácora de stock** del producto |
-| `products` (con ventas) | Falla por FK desde `order_items.product_id` (sin cascade) | Correcto, pero la UI solo muestra el mensaje de Postgres. Debería usarse `is_active=false` |
-| `orders` | Se borran `order_items` y `payments` | Con RLS permisivo, **cualquier usuario puede borrar ventas y pagos**, borrando registros financieros |
-| `categories` en uso | Falla por FK desde `products.category_id` | Sin mensaje amigable |
-| `customers` con órdenes | Falla por FK desde `orders.customer_id` | |
-| `auth.users` (desde el panel de Supabase) | Falla mientras exista su fila en `profiles` (FK sin cascade) | Impide dar de baja usuarios; añadir `ON DELETE CASCADE` o desactivar en lugar de borrar |
+| `products` (con ventas) | Falla por FK desde `order_items.product_id` (sin cascade) | La API hace **borrado lógico** (`deleted_at`); el borrado físico es solo admin y falla si hay ventas |
+| `products` (sin ventas) | Cascada a `product_variants`, `inventory` y `inventory_transactions` (se pierde su bitácora) | Solo admin; usar borrado lógico |
+| `orders` | Cascada a `order_items` y `payments` | Sin privilegio `DELETE` para `authenticated` (ni admin) |
+| `categories` en uso | Falla por FK desde `products.category_id` → la API responde **409** | Mensaje claro en la UI |
+| `customers` con órdenes | Falla por FK desde `orders.customer_id` | Solo admin y sin UI |
+| `auth.users` | Se borra su `profiles` (**CASCADE**) | Preferir **desactivar** (`is_active = false`) para conservar la trazabilidad (`created_by` no tiene cascade) |
 
 ## Cardinalidades y particularidades
 
-- **Producto ↔ inventario:** debería ser 1 fila por (producto, variante). Con `variant_id` NULL la
-  restricción `UNIQUE` **no se aplica**, por lo que puede haber varias filas para el mismo producto.
-  Además la app **no crea** filas de inventario al crear un producto (el README dice lo contrario).
-- **Orden ↔ pago:** modelado como 1:N, usado como 1:1.
-- **Orden ↔ creador:** FK a `auth.users`, no a `profiles`. Consultar el creador con un embed
-  `profiles!orders_created_by_fkey` **[Por verificar]**; una relación válida requeriría una FK directa a `profiles`.
+- **Producto ↔ inventario:** una fila por (producto, variante); para productos sin variante, el índice parcial único garantiza **una sola**. El trigger `create_inventory_for_product` la crea (cantidad 0) al insertar el producto.
+- **Orden ↔ pago:** modelado 1:N, usado 1:1 (pagos mixtos: D5).
+- **Orden ↔ creador:** FK a `auth.users`, no a `profiles`, así que PostgREST **no puede embeber** el perfil: el servicio consulta el perfil aparte (`created_by_name`). El antiguo embed `profiles!orders_created_by_fkey` no funcionaba.
 - **Categorías anidadas:** existe `parent_id`; ninguna pantalla lo usa.
+- **`inventory_transactions.reference_id`** apunta lógicamente a una orden o compra **sin FK** (así las bitácoras sobreviven a su origen).
