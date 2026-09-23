@@ -19,6 +19,14 @@ La página orquesta estado, queries y `handleCheckout` sobre componentes en `com
 4. `create_sale` expande paquetes, fija `unit_price` asignado (no el de catálogo), baja stock por componente y devuelve la orden. El toast muestra ese total.
 5. Si falla, el carrito se conserva y se refresca el stock.
 
+**Idempotencia del cobro:** la página genera un UUID por intento de cobro (al abrir el diálogo de pago) y lo manda en la
+cabecera `Idempotency-Key`; se conserva mientras el carrito no cambie, así reintentar tras un error de red (o pulsar
+"Cobrar" dos veces) reutiliza la misma clave. `create_sale` la guarda en `idempotency_keys` y, si la misma clave
+llega dos veces con el mismo `user_id` y el mismo payload, devuelve la orden ya creada en vez de cobrar otra vez; con
+un payload distinto responde 409. Corrige el doble cobro por respuesta perdida (F0 en
+[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md), que además documenta el resto del diseño
+offline, todavía sin implementar).
+
 **Cuentas abiertas:** el carrito (productos y/o promociones) se puede enviar a una cuenta vía `tab_add_items` (misma expansión de paquetes que `create_sale`). Ver [cuentas-abiertas](cuentas-abiertas.md) y [promociones](promociones.md).
 
 ## Lo que el cliente envía y lo que decide la BD

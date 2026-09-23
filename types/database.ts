@@ -183,6 +183,33 @@ export type Database = {
         }
         Relationships: []
       }
+      idempotency_keys: {
+        Row: {
+          action: string
+          created_at: string
+          key: string
+          request_hash: string
+          result: Json | null
+          user_id: string
+        }
+        Insert: {
+          action: string
+          created_at?: string
+          key: string
+          request_hash: string
+          result?: Json | null
+          user_id: string
+        }
+        Update: {
+          action?: string
+          created_at?: string
+          key?: string
+          request_hash?: string
+          result?: Json | null
+          user_id?: string
+        }
+        Relationships: []
+      }
       inventory: {
         Row: {
           created_at: string
@@ -1099,6 +1126,7 @@ export type Database = {
         Args: {
           p_customer_id: string
           p_discount?: number
+          p_idempotency_key?: string
           p_items: Json
           p_payment_method: Database["public"]["Enums"]["payment_method"]
         }

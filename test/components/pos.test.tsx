@@ -28,7 +28,11 @@ const list = mock(async (query: Record<string, unknown>) => {
     const ids = typeof query.ids === 'string' ? query.ids.split(',') : null
     return page(ids ? catalog.filter(item => ids.includes(item.id)) : catalog)
 })
-const createSale = mock(async (_body: unknown) => ({ id: 'order-1', order_number: 'ORD-260921-000001', total: 80.27 }))
+const createSale = mock(async (_body: unknown, _idempotencyKey?: string) => ({
+    id: 'order-1',
+    order_number: 'ORD-260921-000001',
+    total: 80.27
+}))
 const push = mock(() => {})
 
 void mock.module('@/lib/api/products', () => ({ productsApi: { list, top: async () => [] } }))
@@ -257,7 +261,8 @@ describe('POS cart', () => {
                 payment_method: 'card',
                 items: [{ product_id: 'p-mouse', quantity: 2, discount: 0 }],
                 discount: 0
-            }
+            },
+            expect.any(String) // idempotency key: one per checkout attempt, see app/(dashboard)/pos/page.tsx
         ])
         // Nothing but ids and quantities: no prices, tax or totals travel to the server.
         expect(JSON.stringify(createSale.mock.calls[0])).not.toMatch(/29\.99|unit_price|total|tax/)
@@ -280,5 +285,27 @@ describe('POS cart', () => {
         await waitFor(() => expect(createSale).toHaveBeenCalled())
         await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(2)) // refreshed stock after the failure
         expect(useCartStore.getState().items).toHaveLength(1)
+    })
+
+    test('retrying the same checkout attempt reuses the idempotency key', async () => {
+        createSale.mockImplementationOnce(async () => {
+            throw new Error('network_offline')
+        })
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+        openCart()
+        fireEvent.click(await screen.findByRole('button', { name: /Checkout/ }))
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        const submit = () => within(dialog).getByRole('button', { name: 'Complete Order' })
+        fireEvent.click(submit())
+        await waitFor(() => expect(createSale).toHaveBeenCalledTimes(1))
+        fireEvent.click(submit())
+        await waitFor(() => expect(createSale).toHaveBeenCalledTimes(2))
+
+        const [firstKey] = createSale.mock.calls[0]?.slice(1) ?? []
+        const [secondKey] = createSale.mock.calls[1]?.slice(1) ?? []
+        expect(firstKey).toBe(secondKey)
     })
 })

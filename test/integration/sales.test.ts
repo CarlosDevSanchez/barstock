@@ -44,7 +44,8 @@ interface Order {
     refund_reason: string | null
 }
 
-const sale = (client: TestClient, body: unknown) => client.post(createSale, 'sales', { body })
+const sale = (client: TestClient, body: unknown, headers?: Record<string, string>) =>
+    client.post(createSale, 'sales', { body, headers })
 
 describe('POST /sales', () => {
     test('needs a session', async () => {
@@ -188,6 +189,99 @@ describe('POST /sales', () => {
             .eq('id', customer.id)
             .single()
         expect(data).toEqual({ total_spent: 200, loyalty_points: 200 })
+    })
+
+    test('rejects a malformed Idempotency-Key header', async () => {
+        const product = await createProduct({ stock: 5 })
+        const response = await sale(
+            cashier,
+            { payment_method: 'cash', items: [{ product_id: product.id, quantity: 1 }] },
+            { 'Idempotency-Key': 'not-a-uuid' }
+        )
+        expect(response.status).toBe(400)
+        expect(await stockOf(product.id)).toBe(5)
+    })
+
+    test('the same Idempotency-Key replayed with the same payload returns the same order instead of selling twice', async () => {
+        const product = await createProduct({ selling_price: 10, stock: 5 })
+        const key = crypto.randomUUID()
+        const body = { payment_method: 'cash' as const, items: [{ product_id: product.id, quantity: 1 }] }
+
+        const first = await sale(cashier, body, { 'Idempotency-Key': key })
+        expect(first.status).toBe(201)
+        const second = await sale(cashier, body, { 'Idempotency-Key': key })
+        expect(second.status).toBe(201)
+        expect(dataOf<Order>(second).id).toBe(dataOf<Order>(first).id)
+        expect(await stockOf(product.id)).toBe(4) // decremented once, not twice
+    })
+
+    test('the same Idempotency-Key with a different payload is a conflict, not a replay', async () => {
+        const a = await createProduct({ stock: 5 })
+        const b = await createProduct({ stock: 5 })
+        const key = crypto.randomUUID()
+
+        expect(
+            (
+                await sale(
+                    cashier,
+                    { payment_method: 'cash', items: [{ product_id: a.id, quantity: 1 }] },
+                    {
+                        'Idempotency-Key': key
+                    }
+                )
+            ).status
+        ).toBe(201)
+        const conflicting = await sale(
+            cashier,
+            { payment_method: 'cash', items: [{ product_id: b.id, quantity: 1 }] },
+            { 'Idempotency-Key': key }
+        )
+        expect(conflicting.status).toBe(409)
+        expect(await stockOf(b.id)).toBe(5) // the second sale never ran
+    })
+
+    test('two concurrent requests with the same key produce exactly one order', async () => {
+        const product = await createProduct({ selling_price: 10, stock: 5 })
+        const key = crypto.randomUUID()
+        const body = { payment_method: 'cash' as const, items: [{ product_id: product.id, quantity: 1 }] }
+
+        const [a, b] = await Promise.all([
+            sale(cashier, body, { 'Idempotency-Key': key }),
+            sale(cashier, body, { 'Idempotency-Key': key })
+        ])
+        const statuses = [a.status, b.status].sort()
+        expect(statuses).toEqual([201, 201])
+        expect(dataOf<Order>(a).id).toBe(dataOf<Order>(b).id)
+        expect(await stockOf(product.id)).toBe(4) // one sale, not two
+    })
+
+    test('a retry with the same key after a failed attempt re-evaluates the sale instead of replaying the failure', async () => {
+        const product = await createProduct({ stock: 1 })
+        const key = crypto.randomUUID()
+
+        const failed = await sale(
+            cashier,
+            { payment_method: 'cash', items: [{ product_id: product.id, quantity: 2 }] }, // more than in stock
+            { 'Idempotency-Key': key }
+        )
+        expect(failed.status).toBe(422)
+        expect(await stockOf(product.id)).toBe(1) // rolled back, including the idempotency row
+
+        const retried = await sale(
+            cashier,
+            { payment_method: 'cash', items: [{ product_id: product.id, quantity: 1 }] }, // fixed and resubmitted
+            { 'Idempotency-Key': key }
+        )
+        expect(retried.status).toBe(201)
+        expect(await stockOf(product.id)).toBe(0)
+    })
+
+    test('without a key, nothing changes: every call is a new sale', async () => {
+        const product = await createProduct({ selling_price: 10, stock: 5 })
+        const body = { payment_method: 'cash' as const, items: [{ product_id: product.id, quantity: 1 }] }
+        await sale(cashier, body)
+        await sale(cashier, body)
+        expect(await stockOf(product.id)).toBe(3)
     })
 })
 

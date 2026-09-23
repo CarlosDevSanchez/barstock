@@ -78,6 +78,9 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 ## Auditoría
 **`audit_log`** — `id bigint identity`, `occurred_at`, `actor_id` (**sin FK**), `actor_email`, `actor_role`, `action CHECK IN ('insert','update','delete','login','login_failed','logout','invite','password_reset')`, `entity`, `entity_id`, `changes jsonb`, `source CHECK IN ('db','api')`. Append-only: sin política de escritura, privilegios revocados y triggers que bloquean `UPDATE`/`DELETE`/`TRUNCATE` incluso para `service_role`. Ver [Auditoría](../03-modulos/auditoria.md).
 
+## Idempotencia
+**`idempotency_keys`** — `key uuid PK` (la manda el cliente, cabecera `Idempotency-Key`), `user_id NOT NULL`, `action text NOT NULL`, `request_hash text NOT NULL`, `result jsonb` (nulo hasta que la llamada dueña termina, en la misma transacción), `created_at`. Sin política RLS (solo la usan las RPC `SECURITY DEFINER`) y `revoke all` de `anon`/`authenticated`. Hoy solo la usa `create_sale` (evita el doble cobro de un reintento de red); ver [pos-checkout](../03-modulos/pos-checkout.md) y [F0 del diseño offline](../06-roadmap/offline-y-sincronizacion.md).
+
 ## Diferencias respecto a la baseline
 | Cambio | Migración |
 |---|---|
@@ -92,3 +95,4 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `tabs`, `tab_members`, `tab_items`, `tab_payments`, `orders.tab_id`, enum `tab_status` y sus RPC | `…0008` |
 | `promotions`, `promotion_items`, `order_items.promotion_id` (soft-delete; sin hard delete API) | `20260924000001` |
 | `audit_log` (append-only), trigger genérico en 13 tablas, `log_auth_event` RPC | `20260926000001` |
+| `idempotency_keys`; `create_sale` gana `p_idempotency_key` (drop + recreate, firma antigua eliminada) | `20260927000001` |

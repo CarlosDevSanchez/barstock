@@ -11,5 +11,11 @@ export const ordersApi = {
 }
 
 export const salesApi = {
-    create: (body: SaleInput) => apiPost<OrderDetail>('sales', body)
+    /**
+     * `idempotencyKey` lets the caller retry a checkout attempt (network drop, a lost response) without risking a
+     * duplicate charge: the server returns the same order for a replay of the same key. See create_sale (F0,
+     * docs/06-roadmap/offline-y-sincronizacion.md).
+     */
+    create: (body: SaleInput, idempotencyKey?: string) =>
+        apiPost<OrderDetail>('sales', body, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined)
 }

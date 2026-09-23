@@ -8,8 +8,16 @@ import { getOrder, type OrderDetail } from './orders'
 /**
  * Rings up a sale through the `create_sale` RPC: one transaction that reads prices and taxes from the database,
  * decrements stock and records order, items, payment and stock movements. The client's totals are never used.
+ *
+ * `idempotencyKey` protects against a lost response causing a second charge (a retry, or the cashier pressing
+ * "Cobrar" again before the first request returns): the RPC returns the same order on a replay of the same key
+ * with the same payload instead of ringing up the sale twice.
  */
-export async function createSale(supabase: AppSupabaseClient, input: SaleInput): Promise<OrderDetail> {
+export async function createSale(
+    supabase: AppSupabaseClient,
+    input: SaleInput,
+    idempotencyKey?: string | null
+): Promise<OrderDetail> {
     const discountFields: Record<string, number | undefined> = { discount: input.discount }
     for (const [index, item] of input.items.entries()) {
         if ('product_id' in item) discountFields[`items.${index}.discount`] = item.discount
@@ -29,7 +37,8 @@ export async function createSale(supabase: AppSupabaseClient, input: SaleInput):
                   }
         ),
         p_payment_method: input.payment_method,
-        p_discount: input.discount ?? 0
+        p_discount: input.discount ?? 0,
+        p_idempotency_key: (idempotencyKey ?? null) as string
     })
     assertNoError(error)
     return getOrder(supabase, orderId)

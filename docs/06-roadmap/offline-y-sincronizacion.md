@@ -1,6 +1,7 @@
 # Plan: cola offline y sincronización (no implementado)
 
-> Estado: **solo documento**, sin código. Complementa [PWA y modo offline](../01-arquitectura/09-pwa-offline.md), que sí
+> Estado: la cola de escrituras sigue **solo documento**, sin código; §1 (idempotencia de `create_sale`) es la
+> excepción, **implementada**. Complementa [PWA y modo offline](../01-arquitectura/09-pwa-offline.md), que sí
 > está implementado (lectura offline, avisos de conexión, instalación). Referencia: D16 en
 > [decisiones-pendientes](decisiones-pendientes.md) — "Parcial: lectura offline implementada".
 
@@ -11,15 +12,28 @@ cliente (outbox persistente), la sesión (qué pasa si expira sin red) y trae de
 permiten ventas offline? ¿solo en efectivo?). Se documenta aquí el diseño para no perder el análisis, pero no se
 implementa hasta que el negocio responda las preguntas de la sección 8.
 
-## 1. Idempotencia primero (hace falta incluso sin offline)
+## 1. Idempotencia primero (hace falta incluso sin offline) — ✅ Corregido para `create_sale`
 
-Hoy un reintento de red ya cobra dos veces: no hay forma de decirle a `create_sale` "esto ya lo intenté". Antes de
-construir cualquier cola, añadir:
+> El diseño original de esta sección (`client_ref uuid unique` en `orders`/`tab_items`/`tab_payments`/
+> `inventory_transactions`) tenía un error: `create_sale` puede insertar **varias** filas de `order_items` e
+> `inventory_transactions` en una sola llamada (paquetes de promoción), así que una columna única por fila no puede
+> representar "esta llamada ya se hizo". Implementado con una tabla aparte en su lugar (migración
+> `20260927000001_idempotency.sql`):
 
-- Columna `client_ref uuid unique` a `orders`, `tab_items`, `tab_payments` e `inventory_transactions`.
-- Las RPC `create_sale`, `tab_add_items`, `tab_pay` y `adjust_inventory` aceptan `p_client_ref` y, si ya existe una
-  fila con ese `client_ref`, devuelven el resultado ya procesado en vez de repetir el efecto.
-- Esto por sí solo arregla el doble cobro por reintento de red **hoy**, sin esperar a la cola.
+- Tabla `idempotency_keys(key uuid PK, user_id, action, request_hash, result jsonb, created_at)`, RLS activada y sin
+  políticas (solo la usan las RPC `SECURITY DEFINER`).
+- `create_sale` gana `p_idempotency_key uuid default null` (firma antigua eliminada con `drop function`, grants
+  rehechos). Con clave: inserta una fila de reclamo (`on conflict (key) do nothing`, así una petición concurrente con
+  la misma clave espera en el índice único a que la primera termine); si la clave ya existía con el mismo
+  `user_id`/payload y ya tiene `result`, devuelve la orden en vez de cobrar otra vez; con un payload distinto o sin
+  `result` responde un conflicto (`errcode 'BS409'` → 409). Si la transacción falla, la fila de reclamo se revierte
+  con ella y un reintento con la misma clave vuelve a evaluar la venta.
+- El cliente manda la clave en la cabecera `Idempotency-Key` (`POST /api/v1/sales`), generada una vez por intento de
+  cobro en el POS. Ver [pos-checkout](../03-modulos/pos-checkout.md).
+- Pendiente, no bloqueante: limpieza de claves con más de unos días (tarea manual o `pg_cron`, **[Por verificar]** en
+  el plan de Supabase).
+- **Fuera de este alcance:** `tab_add_items`, `tab_pay` y `adjust_inventory` todavía no tienen protección de
+  idempotencia; el mismo patrón (tabla `idempotency_keys`, ya creada) sirve para ellos cuando se necesite.
 
 ## 2. Outbox en IndexedDB
 
@@ -78,7 +92,8 @@ dispositivo, no solo cuándo llegó al servidor.
 
 ## 9. Pruebas necesarias cuando esto se implemente
 
-- Concurrencia e idempotencia: el mismo `client_ref` enviado dos veces **a la vez** (dos pestañas, o un reintento
-  automático que se solapa con uno manual) debe producir un solo efecto.
+- Concurrencia e idempotencia de la cola: la misma clave enviada dos veces **a la vez** (dos pestañas, o un reintento
+  automático que se solapa con uno manual) debe producir un solo efecto. Para `create_sale` ya cubierto en
+  `test/integration/sales.test.ts` (clave repetida en paralelo, con payload distinto, tras un fallo, sin clave).
 - E2E de ida y vuelta offline → online: encolar una venta sin red, recuperar la red, comprobar que se sincroniza una
   sola vez y que el número de orden final es el que asignó el servidor.

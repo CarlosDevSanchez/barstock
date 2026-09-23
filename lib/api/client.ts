@@ -24,6 +24,7 @@ interface RequestOptions {
     formData?: FormData
     query?: Query
     signal?: AbortSignal
+    headers?: Record<string, string>
 }
 
 const BASE = '/api/v1/'
@@ -76,13 +77,16 @@ export function isStale(value: unknown): boolean {
 async function request(
     method: string,
     path: string,
-    { body, formData, query, signal }: RequestOptions = {}
+    { body, formData, query, signal, headers }: RequestOptions = {}
 ): Promise<{ payload: unknown; fromCache: boolean }> {
     let response: Response
     try {
         response = await fetch(buildUrl(path, query), {
             method,
-            headers: formData || body === undefined ? undefined : { 'Content-Type': 'application/json' },
+            headers: {
+                ...(formData || body === undefined ? undefined : { 'Content-Type': 'application/json' }),
+                ...headers
+            },
             body: formData ?? (body === undefined ? undefined : JSON.stringify(body)),
             credentials: 'same-origin',
             signal
@@ -123,8 +127,8 @@ export async function apiList<T, S = undefined>(
     return markIfStale(payload as Paginated<T, S>, fromCache)
 }
 
-export async function apiPost<T = void>(path: string, body?: unknown): Promise<T> {
-    const { payload } = await request('POST', path, { body })
+export async function apiPost<T = void>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
+    const { payload } = await request('POST', path, { body, headers })
     return (payload as Single<T> | undefined)?.data as T
 }
 

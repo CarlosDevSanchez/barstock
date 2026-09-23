@@ -57,6 +57,9 @@ export default function POSPage() {
     // One pending tile at a time (product, Top 5, or promo): qty is local draft until Confirm.
     const [pendingId, setPendingId] = useState<string | null>(null)
     const [pendingQty, setPendingQty] = useState(1)
+    // One key per checkout attempt: pressing "Cobrar" again before a reply arrives reuses it, so a retry cannot
+    // charge twice. A fresh attempt (dialog reopened) gets a fresh key.
+    const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
     const search = useDebouncedValue(searchQuery)
 
     const items = useCartStore(state => state.items)
@@ -231,17 +234,23 @@ export default function POSPage() {
 
     const handleCheckout = async () => {
         setProcessing(true)
+        // Generated lazily so a retry of the same attempt (checkoutKey already set) reuses it.
+        const key = checkoutKey ?? crypto.randomUUID()
+        if (!checkoutKey) setCheckoutKey(key)
         try {
-            const order = await salesApi.create({
-                customer_id: selectedCustomer || null,
-                payment_method: paymentMethod,
-                items: items.map(item =>
-                    item.kind === 'product'
-                        ? { product_id: item.productId, quantity: item.quantity, discount: item.discount }
-                        : { promotion_id: item.promotionId, quantity: item.quantity }
-                ),
-                discount
-            })
+            const order = await salesApi.create(
+                {
+                    customer_id: selectedCustomer || null,
+                    payment_method: paymentMethod,
+                    items: items.map(item =>
+                        item.kind === 'product'
+                            ? { product_id: item.productId, quantity: item.quantity, discount: item.discount }
+                            : { promotion_id: item.promotionId, quantity: item.quantity }
+                    ),
+                    discount
+                },
+                key
+            )
             toast.success(t('orderCompleted', { orderNumber: order.order_number, total: money(order.total) }), {
                 action: { label: t('viewOrder'), onClick: () => router.push(`/orders/${order.id}`) }
             })
@@ -249,6 +258,7 @@ export default function POSPage() {
             setSelectedCustomer('')
             setShowPaymentDialog(false)
             setShowCart(false)
+            setCheckoutKey(null)
             catalog.reload()
             activePromos.reload()
             setTopReloadSignal(count => count + 1)
@@ -379,7 +389,11 @@ export default function POSPage() {
                 onSelectCustomer={setSelectedCustomer}
                 blocked={blocked}
                 showPaymentDialog={showPaymentDialog}
-                onShowPaymentDialog={setShowPaymentDialog}
+                onShowPaymentDialog={open => {
+                    setShowPaymentDialog(open)
+                    // Cancelling (or the dialog closing after success, already cleared) starts the next attempt fresh.
+                    if (!open) setCheckoutKey(null)
+                }}
                 paymentMethod={paymentMethod}
                 onPaymentMethodChange={setPaymentMethod}
                 processing={processing}

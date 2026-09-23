@@ -110,6 +110,10 @@ export function fromDatabaseError(error: DatabaseError): AppError {
             return unprocessable(error.message)
         case 'P0002':
             return notFound(error.message)
+        case 'BS409':
+            // This project's own application code for a conflict raised from PL/pgSQL (idempotency replay), not a
+            // real unique-constraint violation. See supabase/migrations/20260927000001_idempotency.sql.
+            return conflict(error.message)
         case '42501':
             return forbidden()
         case 'PGRST116':
