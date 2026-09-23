@@ -25,6 +25,7 @@ export const SETTINGS_DEFAULTS: SettingsInput = {
     timezone: 'America/Bogota',
     low_stock_threshold: 10,
     tax_rate: 0.19, // IVA general de Colombia: supuesto D3, sin validar
+    offline_max_hours: 12,
     receipt_template: { header: '¡Gracias por su compra!', footer: '¡Vuelva pronto!' }
 }
 

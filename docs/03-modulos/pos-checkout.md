@@ -1,6 +1,6 @@
 # Módulo: POS y cobro
 
-> Actualizado tras promociones (paquetes) · `app/(dashboard)/pos/page.tsx` + `components/pos/*` · API `POST /sales` · RPC `create_sale` · Servicio `services/sales.ts` · Confianza: **[Verificado]** (`sales` / `rpc` / `create-sale-promotions`, `pos.test.tsx`, `promotion-allocate.test.ts`).
+> Actualizado con idempotencia (F0), instantánea offline (F1) y recepción de ventas offline (F2) · `app/(dashboard)/pos/page.tsx` + `components/pos/*` · API `POST /sales`, `GET /pos/snapshot` · RPC `create_sale` · Servicio `services/sales.ts`, `services/pos.ts` · Confianza: **[Verificado]** (`sales.test.ts` / `offline-sales.test.ts` / `rpc.test.ts` / `create-sale-promotions.test.ts` / `pos-snapshot.test.ts`, `pos.test.tsx`, `use-pos-snapshot.test.tsx`, `promotion-allocate.test.ts`).
 
 > Sustituye al análisis anterior, donde el cobro eran 5 llamadas sueltas desde el navegador, sin transacción, con totales calculados en el cliente y un descuento de stock que probablemente no funcionaba
 > ([C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md), ahora **Verificado**). El estado previo queda en el historial de git (commit `54962b9`).
@@ -33,6 +33,16 @@ las promociones, clientes y líneas del carrito) se leen en memoria de una insta
 [offline y sincronización](../06-roadmap/offline-y-sincronizacion.md). Cobrar sigue deshabilitado sin red
 (`OfflineDisabledButton`): la instantánea solo respalda navegar y armar el carrito, nunca el cobro en sí.
 
+**El servidor ya sabe recibir una venta offline (F2), el POS todavía no la manda.** `saleSchema` acepta
+`occurred_at` (hora del dispositivo) y `expected_total` (el total provisional que mostró el POS) opcionales;
+`create_sale` los usa si llegan: recalcula precio/impuestos como siempre (nunca confía en `expected_total`, solo
+anota la diferencia), ajusta `occurred_at` a la ventana `settings.offline_max_hours` (recortándolo si se pasa) y, si
+`occurred_at` no es nulo, **nunca rechaza por falta de stock** — descuenta lo que haya (hasta 0) y anota el faltante.
+Cualquier diferencia queda en `orders.sync_issues` (`occurred_at_clamped`/`price_mismatch`/`stock_shortfall`) para
+que un gerente la revise (F4, sin pantalla todavía). Lo que falta para que el POS realmente venda sin red es la cola
+de escrituras del dispositivo (F3: outbox, motor de sincronización) — hoy `handleCheckout` nunca manda estos campos
+porque cobrar está deshabilitado sin red.
+
 **Cuentas abiertas:** el carrito (productos y/o promociones) se puede enviar a una cuenta vía `tab_add_items` (misma expansión de paquetes que `create_sale`). Ver [cuentas-abiertas](cuentas-abiertas.md) y [promociones](promociones.md).
 
 ## Lo que el cliente envía y lo que decide la BD
@@ -52,7 +62,9 @@ POST /api/v1/sales
 - `total = Σ base + Σ impuesto − descuento global`.
 
 ## Validaciones y rechazos
-Carrito vacío, > 100 entradas o > 200 líneas tras expansión, cantidad ≤ 0, promo inactiva/borrada o con componente inactivo, stock insuficiente en cualquier componente (atómico), etc.
+Carrito vacío, > 100 entradas o > 200 líneas tras expansión, cantidad ≤ 0, promo inactiva/borrada o con componente inactivo,
+stock insuficiente en cualquier componente (atómico), etc. **Excepción:** una venta offline (`occurred_at` no nulo)
+nunca se rechaza por falta de stock — ver F2 arriba.
 
 ## Pantalla: comportamiento
 - Carrito persistido (`pos-cart` v3: líneas discriminadas; versiones anteriores se descartan).

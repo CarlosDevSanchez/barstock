@@ -292,6 +292,8 @@
     "defaultTaxRateHint": "Tasa sugerida para productos nuevos. Cada producto conserva la suya.",
     "lowStockThreshold": "Umbral de stock bajo",
     "lowStockThresholdHint": "Aplica a productos nuevos. Los existentes conservan el suyo.",
+    "offlineMaxHours": "Máx. horas sin conexión",
+    "offlineMaxHoursHint": "Cuánto tiempo puede una caja cobrar sin red antes de necesitar revisión.",
     "receipt": "Recibo",
     "receiptDesc": "Texto impreso arriba y abajo del recibo",
     "header": "Encabezado",

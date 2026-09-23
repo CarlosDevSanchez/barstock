@@ -1,16 +1,21 @@
 # Plan: cola offline y sincronización (no implementado)
 
-> Estado: la cola de escrituras sigue **solo documento**, sin código; F0 (idempotencia de `create_sale`) y F1
-> (instantánea del catálogo del POS) son la excepción, **implementadas**. Complementa
+> Estado: la cola de escrituras del **dispositivo** sigue sin código (F3/F4); F0 (idempotencia de `create_sale`), F1
+> (instantánea del catálogo del POS) y F2 (el servidor ya sabe recibir una venta offline) están **implementadas**. Lo
+> que falta es lo que manda esos datos desde el cliente — hoy cobrar sigue deshabilitado sin red. Complementa
 > [PWA y modo offline](../01-arquitectura/09-pwa-offline.md), que sí está implementado (lectura offline, avisos de
 > conexión, instalación, instantánea del POS). Referencia: D16 en [decisiones-pendientes](decisiones-pendientes.md).
+>
+> **Decisiones tomadas (2026-09-22):** alcance v1 = solo ventas nuevas del POS (cuentas abiertas, ajustes de
+> inventario y reembolsos siguen deshabilitados sin red); sin stock al sincronizar → se registra la venta y se marca
+> para revisión, nunca se rechaza; ventana offline configurable (`settings.offline_max_hours`, 12 h por defecto).
 
 ## Por qué todavía no hay cola de escrituras
 
 Encolar ventas, pagos de cuentas y ajustes de inventario sin red es un cambio grande: toca la BD (idempotencia), el
 cliente (outbox persistente), la sesión (qué pasa si expira sin red) y trae decisiones de negocio sin resolver (¿se
 permiten ventas offline? ¿solo en efectivo?). Se documenta aquí el diseño para no perder el análisis, pero no se
-implementa hasta que el negocio responda las preguntas de la sección 8.
+implementa hasta que el negocio responda las preguntas de la sección 10.
 
 ## 1. Idempotencia primero (hace falta incluso sin offline) — ✅ Corregido para `create_sale`
 
@@ -56,7 +61,34 @@ con una instantánea explícita, sin esperar al resto de la cola:
 
 Ver [PWA y modo offline](../01-arquitectura/09-pwa-offline.md) y [pos-checkout](../03-modulos/pos-checkout.md).
 
-## 3. Outbox en IndexedDB
+## 3. Servidor: recibir una venta offline — ✅ Implementada
+
+`create_sale` acepta `p_occurred_at`/`p_expected_total` (ambos opcionales; migración `20260928000001_offline_sales.sql`).
+Sin ellos el comportamiento es exactamente el de antes (venta online). Con `p_occurred_at`:
+
+- **Ventana:** se recorta a `[now() − settings.offline_max_hours, now()]` (defecto 12 h, solo admin); si se recorta,
+  `orders.sync_issues.occurred_at_clamped` guarda lo pedido y lo usado.
+- **Precio:** el servidor calcula como siempre (regla dura 1) — `p_expected_total` nunca se usa para escribir, solo
+  se compara; si difiere, `orders.sync_issues.price_mismatch` guarda `{expected, actual}` y `payments.amount` es
+  siempre el total del servidor.
+- **Stock:** con `p_occurred_at` no nulo, la venta **nunca se rechaza por falta de stock** (a diferencia del camino
+  online, que sigue rechazando igual que siempre): descuenta lo que haya hasta 0 (el `CHECK ≥ 0` se mantiene) y anota
+  `orders.sync_issues.stock_shortfall: [{product_id, missing}]`. Un producto/promoción inactivo o borrado sigue
+  rechazando la venta entera (no hay precio con qué calcular) — mismo mensaje que en el camino online.
+- **`orders.client_ref`** guarda la misma clave que la idempotencia (§1), para que el dispositivo pueda enlazar su
+  ticket provisional con la orden ya sincronizada.
+- Reportes (`dashboard_summary`, `sales_report`, `top_selling_products`) agrupan/filtran por
+  `coalesce(orders.occurred_at, orders.created_at)`, así una venta sincronizada horas o días después sigue cayendo en
+  el día real en que ocurrió. El listado `/orders` (`?from&to`) no se tocó: sigue usando `created_at`.
+- API: `saleSchema` acepta `occurred_at`/`expected_total`; `lib/server/services/sales.ts` los pasa a la RPC. El POS
+  **todavía no los manda** (eso es F3/F4): hoy solo se puede probar vía `POST /sales` directamente o RPC. Ver
+  [pos-checkout](../03-modulos/pos-checkout.md).
+
+Pruebas: `test/integration/offline-sales.test.ts` (ventana, recorte, `price_mismatch`, `stock_shortfall`, producto
+inactivo, `client_ref`, agrupación de reportes) y `test/integration/admin.test.ts` (`offline_max_hours`: validación,
+solo-admin, defecto).
+
+## 4. Outbox en IndexedDB
 
 - Cada entrada: acción, payload, `user_id`, hora del cliente (`client_occurred_at`), `client_ref` (generado en el
   cliente, ver §1).
@@ -66,26 +98,29 @@ Ver [PWA y modo offline](../01-arquitectura/09-pwa-offline.md) y [pos-checkout](
 - El store `outbox` de `lib/offline/db.ts` (§2) ya existe en el esquema de IndexedDB; falta la lógica que lo llena y
   la vacía.
 
-## 4. Disparadores de la sincronización
+## 5. Disparadores de la sincronización
 
 El evento `online` (`hooks/use-online-status.ts` ya existe y puede disparar esto), el arranque de la app, un botón
-manual en el centro de sincronización (§8), y Background Sync API donde el navegador lo soporte (degradar
+manual en el centro de sincronización (§9), y Background Sync API donde el navegador lo soporte (degradar
 silenciosamente donde no: Safari/iOS no lo soporta hoy).
 
-## 5. Reglas por acción
+## 6. Reglas por acción
 
-- **Ventas.** El precio y el total mostrados offline son **provisionales** (la última foto de precio/stock vista). El
-  servidor recalcula al sincronizar; si el total cambia o la venta se rechaza (stock insuficiente, precio cambiado,
-  promoción ya inactiva), el usuario recibe un aviso con acción (aceptar el nuevo total, o descartar). El número de
-  orden (`order_number`, hoy una secuencia) se asigna **al sincronizar**, no al vender: el ticket offline es
-  provisional y lo dice explícitamente.
+- **Ventas.** El precio y el total mostrados offline son **provisionales** (la última foto de precio/stock vista de
+  la instantánea, §2). El servidor recalcula al sincronizar (§3, ya implementado): el total del servidor manda
+  siempre, una diferencia queda anotada (`sync_issues.price_mismatch`) en vez de bloquear la venta, y la falta de
+  stock **nunca** la rechaza (se registra el faltante, `sync_issues.stock_shortfall` — decisión tomada 2026-09-22,
+  ver la cabecera del documento). Solo un producto/promoción inactivo o borrado la rechaza de verdad. Falta la parte
+  de UI: un aviso o pantalla de revisión para esas diferencias (F4) sigue sin construir. El número de orden
+  (`order_number`, hoy una secuencia) se asigna **al sincronizar**, no al vender: el ticket offline es provisional y
+  lo dice explícitamente.
 - **Cuentas.** Solo se puede operar sobre cuentas ya vistas en caché. Dos dispositivos añadiendo a la misma cuenta
   offline es un conflicto real: la resolución (último gana, o unir líneas) es una decisión de negocio pendiente. El
   stock se descuenta en el servidor al sincronizar, nunca en el cliente.
 - **Ajustes de inventario.** Son **deltas** (`+5`, `-2`), no valores absolutos: conmutan sin conflicto entre sí y son
   el caso más simple de la cola.
 
-## 6. Sesión
+## 7. Sesión
 
 - Si la sesión expira mientras el dispositivo está sin red, la cola se conserva en IndexedDB y solo se reintenta
   sincronizar cuando vuelve a haber sesión **del mismo usuario** (comparar `user_id` de la entrada contra la sesión
@@ -95,25 +130,29 @@ silenciosamente donde no: Safari/iOS no lo soporta hoy).
   en segundo plano necesita una ruta que no dispare esa redirección (por ejemplo, un cliente de sincronización
   separado que solo marque la cola como "pausada" y muestre un aviso, en vez de navegar).
 
-## 7. Auditoría
+## 8. Auditoría
 
 Las acciones sincronizadas se registran igual que cualquier otra escritura (ver [auditoría](../03-modulos/auditoria.md)),
 con `changes`/metadata incluyendo `client_occurred_at` para poder reconstruir cuándo ocurrió realmente la acción en el
 dispositivo, no solo cuándo llegó al servidor.
 
-## 8. Centro de sincronización en la UI
+## 9. Centro de sincronización en la UI
 
 - Un contador de pendientes visible en el header (junto al badge de conexión, `components/connection-status.tsx`).
 - Una lista de entradas **rechazadas** con opción de reintentar o descartar cada una.
 
-## 9. Decisiones de negocio pendientes (bloquean la implementación)
+## 10. Decisiones de negocio pendientes (bloquean la implementación)
 
-1. ¿Se permiten ventas offline en absoluto, o el POS debe negarse a cobrar sin red?
+1. ¿Se permiten ventas offline en absoluto, o el POS debe negarse a cobrar sin red? (Asumido que sí para poder
+   construir F2; la decisión formal con el negocio sigue pendiente — el POS no las manda todavía, ver §3)
 2. Si se permiten, ¿solo en efectivo (sin verificación de tarjeta posible offline)?
-3. ¿Cuánto tiempo máximo puede una caja operar sin conexión antes de bloquearse?
-4. ¿Qué pasa con una venta rechazada al sincronizar (stock insuficiente) si el producto **ya se entregó** al cliente?
+3. ~~¿Cuánto tiempo máximo puede una caja operar sin conexión antes de bloquearse?~~ **Decidido (2026-09-22):**
+   configurable, `settings.offline_max_hours`, 12 h por defecto (§3).
+4. ~~¿Qué pasa con una venta rechazada al sincronizar (stock insuficiente) si el producto ya se entregó al cliente?~~
+   **Decidido (2026-09-22):** no se rechaza; se registra con el faltante anotado para que un gerente la revise (§3,
+   §6; la pantalla de revisión es F4, sin construir).
 
-## 10. Pruebas necesarias cuando esto se implemente
+## 11. Pruebas necesarias cuando esto se implemente
 
 - Concurrencia e idempotencia de la cola: la misma clave enviada dos veces **a la vez** (dos pestañas, o un reintento
   automático que se solapa con uno manual) debe producir un solo efecto. Para `create_sale` ya cubierto en

@@ -1,6 +1,6 @@
 # Módulo: Órdenes y reembolsos
 
-> Actualizado en la etapa 3 (Fase 5, ticket de 80 mm) · `app/(dashboard)/orders/page.tsx`, `orders/[id]/page.tsx`, `components/orders/receipt-ticket.tsx` · API `orders`, `orders/[id]`, `orders/[id]/refund` · RPC `refund_order` · Confianza: **[Verificado]** (`sales.test.ts`, `rpc.test.ts`, `rls.test.ts`, `receipt.test.ts`, `receipt-ticket.test.tsx`, e2e).
+> Actualizado con las columnas offline (F2) · `app/(dashboard)/orders/page.tsx`, `orders/[id]/page.tsx`, `components/orders/receipt-ticket.tsx` · API `orders`, `orders/[id]`, `orders/[id]/refund` · RPC `refund_order`, `create_sale` · Confianza: **[Verificado]** (`sales.test.ts`, `offline-sales.test.ts`, `rpc.test.ts`, `rls.test.ts`, `receipt.test.ts`, `receipt-ticket.test.tsx`, e2e).
 
 ## Quién ve qué
 | Rol | Lista y detalle | Reembolsar |
@@ -48,6 +48,8 @@ Verificado, incluido **30 rondas × 8 reembolsos simultáneos** (sin el `FOR UPD
 ## Modelo
 `orders(order_number, customer_id, status, subtotal, discount, tax, total, created_by, refunded_*)` — `CHECK (total = subtotal − discount + tax)` en filas nuevas; `order_items`; `payments`.
 Estados: `completed` y `refunded` los produce la aplicación; `draft` y `pending` existen en el enum pero **no se usan**. Las órdenes **no se editan ni se borran** (privilegios revocados, incluso al admin).
+
+Desde F2 (offline, ver [pos-checkout](pos-checkout.md) y [offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md)): `client_ref` (mismo valor que la clave de idempotencia del cobro), `occurred_at` (hora del dispositivo; nulo en una venta online), `source` (`online`/`offline`), `sync_issues` (nulo si no hubo incidencias; si no, `occurred_at_clamped`/`price_mismatch`/`stock_shortfall`) y `reviewed_by`/`reviewed_at` (reservados para la revisión de gerente, sin pantalla todavía — F4). El **reporte** (`sales_report`/`dashboard_summary`/`top_selling_products`) agrupa por `coalesce(occurred_at, created_at)`; el listado de `/orders` (`?from&to`, orden por fecha) sigue usando `created_at` (cuándo llegó al servidor), sin cambios.
 
 ## Límites conocidos
 - **Reembolso total** únicamente; sin parciales por línea, ventana de tiempo ni autorización escalonada (D8).

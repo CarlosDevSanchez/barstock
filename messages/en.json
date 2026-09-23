@@ -292,6 +292,8 @@
     "defaultTaxRateHint": "Suggested rate for new products. Each product keeps its own rate.",
     "lowStockThreshold": "Low Stock Threshold",
     "lowStockThresholdHint": "Applies to new products. Existing items keep their own threshold.",
+    "offlineMaxHours": "Max. Hours Offline",
+    "offlineMaxHoursHint": "How long a till may ring up sales without a connection before they need review.",
     "receipt": "Receipt",
     "receiptDesc": "Text printed at the top and bottom of a receipt",
     "header": "Header",

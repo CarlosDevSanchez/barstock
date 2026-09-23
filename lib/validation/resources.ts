@@ -143,7 +143,12 @@ export const saleSchema = z.object({
     customer_id: nullableUuid,
     items: z.array(saleItemSchema).min(1, 'validation.cartEmpty').max(100),
     payment_method: z.enum(PAYMENT_METHODS),
-    discount: money.optional()
+    discount: money.optional(),
+    // Offline sales only (F2, docs/06-roadmap/offline-y-sincronizacion.md): when the device rang this up without a
+    // network connection. `occurred_at` is the device's clock at the time; `expected_total` is the provisional total
+    // it showed — the server always recalculates and only records the difference (`sync_issues.price_mismatch`).
+    occurred_at: z.iso.datetime().optional(),
+    expected_total: money.optional()
 })
 export const refundSchema = z.object({ reason: z.string().trim().min(3, 'validation.reasonRequired').max(500) })
 
@@ -189,6 +194,12 @@ export const settingsSchema = z.object({
         numberField().int('validation.wholeNumber').min(0, 'validation.minZero').max(100_000, 'validation.tooLarge')
     ),
     tax_rate: taxRate,
+    // How long a till may operate offline before create_sale clamps an offline sale's occurred_at to this window
+    // (sync_issues.occurred_at_clamped). See F2, docs/06-roadmap/offline-y-sincronizacion.md.
+    offline_max_hours: z.preprocess(
+        toNumber,
+        numberField().int('validation.wholeNumber').min(1, 'validation.minOne').max(168, 'validation.tooLarge')
+    ),
     receipt_template: z.object({ header: z.string().trim().max(200), footer: z.string().trim().max(200) })
 })
 // store_logo_key is server-generated (never client-writable): see app/api/v1/settings/logo/route.ts and

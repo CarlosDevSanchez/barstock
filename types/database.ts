@@ -378,54 +378,72 @@ export type Database = {
       }
       orders: {
         Row: {
+          client_ref: string | null
           created_at: string
           created_by: string | null
           customer_id: string | null
           discount: number
           id: string
           notes: string | null
+          occurred_at: string | null
           order_number: string
           refund_reason: string | null
           refunded_at: string | null
           refunded_by: string | null
+          reviewed_at: string | null
+          reviewed_by: string | null
+          source: string
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
+          sync_issues: Json | null
           tab_id: string | null
           tax: number
           total: number
           updated_at: string
         }
         Insert: {
+          client_ref?: string | null
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
           discount?: number
           id?: string
           notes?: string | null
+          occurred_at?: string | null
           order_number: string
           refund_reason?: string | null
           refunded_at?: string | null
           refunded_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
+          sync_issues?: Json | null
           tab_id?: string | null
           tax?: number
           total?: number
           updated_at?: string
         }
         Update: {
+          client_ref?: string | null
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
           discount?: number
           id?: string
           notes?: string | null
+          occurred_at?: string | null
           order_number?: string
           refund_reason?: string | null
           refunded_at?: string | null
           refunded_by?: string | null
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+          source?: string
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
+          sync_issues?: Json | null
           tab_id?: string | null
           tax?: number
           total?: number
@@ -1126,8 +1144,10 @@ export type Database = {
         Args: {
           p_customer_id: string
           p_discount?: number
+          p_expected_total?: number
           p_idempotency_key?: string
           p_items: Json
+          p_occurred_at?: string
           p_payment_method: Database["public"]["Enums"]["payment_method"]
         }
         Returns: string

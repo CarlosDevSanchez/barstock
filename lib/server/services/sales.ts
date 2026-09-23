@@ -12,13 +12,20 @@ import { getOrder, type OrderDetail } from './orders'
  * `idempotencyKey` protects against a lost response causing a second charge (a retry, or the cashier pressing
  * "Cobrar" again before the first request returns): the RPC returns the same order on a replay of the same key
  * with the same payload instead of ringing up the sale twice.
+ *
+ * `input.occurred_at`/`input.expected_total` mark an offline sale (F2, docs/06-roadmap/offline-y-sincronizacion.md):
+ * the device's clock and its provisional total. The server still computes the real prices/stock; a difference is
+ * recorded on the order (`sync_issues`), never trusted as-is.
  */
 export async function createSale(
     supabase: AppSupabaseClient,
     input: SaleInput,
     idempotencyKey?: string | null
 ): Promise<OrderDetail> {
-    const discountFields: Record<string, number | undefined> = { discount: input.discount }
+    const discountFields: Record<string, number | undefined> = {
+        discount: input.discount,
+        expected_total: input.expected_total
+    }
     for (const [index, item] of input.items.entries()) {
         if ('product_id' in item) discountFields[`items.${index}.discount`] = item.discount
     }
@@ -38,7 +45,9 @@ export async function createSale(
         ),
         p_payment_method: input.payment_method,
         p_discount: input.discount ?? 0,
-        p_idempotency_key: (idempotencyKey ?? null) as string
+        p_idempotency_key: (idempotencyKey ?? null) as string,
+        p_occurred_at: (input.occurred_at ?? null) as string,
+        p_expected_total: (input.expected_total ?? null) as number
     })
     assertNoError(error)
     return getOrder(supabase, orderId)
