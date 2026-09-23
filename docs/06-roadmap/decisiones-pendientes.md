@@ -23,7 +23,7 @@
 | D13 | Entornos y despliegue: ¿Vercel + un Supabase por entorno? ¿quién despliega? | CI/CD, variables | dev / staging / prod separados; despliegue por PR | Pendiente |
 | D14 | Datos personales de clientes: retención, borrado, consentimiento, normativa aplicable | Clientes, RLS, backups | Minimizar campos; política de retención; acceso por rol | Pendiente |
 | D15 | Hardware: lector de códigos, impresora térmica, cajón de dinero | POS, recibo | Lector como teclado (auto-agregar con Enter); impresión ESC/POS o recibo HTML | Pendiente |
-| D16 | ¿Se necesita operar **sin conexión**? | Arquitectura del POS | Hoy es imposible (todo va a Supabase). Si sí, requiere cola offline y sincronización — cambio grande | Pendiente |
+| D16 | ¿Se necesita operar **sin conexión**? | Arquitectura del POS | Hoy es imposible (todo va a Supabase). Si sí, requiere cola offline y sincronización — cambio grande | **Parcial: lectura offline implementada** (PWA instalable, vistas visitadas antes se ven sin red, avisos de conexión). La cola de escrituras sin red queda **solo documentada como plan**, ver [offline-y-sincronizacion](offline-y-sincronizacion.md) |
 | D17 | Roles: ¿bastan admin/gerente/cajero? ¿permisos finos? | RLS | Empezar con 3 roles; tabla de permisos si crece | Pendiente |
 | D18 | Backups: RPO/RTO aceptables; quién restaura | [migraciones](../02-base-de-datos/06-seed-y-migraciones.md) | PITR si el negocio no tolera perder ventas | Pendiente |
 | D19 | Política de rotación de claves y accesos | [variables de entorno](../05-guias/variables-de-entorno.md) | Rotación tras salida de personal y ante sospecha | Pendiente |
@@ -31,6 +31,7 @@
 | D21 | Ticket POS de 80 mm: ¿comprobante interno o factura electrónica (CUFE, QR, resolución DIAN)? | `receipt-ticket.tsx`, ventas al por menor | Comprobante **no fiscal** para esta fase; factura electrónica es un proyecto aparte (DIAN, numeración autorizada, firma) | **Decidido (2026-09-22, propietario)**: no es factura electrónica |
 | D-promos | ¿Paquetes fijos multi-producto? ¿Tabs? ¿Precio en líneas expandidas? | `promotions`, `create_sale`, `tab_add_items`, POS | Paquetes a precio fijo; expansión en RPC con precio **asignado**; tabs **sí** (migración `20260925000001`) | **Decidido (2026-09-22)**: ver abajo |
 | D-margin | ¿Utilidad bruta? ¿Congelar costo/lista en la venta? | `sales_report`, reportes | Base cobrada − `cost_price` actual; markdown de promo vs lista actual; sin snapshot v1 | **Decidido (2026-09-22)**: ver abajo |
+| D-audit | Retención de `audit_log`: crece sin límite y nadie puede borrarla (append-only por diseño). ¿Archivar filas antiguas, particionar por fecha, o dejarla crecer? | `audit_log`, `docs/03-modulos/auditoria.md` | Sin propuesta todavía: depende del volumen real y de si hay una obligación legal de conservación | Pendiente |
 
 ## Supuestos aplicados en la etapa 1 (a validar con el negocio)
 

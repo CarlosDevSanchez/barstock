@@ -24,7 +24,10 @@ const contentSecurityPolicy = [
     "style-src 'self' 'unsafe-inline'",
     `img-src 'self' data: blob:${r2ImageOrigins}`,
     "font-src 'self' data:",
-    `connect-src 'self'${isDev ? ' ws://localhost:* ws://127.0.0.1:*' : ''}`,
+    // The service worker's own fetches (public/sw.js) are also governed by connect-src, hence the same R2/MinIO hosts.
+    `connect-src 'self'${r2ImageOrigins}${isDev ? ' ws://localhost:* ws://127.0.0.1:*' : ''}`,
+    "worker-src 'self'",
+    "manifest-src 'self'",
     "object-src 'none'",
     "base-uri 'self'",
     "form-action 'self'",
@@ -47,7 +50,18 @@ const nextConfig: NextConfig = {
     // next/image is not used: skip the image optimizer endpoint.
     images: { unoptimized: true },
     async headers() {
-        return [{ source: '/:path*', headers: securityHeaders }]
+        return [
+            { source: '/:path*', headers: securityHeaders },
+            {
+                // Never cached by the browser/CDN: a stale sw.js would keep serving an old app version forever.
+                // Service-Worker-Allowed widens its scope to '/' (default would be its own directory, already '/').
+                source: '/sw.js',
+                headers: [
+                    { key: 'Cache-Control', value: 'no-cache' },
+                    { key: 'Service-Worker-Allowed', value: '/' }
+                ]
+            }
+        ]
     }
 }
 

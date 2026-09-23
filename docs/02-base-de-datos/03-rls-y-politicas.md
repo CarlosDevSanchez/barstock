@@ -36,6 +36,7 @@
 | `expenses` | — | SELECT, INSERT | + UPDATE, DELETE |
 | `settings` | SELECT | SELECT | SELECT, INSERT, UPDATE, DELETE |
 | `tabs`, `tab_members`, `tab_items`, `tab_payments` | SELECT (compartido: cualquier cajero ve/atiende cualquier cuenta; escritura solo vía RPC) | SELECT | SELECT |
+| `audit_log` | — | — | SELECT (append-only: ver abajo) |
 
 `orders`, `order_items`, `payments`, `inventory` e `inventory_transactions` tienen además `REVOKE INSERT, UPDATE, DELETE` a nivel de tabla
 (defensa en profundidad: aunque alguien añadiera una política por error, el privilegio no existe). `TRUNCATE`, `REFERENCES` y `TRIGGER`
@@ -68,6 +69,20 @@ Sin usuario en el JWT (SQL Editor, migraciones, `service_role`) no bloquea: el s
 **Cuidado con lo silencioso:** las políticas de `UPDATE`/`DELETE` que no cumplen **no lanzan error, afectan 0 filas** (el cajero que "borra"
 un producto recibe éxito con 0 filas). El resultado de rol insuficiente en `profiles` sí es error (`42501`, lo lanza el trigger) cuando el
 usuario ve la fila, y 0 filas cuando no la ve. Los servicios deben comprobar el número de filas afectadas y devolver `404`/`403`.
+
+## `audit_log`: append-only para todos, incluido `service_role`
+
+A diferencia del resto de tablas, aquí la protección **no depende solo de RLS**: `audit_log` solo tiene una política
+`SELECT` (admin), y además:
+
+- `REVOKE INSERT, UPDATE, DELETE, TRUNCATE` a `authenticated`/`anon` (privilegios de tabla).
+- Triggers `BEFORE UPDATE OR DELETE` y `BEFORE TRUNCATE` que lanzan `raise exception` **siempre**, sin excepción para
+  `auth.uid()` nulo. Esta es la capa que de verdad importa: `service_role` y el editor SQL **bypasean RLS** (tienen
+  `BYPASSRLS`/son el propietario), así que sin este trigger podrían editar o borrar el historial libremente. Los
+  triggers no distinguen quién ejecuta la sentencia.
+
+Detalle completo en [Auditoría](../03-modulos/auditoria.md) y en el trigger `audit_row_change` /
+[04-triggers-y-funciones](04-triggers-y-funciones.md).
 
 ## Alta de usuarios: cerrada por defecto
 

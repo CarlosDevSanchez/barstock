@@ -1,5 +1,6 @@
 {
   "nav": {
+    "label": "Main navigation",
     "dashboard": "Dashboard",
     "pos": "POS",
     "products": "Products",
@@ -11,7 +12,14 @@
     "suppliers": "Suppliers",
     "reports": "Reports",
     "settings": "Settings",
-    "users": "Users"
+    "users": "Users",
+    "audit": "Audit log",
+    "groups": {
+      "sales": "Sales",
+      "catalog": "Catalog",
+      "analytics": "Analytics",
+      "admin": "Administration"
+    }
   },
   "common": {
     "save": "Save",
@@ -103,7 +111,18 @@
     "passwordsMismatch": "Passwords do not match"
   },
   "errors": {
-    "generic": "Something went wrong"
+    "generic": "Something went wrong",
+    "network_offline": "You are offline. Check your connection and try again."
+  },
+  "connection": {
+    "offlineBadge": "Offline",
+    "offlineToast": "You are offline: you are seeing saved data, and actions that change data are disabled.",
+    "backOnline": "Back online",
+    "offlineActionDisabled": "Not available offline"
+  },
+  "pwa": {
+    "updateAvailable": "A new version is available",
+    "update": "Update"
   },
   "dashboard": {
     "title": "Dashboard",
@@ -610,6 +629,37 @@
     "userDisabled": "User disabled",
     "userEnabled": "User enabled",
     "updateFailed": "Failed to update the user"
+  },
+  "audit": {
+    "title": "Audit log",
+    "subtitle": "Every write and session event, kept forever",
+    "filterUser": "User",
+    "allUsers": "All users",
+    "filterAction": "Action",
+    "allActions": "All actions",
+    "filterEntity": "Entity",
+    "allEntities": "All entities",
+    "from": "From",
+    "to": "To",
+    "colDate": "Date and time",
+    "colUser": "User",
+    "colRole": "Role",
+    "colAction": "Action",
+    "colEntity": "Entity",
+    "viewAria": "View the changes",
+    "changesTitle": "Changes",
+    "empty": "No audit records found",
+    "system": "System",
+    "action": {
+      "insert": "Created",
+      "update": "Updated",
+      "delete": "Deleted",
+      "login": "Signed in",
+      "login_failed": "Failed sign-in",
+      "logout": "Signed out",
+      "invite": "Invited a user",
+      "password_reset": "Reset password"
+    }
   },
   "tabs": {
     "opened": "Tab {tabNumber} opened",

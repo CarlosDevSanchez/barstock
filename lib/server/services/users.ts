@@ -1,6 +1,7 @@
 import 'server-only'
 import { serverEnv } from '@/lib/env/server'
 import { conflict, assertNoError, notFound, unprocessable, AppError } from '@/lib/server/errors'
+import { logAuthEvent } from '@/lib/server/services/auth'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import { createSupabaseAdminClient } from '@/lib/server/supabase-admin'
 import { pageRange, type Pagination } from '@/lib/validation/common'
@@ -56,6 +57,8 @@ export async function inviteUser(supabase: AppSupabaseClient, input: InviteUserI
 
     const { data, error } = await supabase.from('profiles').select(COLUMNS).eq('id', invited.user.id).single()
     assertNoError(error)
+    // Logged with the inviting admin's own session: the admin client used above has no auth.uid() to attribute it to.
+    await logAuthEvent(supabase, 'invite', { email: input.email, role: input.role })
     return data
 }
 

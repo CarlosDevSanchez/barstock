@@ -222,6 +222,24 @@ export const ordersQuerySchema = paginationSchema.extend({
     from: optionalDate,
     to: optionalDate
 })
+
+export const AUDIT_ACTIONS = [
+    'insert',
+    'update',
+    'delete',
+    'login',
+    'login_failed',
+    'logout',
+    'invite',
+    'password_reset'
+] as const
+export const auditQuerySchema = paginationSchema.omit({ q: true }).extend({
+    actor_id: optionalUuid,
+    action: z.preprocess(value => blankToNull(value) ?? undefined, z.enum(AUDIT_ACTIONS).optional()),
+    entity: z.preprocess(value => blankToNull(value) ?? undefined, z.string().trim().max(100).optional()),
+    from: optionalDate,
+    to: optionalDate
+})
 export const reportQuerySchema = z.object({ from: z.iso.date(), to: z.iso.date() })
 
 // ---- Inferred inputs (what services receive after validation)
@@ -243,3 +261,4 @@ export type PromotionsQuery = z.output<typeof promotionsQuerySchema>
 export type TopProductsQuery = z.output<typeof topProductsQuerySchema>
 export type InventoryQuery = z.output<typeof inventoryQuerySchema>
 export type OrdersQuery = z.output<typeof ordersQuerySchema>
+export type AuditQuery = z.output<typeof auditQuerySchema>

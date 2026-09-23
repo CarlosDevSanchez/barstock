@@ -26,13 +26,13 @@ navegador ── lib/api/* (fetch) ──▶ proxy.ts ──▶ app/api/v1/**/ro
 
 | Archivo | Función |
 |---|---|
-| `proxy.ts` | Refresca la sesión (cookies) y valida el JWT; sin sesión: páginas → `307 /login?next=…`, `/api/*` → `401` JSON. Guarda por rol en `/settings`, `/users` (admin) y `/reports`, `/suppliers`, `/promotions` (gerente). **Guarda de UX**, no la frontera de seguridad. Públicas: `/login`, `/forgot-password`, `/reset-password`, `/auth/confirm`, `/api/v1/auth/*` |
+| `proxy.ts` | Refresca la sesión (cookies) y valida el JWT; sin sesión: páginas → `307 /login?next=…`, `/api/*` → `401` JSON. Guarda por rol en `/settings`, `/users`, `/audit` (admin) y `/reports`, `/suppliers`, `/promotions` (gerente). **Guarda de UX**, no la frontera de seguridad. Públicas: `/login`, `/forgot-password`, `/reset-password`, `/auth/confirm`, `/api/v1/auth/*` |
 | `lib/server/http.ts` | `route()` (autenticada) y `publicRoute()`. Orden: comprobación de origen → sesión y rol → validación zod → handler → envoltorio JSON |
 | `lib/server/auth.ts` | `loadSession()`, `getSession()`, `requireUser()`, `requireRole(min)`. Usa `auth.getUser()` (valida el JWT) y lee el rol de `profiles` **en cada petición**; un usuario inactivo cuenta como no autenticado |
 | `lib/server/errors.ts` | `AppError`, mapeo de códigos de Postgres, `assertNoError()` |
 | `lib/server/supabase.ts` | Cliente tipado (`SupabaseClient<Database>`) con las cookies del request: aplica RLS. Es el único que reciben los servicios |
 | `lib/server/supabase-admin.ts` | Cliente `service_role`. **Solo** lo usa `services/users.ts` para invitar |
-| `lib/server/services/*` | `products` (incluye `listTopProducts`), `categories`, `promotions`, `customers`, `suppliers`, `inventory`, `orders`, `sales`, `tabs`, `reports`, `settings`, `users`, `auth` |
+| `lib/server/services/*` | `products` (incluye `listTopProducts`), `categories`, `promotions`, `customers`, `suppliers`, `inventory`, `orders`, `sales`, `tabs`, `reports`, `settings`, `users`, `auth`, `audit` |
 | `lib/validation/*` | Esquemas zod compartidos cliente/servidor (`common`, `resources`, `tabs`, `reports`) |
 | `lib/api/*` | Cliente `fetch` tipado (`client.ts`, `ApiError`, `errorMessage`) y un módulo por recurso |
 | `app/auth/confirm/route.ts` | Destino de los correos de invitación y recuperación: `verifyOtp(token_hash)` en el servidor → cookie de sesión → `/reset-password` |
@@ -75,6 +75,7 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | `users` | GET | admin | |
 | `users/invite` | POST | admin | `inviteUserByEmail` + rol en `app_metadata` (un trigger lo copia al perfil y lo activa); si falla la asignación de rol se borra el usuario |
 | `users/[id]` | PATCH | admin | `{ role?, is_active? }`; no se puede uno desactivar ni quitarse el rol de admin; el trigger protege al último admin |
+| `audit` | GET | admin | Solo lectura: sin POST/PATCH/DELETE. `?actor_id&action&entity&from&to`, ver [Auditoría](../03-modulos/auditoria.md) |
 
 ## Contrato
 

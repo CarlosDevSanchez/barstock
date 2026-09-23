@@ -75,6 +75,9 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 ## Configuración
 **`settings`** — `key` UNIQUE NOT NULL, `value jsonb NOT NULL`. Una fila por clave (`store_name`, `currency`, `timezone`, `tax_rate`, `low_stock_threshold`, `receipt_template`…). Ver [Ajustes](../03-modulos/ajustes.md).
 
+## Auditoría
+**`audit_log`** — `id bigint identity`, `occurred_at`, `actor_id` (**sin FK**), `actor_email`, `actor_role`, `action CHECK IN ('insert','update','delete','login','login_failed','logout','invite','password_reset')`, `entity`, `entity_id`, `changes jsonb`, `source CHECK IN ('db','api')`. Append-only: sin política de escritura, privilegios revocados y triggers que bloquean `UPDATE`/`DELETE`/`TRUNCATE` incluso para `service_role`. Ver [Auditoría](../03-modulos/auditoria.md).
+
 ## Diferencias respecto a la baseline
 | Cambio | Migración |
 |---|---|
@@ -88,3 +91,4 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `top_selling_products` (RPC, `SECURITY DEFINER`): mode de venta de toda la tienda para el POS | `…0007` |
 | `tabs`, `tab_members`, `tab_items`, `tab_payments`, `orders.tab_id`, enum `tab_status` y sus RPC | `…0008` |
 | `promotions`, `promotion_items`, `order_items.promotion_id` (soft-delete; sin hard delete API) | `20260924000001` |
+| `audit_log` (append-only), trigger genérico en 13 tablas, `log_auth_event` RPC | `20260926000001` |

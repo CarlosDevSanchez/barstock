@@ -20,6 +20,7 @@ import {
     DialogTitle
 } from '@/components/ui/dialog'
 import { useMoney, useSession } from '@/components/session-provider'
+import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { errorMessage } from '@/lib/api/client'
 import { tabsApi, type TabDetail } from '@/lib/api/tabs'
 import { groupOrderItemsByPromotion, type GroupableOrderItem } from '@/lib/order-item-groups'
@@ -444,7 +445,7 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                                     ))}
                                                 </div>
 
-                                                <Button
+                                                <OfflineDisabledButton
                                                     className="w-full"
                                                     disabled={payingKey !== null}
                                                     onClick={() => pay(null, tab.totals.balance, 'full')}
@@ -452,7 +453,7 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                                     {payingKey === 'full'
                                                         ? t('paying')
                                                         : t('payFullBalance', { amount: money(tab.totals.balance) })}
-                                                </Button>
+                                                </OfflineDisabledButton>
 
                                                 {tab.members.length > 1 && (
                                                     <div className="flex gap-2 text-xs">

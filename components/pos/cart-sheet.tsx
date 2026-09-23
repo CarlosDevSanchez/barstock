@@ -18,6 +18,7 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMoney, useSession } from '@/components/session-provider'
+import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { moneyStep } from '@/lib/money'
 import type { PromotionListItem } from '@/lib/api/promotions'
 import type { ProductListItem } from '@/lib/api/products'
@@ -304,7 +305,7 @@ export function CartSheet({
                                         </div>
                                         <p className="text-xs text-muted-foreground">{t('estimateHint')}</p>
 
-                                        <Button
+                                        <OfflineDisabledButton
                                             className="w-full"
                                             size="lg"
                                             onClick={() => onShowPaymentDialog(true)}
@@ -312,15 +313,15 @@ export function CartSheet({
                                         >
                                             <CreditCard className="mr-2 h-5 w-5" />
                                             {t('checkout')}
-                                        </Button>
-                                        <Button
+                                        </OfflineDisabledButton>
+                                        <OfflineDisabledButton
                                             className="w-full"
                                             variant="outline"
                                             onClick={onAddToTab}
                                             disabled={!canAddToTab}
                                         >
                                             {tTabs('addToTab')}
-                                        </Button>
+                                        </OfflineDisabledButton>
                                     </div>
                                 </>
                             )}
@@ -361,9 +362,9 @@ export function CartSheet({
                         <Button variant="outline" disabled={processing} onClick={() => onShowPaymentDialog(false)}>
                             {tc('cancel')}
                         </Button>
-                        <Button onClick={onCheckout} disabled={processing}>
+                        <OfflineDisabledButton onClick={onCheckout} disabled={processing}>
                             {processing ? t('processing') : t('completeOrder')}
-                        </Button>
+                        </OfflineDisabledButton>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

@@ -20,7 +20,8 @@ test('a sale takes stock, a manager refunds it, the stock comes back', async ({ 
     await till.getByPlaceholder('Search by name, SKU, or barcode...').fill(product.name)
     const card = till.getByRole('button', { name: `Add ${product.name} to cart` })
     await card.click()
-    await card.click()
+    await till.getByRole('button', { name: 'Increase quantity' }).click()
+    await till.getByRole('button', { name: 'Confirm' }).click()
     // The cart is a floating bubble now: open it to see the sheet.
     await till.getByRole('button', { name: /^Cart:/ }).click()
     const cartSheet = till.getByRole('dialog', { name: /^Cart/ })
@@ -51,7 +52,7 @@ test('a sale takes stock, a manager refunds it, the stock comes back', async ({ 
     await till.emulateMedia({ media: 'print' })
     await expect(till.locator('[data-testid="receipt-ticket"]')).toBeVisible()
     await expect(till.getByRole('heading', { name: 'Order Details' })).toBeHidden()
-    await expect(till.locator('aside')).toBeHidden()
+    await expect(till.locator('[data-slot="sidebar"]')).toBeHidden()
     await till.emulateMedia({ media: 'screen' })
 
     // ---- a manager refunds it

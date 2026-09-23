@@ -1,7 +1,9 @@
 import { describe, expect, test } from 'bun:test'
 import { Constants } from '@/types/database'
 import {
+    AUDIT_ACTIONS,
     PAYMENT_METHODS,
+    auditQuerySchema,
     customerCreateSchema,
     inventoryAdjustSchema,
     inviteUserSchema,
@@ -198,5 +200,31 @@ describe('settings', () => {
 describe('enums stay in sync with the database', () => {
     test('payment_method', () => {
         expect([...PAYMENT_METHODS]).toEqual([...Constants.public.Enums.payment_method])
+    })
+})
+
+describe('audit', () => {
+    test('accepts a blank query and defaults pagination', () => {
+        const result = auditQuerySchema.parse({})
+        expect(result).toMatchObject({ page: 1, pageSize: 25 })
+        expect(result.actor_id).toBeUndefined()
+        expect(result.action).toBeUndefined()
+    })
+
+    test('accepts every documented action and rejects anything else', () => {
+        for (const action of AUDIT_ACTIONS) {
+            expect(auditQuerySchema.parse({ action }).action).toBe(action)
+        }
+        expect(auditQuerySchema.safeParse({ action: 'grant' }).success).toBe(false)
+    })
+
+    test('blank filters are treated as "not provided", not as empty strings', () => {
+        const result = auditQuerySchema.parse({ actor_id: '', action: '', entity: '', from: '', to: '' })
+        expect(result).toMatchObject({ actor_id: undefined, action: undefined, entity: undefined })
+    })
+
+    test('rejects a malformed actor_id or date', () => {
+        expect(auditQuerySchema.safeParse({ actor_id: 'not-a-uuid' }).success).toBe(false)
+        expect(auditQuerySchema.safeParse({ from: '09/26/2026' }).success).toBe(false)
     })
 })

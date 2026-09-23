@@ -34,6 +34,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          actor_email: string | null
+          actor_id: string | null
+          actor_role: Database["public"]["Enums"]["user_role"] | null
+          changes: Json | null
+          entity: string
+          entity_id: string | null
+          id: number
+          occurred_at: string
+          source: string
+        }
+        Insert: {
+          action: string
+          actor_email?: string | null
+          actor_id?: string | null
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          changes?: Json | null
+          entity: string
+          entity_id?: string | null
+          id?: never
+          occurred_at?: string
+          source: string
+        }
+        Update: {
+          action?: string
+          actor_email?: string | null
+          actor_id?: string | null
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          changes?: Json | null
+          entity?: string
+          entity_id?: string | null
+          id?: never
+          occurred_at?: string
+          source?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
@@ -1074,6 +1113,10 @@ export type Database = {
       has_min_role: {
         Args: { p_minimum: Database["public"]["Enums"]["user_role"] }
         Returns: boolean
+      }
+      log_auth_event: {
+        Args: { p_action: string; p_metadata?: Json }
+        Returns: undefined
       }
       money_scale: { Args: never; Returns: number }
       open_tab: {

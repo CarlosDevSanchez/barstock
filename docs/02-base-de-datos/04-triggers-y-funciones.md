@@ -74,6 +74,14 @@ Solo cuentan órdenes `completed` (los reembolsos se excluyen). Los días se agr
 | `protect_profile_columns` | `profiles` | `id`/`email` inmutables; solo admin cambia `role`/`is_active`; protege al último admin |
 | `create_inventory_for_product` | `products` | Crea la fila de inventario (cantidad 0, umbral de `settings.low_stock_threshold` o 10). El seed fija cantidades iniciales |
 | `orders_refresh_customer_totals` | `orders` | Recalcula `customers.total_spent` (Σ órdenes `completed`) y `loyalty_points = floor(total_spent)` (D7). Los reembolsos restan |
+| `audit_row_change` (`AFTER INSERT OR UPDATE OR DELETE`) | `products`, `categories`, `promotions`, `promotion_items`, `inventory`, `orders`, `customers`, `suppliers`, `settings`, `profiles`, `tabs`, `tab_items`, `tab_payments` | Escribe una fila en `audit_log` con el actor (de `auth.uid()`/`profiles`, o `system` sin JWT), la acción y, en un `UPDATE`, solo las columnas que cambiaron (`{before, after}`, sin `updated_at`). Un `UPDATE` que no cambia nada no genera fila. `…0016` |
+| `audit_log_immutable` (`BEFORE UPDATE OR DELETE`, `BEFORE TRUNCATE`) | `audit_log` | Lanza `raise exception` siempre, para cualquier rol (incluido `service_role`): es la capa que hace el log append-only. `…0016` |
+
+### `log_auth_event(p_action text, p_metadata jsonb default '{}') → void` — cualquier usuario, `SECURITY DEFINER` (`…0016`)
+
+Registra un evento de sesión (`login`, `logout`, `invite`, `password_reset`) en `audit_log`. El actor es siempre
+`auth.uid()`: la función lo lee del JWT y **no acepta un parámetro para forjarlo**. Un `login_failed` no pasa por aquí
+(no hay sesión todavía): el servidor lo inserta con el cliente `service_role`. Ver [Auditoría](../03-modulos/auditoria.md).
 
 ## Ausencias conocidas
 

@@ -28,22 +28,23 @@ const linksFor = (role: 'cashier' | 'manager' | 'admin') => {
             </AppShell>
         </IntlProvider>
     )
-    // Desktop sidebar (the mobile sheet renders its own copy only when opened).
+    // A single <nav>: the mobile sheet reuses the same tree instead of rendering a second copy.
+    expect(screen.getAllByRole('navigation')).toHaveLength(1)
     const nav = screen.getByRole('navigation')
     return Array.from(nav.querySelectorAll('a')).map(link => link.textContent)
 }
 
 describe('navigation follows the role', () => {
-    const CASHIER = ['Dashboard', 'POS', 'Products', 'Categories', 'Inventory', 'Orders', 'Customers']
+    const CASHIER = ['Dashboard', 'POS', 'Orders', 'Customers', 'Products', 'Categories', 'Inventory']
     const MANAGER = [
         'Dashboard',
         'POS',
+        'Orders',
+        'Customers',
         'Products',
         'Categories',
         'Promotions',
         'Inventory',
-        'Orders',
-        'Customers',
         'Suppliers',
         'Reports'
     ]
@@ -56,8 +57,22 @@ describe('navigation follows the role', () => {
         expect(linksFor('manager')).toEqual(MANAGER)
     })
 
-    test('an admin sees everything, including settings and users', () => {
-        expect(linksFor('admin')).toEqual([...MANAGER, 'Settings', 'Users'])
+    test('an admin sees everything, including settings, users and the audit log', () => {
+        expect(linksFor('admin')).toEqual([...MANAGER, 'Settings', 'Users', 'Audit log'])
+    })
+
+    test('group labels are not links', () => {
+        render(
+            <IntlProvider>
+                <AppShell user={userWithRole('admin')} settings={settings}>
+                    <p>page</p>
+                </AppShell>
+            </IntlProvider>
+        )
+        for (const label of ['Sales', 'Catalog', 'Analytics', 'Administration']) {
+            const el = screen.getByText(label)
+            expect(el.closest('a')).toBeNull()
+        }
     })
 })
 

@@ -38,12 +38,21 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 
 ## Layout del dashboard
 
-`app/(dashboard)/layout.tsx` es un **Server Component** (sesión + ajustes) que monta `AppShell`:
+`app/(dashboard)/layout.tsx` es un **Server Component** (sesión + ajustes) que monta `AppShell`, construido sobre el
+`Sidebar` de shadcn (`components/ui/sidebar.tsx`, etapa 2):
 
-- **Escritorio (`lg+`):** sidebar de `w-64` con el nombre de la tienda, los enlaces permitidos al rol y el menú de usuario (inicial, nombre o email, rol).
-- **Móvil:** cabecera con `Sheet` lateral (mismos enlaces) y menú de usuario.
-- Resalte de ruta activa por **igualdad exacta** (`pathname === href`): `/orders/[id]` no resalta "Orders" (pendiente menor).
-- El markup de navegación sigue duplicado entre escritorio y móvil (candidato a `<SidebarNav>`).
+- **4 grupos colapsables** (`SidebarGroup` + `Collapsible`, abiertos por defecto): Ventas (Panel, Caja, Órdenes,
+  Clientes), Catálogo (Productos, Categorías, Promociones, Inventario, Proveedores), Análisis (Reportes) y
+  Administración (Ajustes, Usuarios, Auditoría). Un grupo sin ítems visibles para el rol actual se oculta entero.
+- **Un único `<nav aria-label>`** para escritorio y móvil: por debajo de 768 px el propio `Sidebar` de shadcn lo
+  muestra dentro de un `Sheet` (ya no hay un `<Sheet>` propio duplicando el markup).
+- `SidebarHeader` (nombre de la tienda), `SidebarFooter` (menú de usuario: inicial, nombre o email, rol) y
+  `SidebarInset` con un header que trae el `SidebarTrigger` y el indicador de conexión
+  ([PWA y offline](09-pwa-offline.md)).
+- Resalte de ruta activa por **prefijo** (`pathname === href || pathname.startsWith(href + '/')`): `/orders/[id]` sí
+  resalta "Órdenes".
+- El estado abierto/colapsado se guarda en la cookie `sidebar_state` (shadcn) y el layout la lee para fijar
+  `defaultOpen` en el primer render, evitando el parpadeo al recargar.
 
 ## Patrones de pantalla
 

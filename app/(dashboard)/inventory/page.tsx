@@ -26,6 +26,7 @@ import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
 import { useMoney, useSession } from '@/components/session-provider'
+import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { errorMessage } from '@/lib/api/client'
 import { inventoryApi, type InventoryListItem } from '@/lib/api/inventory'
 import { promotionsApi } from '@/lib/api/promotions'
@@ -90,9 +91,9 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
                             <Button type="button" variant="outline" onClick={onClose}>
                                 {tc('cancel')}
                             </Button>
-                            <Button type="submit" disabled={submitting}>
+                            <OfflineDisabledButton type="submit" disabled={submitting}>
                                 {submitting ? tc('saving') : t('apply')}
-                            </Button>
+                            </OfflineDisabledButton>
                         </DialogFooter>
                     </form>
                 </Form>

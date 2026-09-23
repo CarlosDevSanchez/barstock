@@ -1,5 +1,6 @@
 {
   "nav": {
+    "label": "Navegación principal",
     "dashboard": "Panel",
     "pos": "Caja",
     "products": "Productos",
@@ -11,7 +12,14 @@
     "suppliers": "Proveedores",
     "reports": "Reportes",
     "settings": "Ajustes",
-    "users": "Usuarios"
+    "users": "Usuarios",
+    "audit": "Auditoría",
+    "groups": {
+      "sales": "Ventas",
+      "catalog": "Catálogo",
+      "analytics": "Análisis",
+      "admin": "Administración"
+    }
   },
   "common": {
     "save": "Guardar",
@@ -103,7 +111,18 @@
     "passwordsMismatch": "Las contraseñas no coinciden"
   },
   "errors": {
-    "generic": "Algo salió mal"
+    "generic": "Algo salió mal",
+    "network_offline": "Estás sin conexión. Comprueba tu red e inténtalo de nuevo."
+  },
+  "connection": {
+    "offlineBadge": "Sin conexión",
+    "offlineToast": "Sin conexión: ves datos guardados, las acciones que modifican datos están deshabilitadas.",
+    "backOnline": "Conexión restablecida",
+    "offlineActionDisabled": "No disponible sin conexión"
+  },
+  "pwa": {
+    "updateAvailable": "Hay una nueva versión disponible",
+    "update": "Actualizar"
   },
   "dashboard": {
     "title": "Panel",
@@ -610,6 +629,37 @@
     "userDisabled": "Usuario deshabilitado",
     "userEnabled": "Usuario habilitado",
     "updateFailed": "No se pudo actualizar el usuario"
+  },
+  "audit": {
+    "title": "Auditoría",
+    "subtitle": "Cada escritura y evento de sesión, conservados para siempre",
+    "filterUser": "Usuario",
+    "allUsers": "Todos los usuarios",
+    "filterAction": "Acción",
+    "allActions": "Todas las acciones",
+    "filterEntity": "Entidad",
+    "allEntities": "Todas las entidades",
+    "from": "Desde",
+    "to": "Hasta",
+    "colDate": "Fecha y hora",
+    "colUser": "Usuario",
+    "colRole": "Rol",
+    "colAction": "Acción",
+    "colEntity": "Entidad",
+    "viewAria": "Ver los cambios",
+    "changesTitle": "Cambios",
+    "empty": "No se encontraron registros de auditoría",
+    "system": "Sistema",
+    "action": {
+      "insert": "Creación",
+      "update": "Edición",
+      "delete": "Eliminación",
+      "login": "Inicio de sesión",
+      "login_failed": "Inicio de sesión fallido",
+      "logout": "Cierre de sesión",
+      "invite": "Invitó a un usuario",
+      "password_reset": "Restableció la contraseña"
+    }
   },
   "tabs": {
     "opened": "Cuenta {tabNumber} abierta",

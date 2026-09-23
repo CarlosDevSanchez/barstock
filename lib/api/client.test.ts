@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
-import { ApiError, apiDelete, apiGet, apiList, apiPatch, apiPost } from './client'
+import { ApiError, apiDelete, apiGet, apiList, apiPatch, apiPost, isStale } from './client'
 
 const realFetch = globalThis.fetch
 const calls: Array<{ url: string; init: RequestInit }> = []
@@ -76,5 +76,46 @@ describe('api client', () => {
         ) as unknown as typeof fetch
         const error = await apiGet('me').catch((e: unknown) => e)
         expect(error).toMatchObject({ status: 502, code: 'unknown_error' })
+    })
+})
+
+describe('offline', () => {
+    test('a fetch failure (no network) becomes ApiError(0, network_offline)', async () => {
+        globalThis.fetch = mock(async () => {
+            throw new TypeError('Failed to fetch')
+        }) as unknown as typeof fetch
+        const error = await apiGet('products').catch((e: unknown) => e)
+        expect(error).toBeInstanceOf(ApiError)
+        expect(error).toMatchObject({ status: 0, code: 'network_offline' })
+    })
+
+    test('an aborted request is not turned into network_offline', async () => {
+        const controller = new AbortController()
+        globalThis.fetch = mock(async () => {
+            const abortError = new DOMException('The operation was aborted', 'AbortError')
+            throw abortError
+        }) as unknown as typeof fetch
+        controller.abort()
+        const error = await apiGet('products', undefined, controller.signal).catch((e: unknown) => e)
+        expect(error).toBeInstanceOf(DOMException)
+        expect((error as DOMException).name).toBe('AbortError')
+    })
+
+    test('a response served from the service worker cache is marked stale', async () => {
+        respond(200, { data: { id: 1 } })
+        const original = globalThis.fetch as unknown as (...args: unknown[]) => Promise<Response>
+        globalThis.fetch = mock(async (...args: unknown[]) => {
+            const response = await original(...args)
+            return new Response(await response.clone().text(), {
+                status: response.status,
+                headers: { 'X-From-Cache': '1' }
+            })
+        }) as unknown as typeof fetch
+        const data = await apiGet<{ id: number }>('products/1')
+        expect(isStale(data)).toBe(true)
+
+        respond(200, { data: { id: 2 } })
+        const live = await apiGet<{ id: number }>('products/1')
+        expect(isStale(live)).toBe(false)
     })
 })
