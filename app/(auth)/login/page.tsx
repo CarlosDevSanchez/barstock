@@ -8,6 +8,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { BarstockIcon } from '@/components/branding/barstock-mark'
+import { InstallBanner } from '@/components/pwa/install-banner'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -49,7 +50,8 @@ export default function LoginPage() {
     const submitting = form.formState.isSubmitting
 
     return (
-        <div className="min-h-screen flex items-center justify-center bg-gradient-to-br from-emerald-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800 dark:to-emerald-950 p-4">
+        <div className="min-h-screen flex flex-col items-center justify-center gap-4 bg-gradient-to-br from-emerald-50 via-white to-slate-50 dark:from-slate-900 dark:via-slate-800 dark:to-emerald-950 p-4">
+            <InstallBanner />
             <Card className="w-full max-w-md shadow-2xl">
                 <CardHeader className="space-y-1">
                     <div className="flex items-center justify-center mb-4">

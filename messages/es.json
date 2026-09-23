@@ -128,7 +128,15 @@
   },
   "pwa": {
     "updateAvailable": "Hay una nueva versión disponible",
-    "update": "Actualizar"
+    "update": "Actualizar",
+    "installTitle": "Instala Barstock",
+    "installBody": "Añádela a tu dispositivo para abrirla como una app.",
+    "install": "Instalar",
+    "installIosHow": "Cómo instalar",
+    "installIosStep1": "Pulsa el botón Compartir en Safari.",
+    "installIosStep2": "Elige «Añadir a pantalla de inicio».",
+    "installIosStep3": "Confirma con «Añadir».",
+    "dismiss": "Cerrar aviso de instalación"
   },
   "dashboard": {
     "title": "Panel",

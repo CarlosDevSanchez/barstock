@@ -5,7 +5,7 @@ export default function manifest(): MetadataRoute.Manifest {
     return {
         name: 'Barstock POS',
         short_name: 'Barstock',
-        description: 'Point of sale and inventory management',
+        description: 'Sistema de gestion de inventario y ventas para bares',
         start_url: '/pos',
         display: 'standalone',
         background_color: '#ffffff',
