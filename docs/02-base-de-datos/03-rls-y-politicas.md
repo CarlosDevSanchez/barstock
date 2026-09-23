@@ -24,6 +24,8 @@
 | `profiles` | SELECT propio; UPDATE propio (trigger limita columnas) | SELECT todos | SELECT/UPDATE todos (rol, `is_active`) |
 | `categories` | SELECT | + INSERT, UPDATE, DELETE | ídem |
 | `products` | SELECT (sin `deleted_at`) | + SELECT borrados, INSERT, UPDATE (borrado lógico) | + DELETE físico |
+| `promotions` | SELECT (sin `deleted_at`) | + SELECT borrados, INSERT, UPDATE (borrado lógico); **sin DELETE** (historial en `order_items`) | ídem |
+| `promotion_items` | SELECT | + INSERT, UPDATE, DELETE | ídem |
 | `product_variants` | SELECT | + INSERT, UPDATE | + DELETE |
 | `inventory` | SELECT | SELECT | SELECT (escritura solo vía RPC) |
 | `inventory_transactions` | — | SELECT | SELECT (las escribe el RPC) |

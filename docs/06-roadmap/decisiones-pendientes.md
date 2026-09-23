@@ -29,6 +29,8 @@
 | D19 | Política de rotación de claves y accesos | [variables de entorno](../05-guias/variables-de-entorno.md) | Rotación tras salida de personal y ante sospecha | Pendiente |
 | D20 | Licencia del proyecto (el README declara MIT; no hay `LICENSE`) | Legal | Definir con el cliente/propietario; añadir `LICENSE` acorde | Pendiente |
 | D21 | Ticket POS de 80 mm: ¿comprobante interno o factura electrónica (CUFE, QR, resolución DIAN)? | `receipt-ticket.tsx`, ventas al por menor | Comprobante **no fiscal** para esta fase; factura electrónica es un proyecto aparte (DIAN, numeración autorizada, firma) | **Decidido (2026-09-22, propietario)**: no es factura electrónica |
+| D-promos | ¿Paquetes fijos multi-producto? ¿Tabs? ¿Precio en líneas expandidas? | `promotions`, `create_sale`, `tab_add_items`, POS | Paquetes a precio fijo; expansión en RPC con precio **asignado**; tabs **sí** (migración `20260925000001`) | **Decidido (2026-09-22)**: ver abajo |
+| D-margin | ¿Utilidad bruta? ¿Congelar costo/lista en la venta? | `sales_report`, reportes | Base cobrada − `cost_price` actual; markdown de promo vs lista actual; sin snapshot v1 | **Decidido (2026-09-22)**: ver abajo |
 
 ## Supuestos aplicados en la etapa 1 (a validar con el negocio)
 
@@ -75,6 +77,22 @@ negocio lo requiere).
 Impacto en el código/BD: migración `20260923000002_receipt.sql` (`order_items.tax_rate`, snapshot vía trigger;
 `settings.store_tax_id`/`store_logo_key`), `lib/receipt.ts`, `components/orders/receipt-ticket.tsx`,
 `app/(dashboard)/orders/[id]/page.tsx`, `app/globals.css`, `components/app-shell.tsx`.
+
+### D-promos — Decidido 2026-09-22 (tabs 2026-09-22)
+Decisión: promociones v1 = **paquetes fijos** multi-producto a `package_price`. Venta híbrida (carrito/ticket agrupan;
+BD descompone con precio **asignado**, no `selling_price` de lista). Soft-delete; sin hard delete. **Promos en
+cuentas abiertas** vía `tab_add_items` (`tab_items.promotion_id` + `discount`; unique incluye promo). Top 5 / reportes
+por SKU cuentan componentes. Impuesto por producto sobre la base asignada (sigue atado a D3).
+Impacto: migraciones `20260924000001` / `20260924000002` / `20260925000001`, `lib/promotion-allocate.ts`, POS, ticket agrupado.
+
+### D-margin — Decidido 2026-09-22
+Decisión: en `sales_report` (solo gerente+): **ingreso** = lo cobrado (`orders.total` / líneas asignadas);
+**promo_markdown** = lista actual × qty − base asignada (líneas con `promotion_id`); **COGS** = qty ×
+`cost_price` actual; **utilidad bruta** = Σ bases de línea − COGS. Sin snapshot de costo/lista en `order_items` (v1).
+El descuento de combo **no** se mezcla con `orders.discount` (descuento global). Dashboard del cajero sin COGS.
+Motivo: evitar reportar precio de lista (p. ej. 20 000) cuando se cobró el paquete (17 000); utilidad operativa
+aceptable con costo de catálogo actual.
+Impacto: migración `20260924000003_sales_report_promo_margin.sql`, `/reports`, [reportes](../03-modulos/reportes.md).
 
 ## Detalle de las decisiones de mayor impacto
 

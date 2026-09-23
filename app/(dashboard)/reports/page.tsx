@@ -4,7 +4,7 @@ import { useState } from 'react'
 import { format } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { useLocale, useTranslations } from 'next-intl'
-import { BarChart3, TrendingUp, Package, Users, DollarSign } from 'lucide-react'
+import { BarChart3, TrendingUp, Package, Users, DollarSign, Percent, Wallet } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -109,7 +109,7 @@ export default function ReportsPage() {
         <div className="space-y-6">
             {header}
 
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t('revenue')}</CardTitle>
@@ -151,6 +151,41 @@ export default function ReportsPage() {
                     </CardHeader>
                     <CardContent>
                         <div className="text-2xl font-bold">{money(data.total_discount)}</div>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+                <Card className="rounded-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('promoMarkdown')}</CardTitle>
+                        <Percent className="h-4 w-4 text-amber-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{money(data.promo_markdown)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t('promoMarkdownHint')}</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('totalCogs')}</CardTitle>
+                        <Wallet className="h-4 w-4 text-slate-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{money(data.total_cogs)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t('totalCogsHint')}</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('grossProfit')}</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-emerald-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-emerald-600">{money(data.gross_profit)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t('grossProfitHint')}</p>
                     </CardContent>
                 </Card>
             </div>
@@ -204,6 +239,8 @@ export default function ReportsPage() {
                                         <TableHead>{t('colProduct')}</TableHead>
                                         <TableHead className="text-right">{t('colSold')}</TableHead>
                                         <TableHead className="text-right">{t('colRevenue')}</TableHead>
+                                        <TableHead className="text-right">{t('colCogs')}</TableHead>
+                                        <TableHead className="text-right">{t('colGrossProfit')}</TableHead>
                                     </TableRow>
                                 </TableHeader>
                                 <TableBody>
@@ -215,6 +252,52 @@ export default function ReportsPage() {
                                             </TableCell>
                                             <TableCell className="text-right font-semibold text-emerald-600">
                                                 {money(product.revenue)}
+                                            </TableCell>
+                                            <TableCell className="text-right text-muted-foreground">
+                                                {money(product.cogs)}
+                                            </TableCell>
+                                            <TableCell className="text-right font-semibold">
+                                                {money(product.gross_profit)}
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Percent className="h-5 w-5 text-amber-600" />
+                            {t('topPromotions')}
+                        </CardTitle>
+                        <CardDescription>{t('topPromotionsDesc')}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {data.top_promotions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-8">{t('noPromoData')}</p>
+                        ) : (
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>{t('colPromotion')}</TableHead>
+                                        <TableHead className="text-right">{t('colOrders')}</TableHead>
+                                        <TableHead className="text-right">{t('colPackages')}</TableHead>
+                                        <TableHead className="text-right">{t('colRevenue')}</TableHead>
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {data.top_promotions.map(promo => (
+                                        <TableRow key={promo.promotion_id}>
+                                            <TableCell className="font-medium">{promo.name}</TableCell>
+                                            <TableCell className="text-right">
+                                                <Badge variant="secondary">{promo.orders}</Badge>
+                                            </TableCell>
+                                            <TableCell className="text-right">{promo.packages}</TableCell>
+                                            <TableCell className="text-right font-semibold text-emerald-600">
+                                                {money(promo.revenue)}
                                             </TableCell>
                                         </TableRow>
                                     ))}
@@ -262,7 +345,7 @@ export default function ReportsPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl">
+                <Card className="rounded-2xl md:col-span-2">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <DollarSign className="h-5 w-5 text-emerald-600" />

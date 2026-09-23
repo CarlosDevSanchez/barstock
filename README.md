@@ -44,7 +44,7 @@ bun run local:up        # Supabase + usuarios de prueba + la app en un contenedo
 ```
 
 Abre <http://localhost:3000> e inicia sesión con `admin@barstock.local`, `manager@barstock.local` o `cashier@barstock.local` (contraseña `barstock-local-2026`; **solo local**).
-Trae ventas de demostración. Para parar: `bun run local:down` (o `local:reset` para borrar también los datos). Detalle en [docker-local](docs/05-guias/docker-local.md).
+Trae el catálogo de ejemplo de `supabase/seed.sql` (productos, categorías, clientes, proveedores), sin ventas ni pedidos. Para parar: `bun run local:down` (o `local:reset` para borrar también los datos). Detalle en [docker-local](docs/05-guias/docker-local.md).
 
 ### Para desarrollar (recarga en caliente)
 

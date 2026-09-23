@@ -8,6 +8,8 @@ import {
     loginSchema,
     productCreateSchema,
     productUpdateSchema,
+    promotionCreateSchema,
+    promotionUpdateSchema,
     refundSchema,
     resetPasswordSchema,
     saleSchema,
@@ -45,6 +47,40 @@ describe('products', () => {
     })
 })
 
+describe('promotions', () => {
+    const item = { product_id: id, quantity: '2' }
+    const base = { name: 'Bucket', package_price: '35000', items: [item] }
+
+    test('parses package price and item quantities from form strings', () => {
+        const parsed = promotionCreateSchema.parse(base)
+        expect(parsed).toEqual({
+            name: 'Bucket',
+            package_price: 35000,
+            items: [{ product_id: id, quantity: 2 }]
+        })
+    })
+    test('requires at least one item and rejects duplicate products', () => {
+        expect(promotionCreateSchema.safeParse({ ...base, items: [] }).success).toBe(false)
+        expect(
+            promotionCreateSchema.safeParse({
+                ...base,
+                items: [item, { product_id: id, quantity: 1 }]
+            }).success
+        ).toBe(false)
+    })
+    test('strips server-owned keys; PATCH can omit items', () => {
+        const parsed = promotionCreateSchema.parse({
+            ...base,
+            id,
+            deleted_at: 'x',
+            created_at: 'x'
+        })
+        expect(Object.keys(parsed).sort()).toEqual(['items', 'name', 'package_price'])
+        expect(promotionUpdateSchema.parse({ name: 'Renamed' })).toEqual({ name: 'Renamed' })
+        expect(promotionUpdateSchema.parse({})).toEqual({})
+    })
+})
+
 describe('customers', () => {
     test('cannot write derived loyalty fields', () => {
         const parsed = customerCreateSchema.parse({ name: 'Ann', email: '', total_spent: 1e6, loyalty_points: 99 })
@@ -70,6 +106,21 @@ describe('sales', () => {
         })
         expect(parsed.items[0]).toEqual({ product_id: id, quantity: 2 })
         expect('total' in parsed).toBe(false)
+    })
+    test('accepts promotion lines without product_id', () => {
+        const parsed = saleSchema.parse({
+            items: [{ promotion_id: id, quantity: 2 }],
+            payment_method: 'cash'
+        })
+        expect(parsed.items[0]).toEqual({ promotion_id: id, quantity: 2 })
+    })
+    test('rejects a line that mixes product_id and promotion_id', () => {
+        expect(
+            saleSchema.safeParse({
+                items: [{ product_id: id, promotion_id: id, quantity: 1 }],
+                payment_method: 'cash'
+            }).success
+        ).toBe(false)
     })
     test('rejects empty carts, bad quantities, bad ids and unknown payment methods', () => {
         expect(saleSchema.safeParse({ items: [], payment_method: 'cash' }).success).toBe(false)

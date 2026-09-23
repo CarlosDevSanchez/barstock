@@ -8,26 +8,68 @@ const { cleanup, fireEvent, render, screen } = await import('@testing-library/re
 const { ProductCard } = await import('@/components/pos/product-card')
 const { SessionProvider } = await import('@/components/session-provider')
 
-const renderCard = (overrides: Parameters<typeof product>[0] = {}, onAdd = mock(() => {})) => {
+const renderCard = (
+    overrides: Parameters<typeof product>[0] = {},
+    props: {
+        pending?: boolean
+        qty?: number
+        maxQty?: number
+        onSelect?: ReturnType<typeof mock>
+        onChangeQty?: ReturnType<typeof mock>
+        onConfirm?: ReturnType<typeof mock>
+    } = {}
+) => {
+    const onSelect = props.onSelect ?? mock(() => {})
+    const onChangeQty = props.onChangeQty ?? mock(() => {})
+    const onConfirm = props.onConfirm ?? mock(() => {})
+    const item = product(overrides)
+    const maxQty = props.maxQty ?? (item.stock === null || item.stock <= 0 ? 0 : item.stock)
     render(
         <IntlProvider>
             <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
-                <ProductCard product={product(overrides)} onAdd={onAdd} />
+                <ProductCard
+                    product={item}
+                    pending={props.pending ?? false}
+                    qty={props.qty ?? 1}
+                    maxQty={maxQty}
+                    onSelect={onSelect}
+                    onChangeQty={onChangeQty}
+                    onConfirm={onConfirm}
+                />
             </SessionProvider>
         </IntlProvider>
     )
-    return onAdd
+    return { onSelect, onChangeQty, onConfirm }
 }
 
 afterEach(cleanup)
 
 describe('ProductCard', () => {
-    test('shows the price and the stock badge on their own rows, and calls onAdd when clicked', () => {
-        const onAdd = renderCard({ id: 'p-1', name: 'Wireless Mouse', selling_price: 29.99, stock: 3 })
+    test('shows the price and the stock badge on their own rows, and calls onSelect when clicked', () => {
+        const { onSelect } = renderCard({ id: 'p-1', name: 'Wireless Mouse', selling_price: 29.99, stock: 3 })
         expect(screen.getByText('$29.99')).toBeTruthy()
         expect(screen.getByText('3 left')).toBeTruthy()
         fireEvent.click(screen.getByRole('button', { name: 'Add Wireless Mouse to cart' }))
-        expect(onAdd).toHaveBeenCalledWith('p-1')
+        expect(onSelect).toHaveBeenCalledTimes(1)
+    })
+
+    test('pending overlay: −/+ call onChangeQty and Confirm calls onConfirm', () => {
+        const { onChangeQty, onConfirm } = renderCard(
+            { id: 'p-1', name: 'Wireless Mouse', stock: 3 },
+            { pending: true, qty: 2, maxQty: 3 }
+        )
+        expect(screen.getByText('2')).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Increase quantity' }))
+        expect(onChangeQty).toHaveBeenCalledWith(3)
+        fireEvent.click(screen.getByRole('button', { name: 'Decrease quantity' }))
+        expect(onChangeQty).toHaveBeenCalledWith(1)
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+        expect(onConfirm).toHaveBeenCalledTimes(1)
+    })
+
+    test('pending overlay: + is disabled at maxQty', () => {
+        renderCard({ id: 'p-1', name: 'Wireless Mouse', stock: 2 }, { pending: true, qty: 2, maxQty: 2 })
+        expect((screen.getByRole('button', { name: 'Increase quantity' }) as HTMLButtonElement).disabled).toBe(true)
     })
 
     test('a long name and a long category both wrap instead of breaking the layout, and stay in the badge row', () => {
@@ -43,12 +85,12 @@ describe('ProductCard', () => {
     })
 
     test('a sold-out product is not addable', () => {
-        const onAdd = renderCard({ name: 'Gone', stock: 0 })
+        const { onSelect } = renderCard({ name: 'Gone', stock: 0 })
         expect(screen.getByText('Out of stock')).toBeTruthy()
         const card = screen.getByRole('button', { name: 'Add Gone to cart' })
         expect(card.getAttribute('aria-disabled')).toBe('true')
         fireEvent.click(card)
-        expect(onAdd).not.toHaveBeenCalled()
+        expect(onSelect).not.toHaveBeenCalled()
     })
 
     test('the image box keeps a fixed aspect ratio and lazy-loads with async decoding', () => {
@@ -73,7 +115,15 @@ describe('ProductCard', () => {
         const view = (image_url: string) => (
             <IntlProvider>
                 <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
-                    <ProductCard product={product({ name: 'Refetched', image_url })} onAdd={() => {}} />
+                    <ProductCard
+                        product={product({ name: 'Refetched', image_url })}
+                        pending={false}
+                        qty={1}
+                        maxQty={5}
+                        onSelect={() => {}}
+                        onChangeQty={() => {}}
+                        onConfirm={() => {}}
+                    />
                 </SessionProvider>
             </IntlProvider>
         )

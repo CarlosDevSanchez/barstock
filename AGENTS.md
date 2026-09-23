@@ -65,9 +65,9 @@ en zsh, entrecomillar los globs. Más en [`docs/05-guias/comandos.md`](docs/05-g
 
 ```
 app/(auth)/            login, forgot-password, reset-password
-app/(dashboard)/       layout (Server Component) y 13 páginas: dashboard, pos, products, categories, inventory,
+app/(dashboard)/       layout (Server Component) y páginas: dashboard, pos, products, categories, promotions (gerente+), inventory,
                        orders(+[id]), customers(+[id]), suppliers, reports, settings, users
-app/api/v1/            25 Route Handlers (route()/publicRoute()) · app/auth/confirm: canjea el enlace del correo
+app/api/v1/            Route Handlers (route()/publicRoute()) · app/auth/confirm: canjea el enlace del correo
 components/  hooks/    UI compartida (AppShell, ConfirmDialog, form-fields…) y hooks · components/ui = shadcn
 lib/server/            SOLO servidor: http (route), auth, errores, clientes Supabase, services/<recurso>
 lib/validation/        esquemas zod compartidos · lib/api/ cliente fetch del navegador · lib/env/ validación del entorno
@@ -131,7 +131,7 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 | Cuentas abiertas (`tabs`) | El stock baja **al añadir** el producto a la cuenta, no al cerrarla; quitar un ítem (gerente+) o anular la repone. Anular solo funciona **sin pagos** | [cuentas-abiertas](docs/03-modulos/cuentas-abiertas.md) |
 | `next build` / `next dev` | Fallan si falta alguna de las 4 variables (el error nombra cuál). `next dev` no debe escribir en `AGENTS.md` (`agentRules: false`) | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
 | Impresión | `window.print()` en el detalle de orden imprime un ticket térmico de 80 mm **no fiscal** (D21: sin CUFE/QR/DIAN) | [UI](docs/01-arquitectura/06-ui-y-diseno.md), [órdenes](docs/03-modulos/ordenes-y-reembolsos.md) |
-| Imágenes R2 | URL firmadas de 12 h (hora de firma redondeada a la hora para que el navegador las cachee). La CSP (`img-src`) permite `https://*.r2.cloudflarestorage.com` **fijo**: `next.config.ts` se evalúa en el *build* y la imagen Docker se construye sin `R2_*`; derivar el origen de `R2_ACCOUNT_ID` hacía que el navegador bloqueara las imágenes en silencio. Sin las 4 variables, los endpoints de imagen responden 503 | [API](docs/01-arquitectura/08-api.md), [productos](docs/03-modulos/productos.md) |
+| Imágenes R2 | URL firmadas de 12 h (hora de firma redondeada a la hora para que el navegador las cachee). La CSP (`img-src`) permite `https://*.r2.cloudflarestorage.com` **y** `http://localhost:9000` / `127.0.0.1:9000` (MinIO local) de forma fija: `next.config.ts` se evalúa en el *build* y la imagen Docker se construye sin `R2_*`; derivar el origen de `R2_ACCOUNT_ID` hacía que el navegador bloqueara las imágenes en silencio. En Docker, `R2_PUBLIC_ENDPOINT_OVERRIDE` hace que las URLs firmadas usen `localhost` (el navegador no resuelve el hostname `r2`). Sin las 4 variables, los endpoints de imagen responden 503 | [API](docs/01-arquitectura/08-api.md), [productos](docs/03-modulos/productos.md) |
 | Cookies de sesión | `@supabase/ssr` las crea `httpOnly: false`; `lib/auth/cookie-options.ts` las fuerza a `HttpOnly` (y `Secure` cuando `APP_URL` es https). Mantenerlo | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
 | Formularios de auth | Enviados antes de hidratar hacen un `GET` nativo y **ponen la contraseña en la URL**: `method="post"` + botón deshabilitado hasta `useHydrated()` | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
 | Alta de usuarios | Solo por invitación. Un perfil nace **activo únicamente si el servidor le asignó rol** (`app_metadata`); `user_metadata` no se usa. Un usuario desactivado no puede entrar aunque su sesión siga válida | [usuarios](docs/03-modulos/usuarios.md) |

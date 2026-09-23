@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Search, Edit, Trash2, Package } from 'lucide-react'
+import { Plus, Search, Edit, Trash2, Package, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -187,16 +187,17 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                             {product ? (
                                 <TextField name="sku" label={t('sku')} />
                             ) : (
-                                <div className="flex items-end gap-2">
-                                    <TextField
-                                        name="sku"
-                                        label={t('sku')}
-                                        description={t('skuHelp')}
-                                        className="flex-1"
-                                    />
-                                    <Button type="button" variant="outline" size="sm" onClick={regenerateSku}>
+                                <div className="flex flex-col relative gap-2">
+                                    <TextField name="sku" label={t('sku')} className="text-xs" />
+                                    <span
+                                        className="text-xs text-green cursor-pointer w-10 absolute top-8 -right-2"
+                                        onClick={regenerateSku}
+                                    >
+                                        <RefreshCcw className="mr-2 h-4 w-4" />
+                                    </span>
+                                    {/* <Button type="button" variant="outline" size="sm" onClick={regenerateSku}>
                                         {t('regenerateSku')}
-                                    </Button>
+                                    </Button> */}
                                 </div>
                             )}
                             <TextField name="barcode" label={t('barcode')} />

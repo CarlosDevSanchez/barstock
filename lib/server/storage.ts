@@ -123,23 +123,32 @@ export function presignDatetime(now: Date): string {
 class R2Storage implements StorageBackend {
     private readonly client: AwsClient
     private readonly base: string
+    private readonly publicBase: string
 
     constructor(accountId: string, accessKeyId: string, secretAccessKey: string, bucket: string) {
         this.client = new AwsClient({ accessKeyId, secretAccessKey, service: 's3', region: 'auto' })
         // R2_ENDPOINT_OVERRIDE (local dev only, e.g. docker-compose.r2.yml's MinIO container) replaces the real R2
-        // host; accountId still selects nothing meaningful there (MinIO has no per-account subdomain), but every
-        // other code path (signing, key generation, CHECK constraint) is unaffected.
+        // host for server-to-server calls (put/delete); accountId still selects nothing meaningful there (MinIO has
+        // no per-account subdomain), but every other code path (signing, key generation, CHECK constraint) is
+        // unaffected. R2_PUBLIC_ENDPOINT_OVERRIDE is the host the BROWSER can reach (e.g. localhost:9000) for the
+        // signed GET URLs handed back to it — different from the app container's Docker-internal host (r2:9000)
+        // when the app itself runs inside Docker (docker-compose.dev.yml/local.yml).
         const endpoint = serverEnv.R2_ENDPOINT_OVERRIDE ?? `https://${accountId}.r2.cloudflarestorage.com`
+        const publicEndpoint = serverEnv.R2_PUBLIC_ENDPOINT_OVERRIDE ?? endpoint
         this.base = `${endpoint}/${bucket}`
+        this.publicBase = `${publicEndpoint}/${bucket}`
     }
 
     async putObject(key: string, bytes: Uint8Array, contentType: string): Promise<void> {
         // Blob (not the raw Uint8Array) sidesteps a BodyInit typing mismatch between TS's generic
         // Uint8Array<ArrayBufferLike> and lib.dom's BufferSource in this TS/lib combination.
+        // Explicit content-length: Next.js's dev-server fetch instrumentation (it patches the global `fetch`) does
+        // not carry over a Blob body's implicit length, so the PUT reaches MinIO without Content-Length and it
+        // replies 411 Length Required (real R2 tolerates the same request; this header is harmless there too).
         const response = await this.client.fetch(`${this.base}/${key}`, {
             method: 'PUT',
             body: new Blob([new Uint8Array(bytes)], { type: contentType }),
-            headers: { 'content-type': contentType }
+            headers: { 'content-type': contentType, 'content-length': String(bytes.byteLength) }
         })
         if (!response.ok) throw new Error(`R2 put failed (${response.status}): ${key}`)
     }
@@ -150,7 +159,7 @@ class R2Storage implements StorageBackend {
     }
 
     async signedGetUrl(key: string, ttlSeconds: number): Promise<string> {
-        const url = new URL(`${this.base}/${key}`)
+        const url = new URL(`${this.publicBase}/${key}`)
         url.searchParams.set('X-Amz-Expires', String(ttlSeconds))
         // `sign()` only computes the HMAC signature over the request: it never touches the network. The signing
         // time is floored (presignDatetime) so every read within the same window gets the SAME url.

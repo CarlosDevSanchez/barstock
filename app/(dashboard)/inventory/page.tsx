@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, PackagePlus, Search, TrendingUp, Warehouse } from 'lucide-react'
+import { AlertTriangle, Gift, PackagePlus, Search, TrendingUp, Warehouse } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -28,6 +28,7 @@ import { PageSpinner } from '@/components/page-spinner'
 import { useMoney, useSession } from '@/components/session-provider'
 import { errorMessage } from '@/lib/api/client'
 import { inventoryApi, type InventoryListItem } from '@/lib/api/inventory'
+import { promotionsApi } from '@/lib/api/promotions'
 import { roleAtLeast } from '@/lib/auth/roles'
 import { inventoryAdjustSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
@@ -118,6 +119,10 @@ export default function InventoryPage() {
         JSON.stringify({ page, pageSize, search, lowOnly })
     )
     const summary = inventory.data?.summary
+    const sellablePackages = useApiQuery(
+        signal => promotionsApi.list({ pageSize: 100, active: true }, signal),
+        'inventory-sellable-packages'
+    )
 
     return (
         <div className="space-y-6">
@@ -162,6 +167,78 @@ export default function InventoryPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <Card className="rounded-2xl p-6">
+                <div className="flex items-start gap-3 mb-4">
+                    <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30 shrink-0">
+                        <Gift className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                    </div>
+                    <div>
+                        <h2 className="text-lg font-semibold">{t('packagesSection')}</h2>
+                        <p className="text-sm text-muted-foreground">{t('packagesSectionHint')}</p>
+                        {sellablePackages.data && sellablePackages.data.data.length > 0 && (
+                            <p className="text-xs text-muted-foreground mt-1">
+                                {t('packagesCount', { count: sellablePackages.data.data.length })}
+                            </p>
+                        )}
+                    </div>
+                </div>
+                {sellablePackages.error ? (
+                    <QueryError error={sellablePackages.error} onRetry={sellablePackages.reload} />
+                ) : !sellablePackages.data ? (
+                    <PageSpinner />
+                ) : sellablePackages.data.data.length === 0 ? (
+                    <p className="text-sm text-muted-foreground">{t('packagesEmpty')}</p>
+                ) : (
+                    <div className="max-h-72 overflow-y-auto overflow-x-auto rounded-md border">
+                        <Table>
+                            <TableHeader>
+                                <TableRow>
+                                    <TableHead className="sticky top-0 z-10 bg-card">{t('packagesColName')}</TableHead>
+                                    <TableHead className="sticky top-0 z-10 bg-card">
+                                        {t('packagesColRecipe')}
+                                    </TableHead>
+                                    <TableHead className="sticky top-0 z-10 bg-card">
+                                        {t('packagesColAvailable')}
+                                    </TableHead>
+                                </TableRow>
+                            </TableHeader>
+                            <TableBody>
+                                {sellablePackages.data.data.map(promo => {
+                                    const recipe = promo.items
+                                        .map(
+                                            item =>
+                                                `${item.quantity}× ${item.product?.name ?? '—'} (stock ${item.product?.stock ?? '—'})`
+                                        )
+                                        .join(' · ')
+                                    return (
+                                        <TableRow key={promo.id}>
+                                            <TableCell className="font-medium">{promo.name}</TableCell>
+                                            <TableCell
+                                                className="text-sm text-muted-foreground max-w-md"
+                                                title={recipe}
+                                            >
+                                                <span className="line-clamp-2">{recipe}</span>
+                                            </TableCell>
+                                            <TableCell>
+                                                {promo.available === null ? (
+                                                    <span className="text-muted-foreground">
+                                                        {t('packagesUnavailable')}
+                                                    </span>
+                                                ) : (
+                                                    <Badge variant={promo.available <= 0 ? 'destructive' : 'secondary'}>
+                                                        {promo.available}
+                                                    </Badge>
+                                                )}
+                                            </TableCell>
+                                        </TableRow>
+                                    )
+                                })}
+                            </TableBody>
+                        </Table>
+                    </div>
+                )}
+            </Card>
 
             <Card className="rounded-2xl p-6">
                 <div className="flex items-center gap-4 mb-6">

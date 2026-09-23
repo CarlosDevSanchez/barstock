@@ -38,7 +38,14 @@ interface Tab {
     status: 'open' | 'closed' | 'voided'
     order_id: string | null
     members: Array<{ id: string; display_name: string }>
-    items: Array<{ id: string; product_id: string; quantity: number; unit_price: number }>
+    items: Array<{
+        id: string
+        product_id: string
+        quantity: number
+        unit_price: number
+        discount: number
+        promotion_id: string | null
+    }>
     payments: Array<{ id: string; amount: number; payment_method: string }>
     totals: { subtotal: number; tax: number; discount: number; total: number; paid: number; balance: number }
 }
@@ -47,15 +54,18 @@ interface Order {
     status: string
     total: number
     tab_id: string | null
-    items: Array<{ product_id: string; quantity: number }>
+    items: Array<{ product_id: string; quantity: number; promotion_id: string | null; unit_price: number }>
     payments: Array<{ amount: number }>
 }
 
 const open = (client: TestClient, body: { label: string; customer_id?: string | null; members?: string[] }) =>
     client.post(openTab, 'tabs', { body })
 const detail = (client: TestClient, id: string) => client.get(getTabDetail, `tabs/${id}`, { params: { id } })
-const addItems = (client: TestClient, id: string, items: Array<{ product_id: string; quantity: number }>) =>
-    client.post(addTabItems, `tabs/${id}/items`, { params: { id }, body: { items } })
+const addItems = (
+    client: TestClient,
+    id: string,
+    items: Array<{ product_id: string; quantity: number } | { promotion_id: string; quantity: number }>
+) => client.post(addTabItems, `tabs/${id}/items`, { params: { id }, body: { items } })
 const removeItem = (client: TestClient, id: string, itemId: string, body: { quantity: number; reason: string }) =>
     client.call(removeTabItem, 'DELETE', `tabs/${id}/items/${itemId}`, { params: { id, itemId }, body })
 const pay = (
@@ -304,5 +314,69 @@ describe('RLS: tabs, tab_items and tab_payments are read-only from the client', 
             const { error } = await anonClient.from(table).select('id').limit(1)
             expect(error?.code).toBe('42501')
         }
+    })
+})
+
+describe('promotions on tabs', () => {
+    test('package charged price accumulates; list SKU stays a separate line; close keeps promotion_id', async () => {
+        const db = adminClient()
+        const beer = await createProduct({
+            name: uniq('BeerTab'),
+            selling_price: 5000,
+            cost_price: 2000,
+            tax_rate: 0,
+            stock: 40
+        })
+        const { data: promo, error: promoError } = await db
+            .from('promotions')
+            .insert({ name: uniq('Bucket17'), package_price: 17000, is_active: true })
+            .select()
+            .single()
+        if (promoError) throw promoError
+        const { error: itemsError } = await db
+            .from('promotion_items')
+            .insert({ promotion_id: promo.id, product_id: beer.id, quantity: 4 })
+        if (itemsError) throw itemsError
+
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('PromoTab') }))
+
+        const withPromo = dataOf<Tab>(await addItems(cashier, tab.id, [{ promotion_id: promo.id, quantity: 1 }]))
+        expect(withPromo.totals.subtotal).toBeCloseTo(17000, 2)
+        expect(withPromo.totals.subtotal).not.toBe(20000)
+        expect(withPromo.items).toHaveLength(1)
+        expect(withPromo.items[0]?.promotion_id).toBe(promo.id)
+        expect(withPromo.items[0]?.quantity).toBe(4)
+        expect(await stockOf(beer.id)).toBe(36)
+
+        const accumulated = dataOf<Tab>(await addItems(cashier, tab.id, [{ promotion_id: promo.id, quantity: 1 }]))
+        expect(accumulated.totals.subtotal).toBeCloseTo(34000, 2)
+        expect(accumulated.items).toHaveLength(1)
+        expect(accumulated.items[0]?.quantity).toBe(8)
+        expect(await stockOf(beer.id)).toBe(32)
+
+        const withLoose = dataOf<Tab>(await addItems(cashier, tab.id, [{ product_id: beer.id, quantity: 1 }]))
+        expect(withLoose.items).toHaveLength(2)
+        const promoLine = withLoose.items.find(i => i.promotion_id === promo.id)
+        const looseLine = withLoose.items.find(i => i.promotion_id === null)
+        expect(promoLine?.quantity).toBe(8)
+        expect(looseLine?.quantity).toBe(1)
+        expect(looseLine?.unit_price).toBeCloseTo(5000, 2)
+        expect(withLoose.totals.subtotal).toBeCloseTo(39000, 2)
+
+        const paid = dataOf<Tab>(
+            await pay(cashier, tab.id, { payment_method: 'cash', amount: withLoose.totals.balance })
+        )
+        expect(paid.status).toBe('closed')
+        expect(paid.order_id).toBeTruthy()
+
+        const order = dataOf<Order>(
+            await cashier.get(getOrder, `orders/${paid.order_id}`, { params: { id: paid.order_id! } })
+        )
+        expect(order.total).toBeCloseTo(39000, 2)
+        expect(order.items.filter(i => i.promotion_id === promo.id)).toHaveLength(1)
+        expect(order.items.filter(i => i.promotion_id === null)).toHaveLength(1)
+        const orderPromo = order.items.find(i => i.promotion_id === promo.id)
+        expect(orderPromo?.quantity).toBe(8)
+        expect(orderPromo!.unit_price * orderPromo!.quantity).toBeLessThanOrEqual(34000 + 0.01)
     })
 })

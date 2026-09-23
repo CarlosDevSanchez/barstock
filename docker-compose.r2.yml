@@ -54,9 +54,11 @@ services:
             R2_ACCESS_KEY_ID: barstock-local
             R2_SECRET_ACCESS_KEY: barstock-local-2026
             R2_BUCKET: barstock-local
-            # Dev-only override (lib/server/storage.ts): the app reaches MinIO by container name on the shared
-            # network, never by localhost:9000 (that port is only for your host machine / the console).
+            # Dev-only overrides (lib/server/storage.ts): the app container reaches MinIO by container name on the
+            # shared network for uploads/deletes, but the signed GET URLs handed to the BROWSER must use a host the
+            # browser (on the host machine, outside Docker) can resolve — hence the second, different value.
             R2_ENDPOINT_OVERRIDE: http://r2:9000
+            R2_PUBLIC_ENDPOINT_OVERRIDE: http://localhost:${R2_PORT:-9000}
 
 networks:
     supabase:

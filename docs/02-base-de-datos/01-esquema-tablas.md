@@ -30,6 +30,10 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 
 **`product_variants`** — `product_id` → `products` CASCADE NOT NULL, `name`, `variant_type` (texto libre: "size", "color"), `sku` UNIQUE, `barcode` UNIQUE, `cost_price`, `selling_price` (nullables, `CHECK ≥ 0`). Sin UI ni venta desde el POS (D10).
 
+**`promotions`** — paquetes multi-producto a precio fijo: `name` NOT NULL, `package_price` `NUMERIC(14,2)` NOT NULL (`CHECK ≥ 0`), `is_active` NOT NULL default true, **`deleted_at`** (borrado lógico como productos; sin hard delete desde la API). Sin stock propio: la disponibilidad se deriva de los componentes. Esquema en `20260924000001`; API + UI admin en `/promotions` (gerente+); venta en POS vía expansión en `create_sale` (`20260924000002`).
+
+**`promotion_items`** — `promotion_id` → `promotions` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `quantity` (`CHECK ≥ 1`), `UNIQUE (promotion_id, product_id)`.
+
 ## Inventario
 **`inventory`** — `product_id` → `products` CASCADE NOT NULL, `variant_id` → `product_variants` CASCADE (NULL = producto sin variante), **`quantity` NOT NULL default 0 `CHECK ≥ 0`**,
 `low_stock_threshold` NOT NULL default 10 (`CHECK ≥ 0`), `location`, `last_restocked_at`. Único por (`product_id`, `variant_id`) **y** por `product_id` cuando `variant_id IS NULL` (índice parcial; `UNIQUE` a secas no impide duplicados con NULL).
@@ -46,7 +50,7 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 **`orders`** — `order_number` UNIQUE NOT NULL (`ORD-YYMMDD-NNNNNN`, secuencia `order_number_seq`), `customer_id` → `customers` (NULL = mostrador), `status` NOT NULL default `pending`, `subtotal`, `discount`, `tax`, `total` NOT NULL,
 `notes`, `created_by` → `auth.users`, **`refunded_at`, `refunded_by` → `auth.users`, `refund_reason`**. `CHECK` importes ≥ 0 y **`total = subtotal − discount + tax`** (`NOT VALID`: se exige en filas nuevas; validar tras depurar datos antiguos).
 
-**`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`. `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
+**`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, **`promotion_id` → `promotions` (nullable; líneas nacidas de un paquete; permite promo soft-deleted)**, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`. `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
 
 **`payments`** — `order_id` → `orders` CASCADE NOT NULL, `payment_method` NOT NULL, `amount` (`CHECK ≥ 0`), `reference_number`, `notes`. Una orden nacida de una venta directa tiene un pago; una nacida de una
 cuenta ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)) puede tener varios (uno por cada pago parcial). `orders.tab_id` → `tabs` (NULL en una venta directa).
@@ -60,7 +64,7 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 
 **`tab_members`** — `tab_id` → `tabs` CASCADE NOT NULL, `display_name` NOT NULL (`CHECK` no vacío), `customer_id` → `customers` (opcional). Las personas entre las que se divide la cuenta.
 
-**`tab_items`** — `tab_id` → `tabs` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id` → `product_variants`, `quantity` (`CHECK > 0`), `unit_price`, `tax_rate` (foto del precio al añadir por primera vez),
+**`tab_items`** — `tab_id` → `tabs` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id` → `product_variants`, `promotion_id` → `promotions` (nullable), `quantity` (`CHECK > 0`), `unit_price`, `tax_rate`, `discount` (foto al primer añadido; unique `nulls not distinct (tab_id, product_id, variant_id, promotion_id)`),
 `added_by` → `auth.users`. `UNIQUE NULLS NOT DISTINCT (tab_id, product_id, variant_id)` (Postgres 17): añadir de nuevo el mismo producto suma cantidad en vez de crear otra fila.
 
 **`tab_payments`** — `tab_id` → `tabs` CASCADE NOT NULL, `member_id` → `tab_members` (opcional: un pago puede no asignarse a nadie en particular), `payment_method` NOT NULL, `amount` (`CHECK > 0`), `created_by` → `auth.users`.
@@ -83,3 +87,4 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `profiles.locale`; importes → `NUMERIC(14,2)`; `currency_decimals` / `money_scale`; `create_sale` redondea según la moneda | `…06` |
 | `top_selling_products` (RPC, `SECURITY DEFINER`): mode de venta de toda la tienda para el POS | `…0007` |
 | `tabs`, `tab_members`, `tab_items`, `tab_payments`, `orders.tab_id`, enum `tab_status` y sus RPC | `…0008` |
+| `promotions`, `promotion_items`, `order_items.promotion_id` (soft-delete; sin hard delete API) | `20260924000001` |

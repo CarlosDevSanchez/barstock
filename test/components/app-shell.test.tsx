@@ -35,17 +35,29 @@ const linksFor = (role: 'cashier' | 'manager' | 'admin') => {
 
 describe('navigation follows the role', () => {
     const CASHIER = ['Dashboard', 'POS', 'Products', 'Categories', 'Inventory', 'Orders', 'Customers']
+    const MANAGER = [
+        'Dashboard',
+        'POS',
+        'Products',
+        'Categories',
+        'Promotions',
+        'Inventory',
+        'Orders',
+        'Customers',
+        'Suppliers',
+        'Reports'
+    ]
 
     test('a cashier sees the till and the catalog, but not suppliers, reports, settings or users', () => {
         expect(linksFor('cashier')).toEqual(CASHIER)
     })
 
     test('a manager also sees suppliers and reports', () => {
-        expect(linksFor('manager')).toEqual([...CASHIER, 'Suppliers', 'Reports'])
+        expect(linksFor('manager')).toEqual(MANAGER)
     })
 
     test('an admin sees everything, including settings and users', () => {
-        expect(linksFor('admin')).toEqual([...CASHIER, 'Suppliers', 'Reports', 'Settings', 'Users'])
+        expect(linksFor('admin')).toEqual([...MANAGER, 'Settings', 'Users'])
     })
 })
 

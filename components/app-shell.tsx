@@ -38,6 +38,7 @@ import {
     Sun,
     LogOut,
     FolderTree,
+    Gift,
     UserCog
 } from 'lucide-react'
 import { cn } from '@/lib/utils'
@@ -51,6 +52,7 @@ const navItems: Array<{
         | 'pos'
         | 'products'
         | 'categories'
+        | 'promotions'
         | 'inventory'
         | 'orders'
         | 'customers'
@@ -63,6 +65,7 @@ const navItems: Array<{
     { icon: ShoppingCart, key: 'pos', href: '/pos', minimumRole: 'cashier' },
     { icon: Package, key: 'products', href: '/products', minimumRole: 'cashier' },
     { icon: FolderTree, key: 'categories', href: '/categories', minimumRole: 'cashier' },
+    { icon: Gift, key: 'promotions', href: '/promotions', minimumRole: 'manager' },
     { icon: Warehouse, key: 'inventory', href: '/inventory', minimumRole: 'cashier' },
     { icon: ShoppingBag, key: 'orders', href: '/orders', minimumRole: 'cashier' },
     { icon: Users, key: 'customers', href: '/customers', minimumRole: 'cashier' },

@@ -97,7 +97,7 @@ export function SelectField({ name, label, placeholder, options, noneLabel, clas
                         disabled={disabled}
                     >
                         <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder={placeholder} />
                             </SelectTrigger>
                         </FormControl>

@@ -51,6 +51,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [ordenes-y-reembolsos.md](03-modulos/ordenes-y-reembolsos.md) | Listado, detalle, reembolso idempotente |
 | [productos.md](03-modulos/productos.md) | CRUD de productos |
 | [categorias.md](03-modulos/categorias.md) | CRUD de categorías |
+| [promociones.md](03-modulos/promociones.md) | Paquetes multi-producto (admin); venta POS pendiente |
 | [inventario.md](03-modulos/inventario.md) | Stock, ajustes con motivo, movimientos |
 | [clientes.md](03-modulos/clientes.md) | Listado y detalle de clientes |
 | [proveedores-y-compras.md](03-modulos/proveedores-y-compras.md) | Proveedores; órdenes de compra (sin UI) |

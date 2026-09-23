@@ -7,38 +7,53 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useMoney } from '@/components/session-provider'
 import { useImageFallback } from '@/hooks/use-image-fallback'
 import type { ProductListItem } from '@/lib/api/products'
+import { QtyConfirmOverlay } from './qty-confirm-overlay'
 
 interface ProductCardProps {
     product: ProductListItem
-    onAdd: (productId: string) => void
+    /** True when this tile is the one pending quantity confirmation. */
+    pending: boolean
+    /** Draft quantity while pending (parent-owned). */
+    qty: number
+    /** Max units still addable: stock − already in cart. */
+    maxQty: number
+    onSelect: () => void
+    onChangeQty: (qty: number) => void
+    onConfirm: () => void
 }
 
 /**
- * Compact tile for the POS grid. The image strip, name, price and badge row each sit on their own line so a long
- * name or a long category never pushes the price out of view or breaks the card's layout (`min-w-0` + `flex-wrap`).
+ * Compact tile for the POS grid. Tap opens an inline −/+/Confirm stepper (quantity lives on the POS page so only
+ * one tile is pending at a time). The image strip, name, price and badge row each sit on their own line so a long
+ * name or a long category never pushes the price out of view (`min-w-0` + `flex-wrap`).
  */
-export function ProductCard({ product, onAdd }: ProductCardProps) {
+export function ProductCard({ product, pending, qty, maxQty, onSelect, onChangeQty, onConfirm }: ProductCardProps) {
     const t = useTranslations('pos')
     const money = useMoney()
     const { showImage, onError: onImageError } = useImageFallback(product.image_url)
     // stock null = no inventory row, which the database refuses to sell.
     const soldOut = product.stock === null || product.stock <= 0
+    const canAdd = !soldOut && maxQty > 0
 
     return (
         <Card
             role="button"
-            aria-disabled={soldOut}
+            aria-disabled={!canAdd && !pending}
             aria-label={t('addToCart', { name: product.name })}
             title={t('sku', { sku: product.sku })}
-            tabIndex={soldOut ? -1 : 0}
-            className={`min-w-0 transition-all rounded-xl overflow-hidden group py-0 gap-0 ${
-                soldOut ? 'opacity-50 cursor-not-allowed' : 'cursor-pointer hover:shadow-lg'
-            }`}
-            onClick={() => !soldOut && onAdd(product.id)}
+            tabIndex={canAdd || pending ? 0 : -1}
+            className={`relative min-w-0 transition-all rounded-xl overflow-hidden group py-0 gap-0 ${
+                canAdd || pending ? 'cursor-pointer hover:shadow-lg' : 'opacity-50 cursor-not-allowed'
+            } ${pending ? 'ring-2 ring-emerald-500 shadow-lg' : ''}`}
+            onClick={() => {
+                if (pending || !canAdd) return
+                onSelect()
+            }}
             onKeyDown={event => {
-                if (!soldOut && (event.key === 'Enter' || event.key === ' ')) {
+                if (pending || !canAdd) return
+                if (event.key === 'Enter' || event.key === ' ') {
                     event.preventDefault()
-                    onAdd(product.id)
+                    onSelect()
                 }
             }}
         >
@@ -50,7 +65,7 @@ export function ProductCard({ product, onAdd }: ProductCardProps) {
                         alt=""
                         loading="lazy"
                         decoding="async"
-                        className="h-full w-full object-cover"
+                        className="h-full w-full object-contain product-image-back"
                         onError={onImageError}
                     />
                 ) : (
@@ -75,6 +90,8 @@ export function ProductCard({ product, onAdd }: ProductCardProps) {
                     )}
                 </div>
             </CardContent>
+
+            {pending && <QtyConfirmOverlay qty={qty} maxQty={maxQty} onChangeQty={onChangeQty} onConfirm={onConfirm} />}
         </Card>
     )
 }

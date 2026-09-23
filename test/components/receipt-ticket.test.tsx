@@ -46,6 +46,7 @@ const baseOrder: OrderDetail = {
             order_id: 'order-1',
             product_id: 'p-1',
             variant_id: null,
+            promotion_id: null,
             quantity: 1,
             unit_price: 100,
             discount: 0,
@@ -54,13 +55,15 @@ const baseOrder: OrderDetail = {
             total: 119,
             created_at: '2026-09-21T15:30:00Z',
             product: { id: 'p-1', name: 'Aguardiente', sku: 'AGU-1' },
-            variant: null
+            variant: null,
+            promotion: null
         },
         {
             id: 'item-2',
             order_id: 'order-1',
             product_id: 'p-2',
             variant_id: null,
+            promotion_id: null,
             quantity: 2,
             unit_price: 10,
             discount: 0,
@@ -69,7 +72,8 @@ const baseOrder: OrderDetail = {
             total: 22,
             created_at: '2026-09-21T15:30:00Z',
             product: { id: 'p-2', name: 'Papas', sku: 'PAP-1' },
-            variant: null
+            variant: null,
+            promotion: null
         }
     ]
 }

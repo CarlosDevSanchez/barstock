@@ -24,7 +24,7 @@ Requisitos: **Docker Desktop activo**, **Supabase CLI** (`brew install supabase/
 | Paso | `local:up` | `local:dev` |
 |---|---|---|
 | 1. Supabase | `supabase start`: base de datos (aplica las migraciones y el seed de catálogo), Auth, API, Mailpit | igual |
-| 2. Semilla de usuarios | `scripts/seed-local.ts`: crea los usuarios de abajo y unas ventas de demostración | igual |
+| 2. Semilla de usuarios | `scripts/seed-local.ts`: crea solo los usuarios de abajo (nada más: el catálogo viene de `supabase/seed.sql`, sin ventas) | igual |
 | 3. La app | `docker compose up -d --build`: imagen de producción en el puerto 3000, en segundo plano | `docker compose up --build`: `next dev` en primer plano (deja la terminal abierta) |
 
 Al terminar (o al arrancar, en el caso de `local:dev`) imprime las URLs y las credenciales.
@@ -46,7 +46,7 @@ Al terminar (o al arrancar, en el caso de `local:dev`) imprime las URLs y las cr
 | `manager@barstock.local` | manager | Catálogo, ajuste de stock, todas las órdenes y reembolsos, reportes, proveedores |
 | `cashier@barstock.local` | cashier | Caja, catálogo (solo lectura), **solo sus propias órdenes**, sin `/settings`, `/users`, `/reports`, `/suppliers` |
 
-Además se crean **6 ventas de demostración** (una reembolsada) para que el dashboard, las órdenes y los reportes no estén vacíos; solo si todavía no hay órdenes, así que repetir el comando no las duplica.
+`scripts/seed-local.ts` **solo** crea/actualiza estos tres usuarios: no genera ventas, pedidos ni ningún otro dato. El catálogo de ejemplo (productos, categorías, clientes, proveedores) viene de `supabase/seed.sql`, aplicado siempre por `supabase start`/`db reset`.
 Cambiar la contraseña: `LOCAL_USERS_PASSWORD=otra-clave-larga bun run local:up` (mínimo 10 caracteres).
 
 ## Comandos
@@ -67,7 +67,7 @@ Cambiar la contraseña: `LOCAL_USERS_PASSWORD=otra-clave-larga bun run local:up`
 - **`docker-compose.yml`**: define solo la app, portable: construye y corre la imagen de producción (`target: run`, el por defecto) contra **cualquier** Supabase alcanzable en `NEXT_PUBLIC_SUPABASE_URL` (local o hospedado). No asume la red del CLI; sirve como referencia de la imagen fuera de Vercel.
 - **`docker-compose.local.yml`** (overlay, `local:up`): añade la unión a la red `supabase_network_barstock` que crea la Supabase CLI, para llegar a la API por nombre (`http://supabase_kong_barstock:8000`) sin `host.docker.internal`.
 - **`docker-compose.dev.yml`** (overlay, `local:dev`): usa `target: dev`, monta el repositorio completo en `/app` y enmascara `/app/node_modules` y `/app/.next` con volúmenes con nombre (`node_modules`, `next_cache`) para que la instalación de dependencias hecha en la imagen no la tape el bind mount, y para que el caché de Next sobreviva entre reinicios. También se une a la red de la Supabase CLI.
-- **`docker-compose.r2.yml`** (overlay, ambos modos): añade [MinIO](https://min.io) (`quay.io/minio/minio` — `minio/minio` ya no se publica en Docker Hub) como sustituto local de Cloudflare R2, con un bucket creado por un contenedor `r2-init` (`mc mb`) que corre una vez y termina. Define las cuatro variables `R2_*` (credenciales locales fijas) y `R2_ENDPOINT_OVERRIDE=http://r2:9000` (`lib/server/storage.ts`, ver [variables de entorno](variables-de-entorno.md#r2-en-local-minio-sin-credenciales-reales)), así que la subida de imágenes de producto y del logo del ticket funciona de punta a punta sin credenciales reales de Cloudflare.
+- **`docker-compose.r2.yml`** (overlay, ambos modos): añade [MinIO](https://min.io) (`quay.io/minio/minio` — `minio/minio` ya no se publica en Docker Hub) como sustituto local de Cloudflare R2, con un bucket creado por un contenedor `r2-init` (`mc mb`) que corre una vez y termina. Define las cuatro variables `R2_*` (credenciales locales fijas), `R2_ENDPOINT_OVERRIDE=http://r2:9000` para que el propio contenedor de la app suba/borre por nombre de contenedor, y `R2_PUBLIC_ENDPOINT_OVERRIDE=http://localhost:9000` para que las URLs firmadas que recibe el navegador (fuera de la red de Docker) sean alcanzables (`lib/server/storage.ts`, ver [variables de entorno](variables-de-entorno.md#r2-en-local-minio-sin-credenciales-reales)). La CSP (`img-src` en `next.config.ts`) también permite esos orígenes `localhost:9000` / `127.0.0.1:9000`; sin eso el navegador bloqueaba las imágenes en silencio aunque la subida y la firma estuvieran bien. Así la subida y visualización de imágenes de producto y del logo del ticket funciona de punta a punta sin credenciales reales de Cloudflare.
 - **`.env.docker`** (generado por `local-up.sh`/`local-dev.sh`, ignorado por git): las variables del Supabase local. Para `local:up` las `NEXT_PUBLIC_*` se **incrustan en el build** (van como argumentos de build); para `local:dev` también se pasan como variables de entorno en tiempo de ejecución, que es lo que usa `next dev`.
   La clave `service_role` **solo se pasa en tiempo de ejecución**: nunca queda en una capa de la imagen (comprobado con `docker history`); el build de `run` usa un marcador porque `next.config.ts` exige que la variable exista.
 - **Cookies:** `Secure` depende de que `APP_URL` sea https (no de `NODE_ENV`). Por eso la imagen sirve por `http://localhost` con cookies que también acepta Safari.

@@ -26,7 +26,7 @@
 | "Loyalty points tracking" / "Total spent tracking" | Columnas existentes; nada las actualiza | ❌ No funciona |
 | "Purchase history (ready)" (clientes) | El detalle lista sus órdenes | ✅ Cierto |
 | "Purchase order system (ready)" | Solo tablas; sin UI ni lógica | ❌ Solo esquema |
-| "Profit analysis (ready)" | Ningún cálculo de utilidad | ❌ No implementado |
+| "Profit analysis (ready)" | Utilidad bruta + COGS + markdown de promos en `/reports` (`sales_report`; costo/lista **actual**, sin snapshot) | ✅ Parcial (v1; no gastos operativos) |
 | "Revenue charts" / "Sales analytics" | Gráficas en dashboard; reportes son listas de 7 días | ⚠️ Parcial |
 | Settings: "Store information / Tax rate / Currency / Low stock threshold" | La pantalla no persiste nada | ❌ Decorativo |
 | "Forms: React Hook Form + Zod (ready)" | Instaladas, **sin uso** | ❌ Sin uso |

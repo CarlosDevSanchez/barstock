@@ -155,3 +155,7 @@
         background: white;
     }
 }
+
+.product-image-back {
+    mix-blend-mode: multiply;
+}

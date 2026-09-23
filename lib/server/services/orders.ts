@@ -14,6 +14,7 @@ export type OrderDetail = Tables<'orders'> & {
         Tables<'order_items'> & {
             product: Pick<Tables<'products'>, 'id' | 'name' | 'sku'>
             variant: Pick<Tables<'product_variants'>, 'id' | 'name'> | null
+            promotion: Pick<Tables<'promotions'>, 'id' | 'name'> | null
         }
     >
     payments: Tables<'payments'>[]
@@ -27,7 +28,7 @@ export type OrderDetail = Tables<'orders'> & {
 // `!orders_tab_id_fkey` disambiguates: orders.tab_id -> tabs.id AND tabs.order_id -> orders.id are two different FKs
 // between the same two tables, so PostgREST cannot pick one on its own.
 const DETAIL_SELECT =
-    '*, customer:customers(id, name, email, phone), items:order_items(*, product:products(id, name, sku), variant:product_variants(id, name)), payments(*), tab:tabs!orders_tab_id_fkey(id, tab_number, label)'
+    '*, customer:customers(id, name, email, phone), items:order_items(*, product:products(id, name, sku), variant:product_variants(id, name), promotion:promotions(id, name)), payments(*), tab:tabs!orders_tab_id_fkey(id, tab_number, label)'
 
 /** Cashiers only see their own orders, managers and admins all of them: RLS decides, not this code. */
 export async function listOrders(

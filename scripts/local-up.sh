@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Brings the whole project up locally with Docker:
 #   1. Supabase local stack (database, Auth, API, mail catcher)     -> `supabase start`
-#   2. Seed users (+ a few demo sales)                              -> scripts/seed-local.ts
+#   2. Seed the admin/manager/cashier users                         -> scripts/seed-local.ts
 #   3. The app as a production image                                -> docker compose up
 # Everything is LOCAL. Re-running it is safe (idempotent).
 set -euo pipefail
@@ -25,9 +25,9 @@ supabase start >/dev/null 2>&1 || supabase start   # quiet when it works, verbos
 eval "$(supabase status -o env)"
 [ -n "${API_URL:-}" ] && [ -n "${ANON_KEY:-}" ] && [ -n "${SERVICE_ROLE_KEY:-}" ] || die "Could not read the Supabase configuration."
 
-say "2/3 Seed users and demo data"
+say "2/3 Seed users"
 [ -d node_modules ] || bun install --frozen-lockfile
-SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" bun run scripts/seed-local.ts
+SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" bun run scripts/seed-local.ts
 
 say "3/3 The app (docker compose)"
 # Inside the Docker network the app reaches the API gateway by container name (host.docker.internal is not needed).

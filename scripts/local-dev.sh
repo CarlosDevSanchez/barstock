@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # Brings up local dev with hot-reload, containerized:
 #   1. Supabase local stack (database, Auth, API, mail catcher)     -> `supabase start`
-#   2. Seed users (+ a few demo sales)                              -> scripts/seed-local.ts
+#   2. Seed the admin/manager/cashier users                         -> scripts/seed-local.ts
 #   3. The app with `next dev`, bind-mounted, in the foreground     -> docker compose up (Ctrl+C to stop)
 # For programming with the app running directly on the host instead, use `bun run db:start` + `bun run dev`
 # (docs/05-guias/setup-local.md). For testing the production image, use `bun run local:up`.
@@ -26,9 +26,9 @@ supabase start >/dev/null 2>&1 || supabase start
 eval "$(supabase status -o env)"
 [ -n "${API_URL:-}" ] && [ -n "${ANON_KEY:-}" ] && [ -n "${SERVICE_ROLE_KEY:-}" ] || die "Could not read the Supabase configuration."
 
-say "2/2 Seed users and demo data"
+say "2/2 Seed users"
 [ -d node_modules ] || bun install --frozen-lockfile
-SUPABASE_URL="$API_URL" SUPABASE_ANON_KEY="$ANON_KEY" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" bun run scripts/seed-local.ts
+SUPABASE_URL="$API_URL" SUPABASE_SERVICE_ROLE_KEY="$SERVICE_ROLE_KEY" bun run scripts/seed-local.ts
 
 # Inside the Docker network the app reaches the API gateway by container name (host.docker.internal is not needed).
 # R2_* vars are NOT set here: docker-compose.r2.yml's MinIO container supplies them (dummy local credentials plus

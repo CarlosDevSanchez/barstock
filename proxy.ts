@@ -14,7 +14,8 @@ const PAGE_ROLE_GUARDS: Array<{ prefix: string; minimum: UserRole }> = [
     { prefix: '/settings', minimum: 'admin' },
     { prefix: '/users', minimum: 'admin' },
     { prefix: '/reports', minimum: 'manager' },
-    { prefix: '/suppliers', minimum: 'manager' }
+    { prefix: '/suppliers', minimum: 'manager' },
+    { prefix: '/promotions', minimum: 'manager' }
 ]
 
 const profileSchema = z.object({ role: z.enum(USER_ROLES), is_active: z.boolean() })

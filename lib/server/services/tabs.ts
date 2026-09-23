@@ -33,6 +33,11 @@ export type TabDetail = Tables<'tabs'> & {
         Tables<'tab_items'> & {
             product: Pick<Tables<'products'>, 'id' | 'name' | 'sku'>
             variant: Pick<Tables<'product_variants'>, 'id' | 'name'> | null
+            promotion:
+                | (Pick<Tables<'promotions'>, 'id' | 'name'> & {
+                      items: Array<Pick<Tables<'promotion_items'>, 'product_id' | 'quantity'>>
+                  })
+                | null
         }
     >
     payments: Tables<'tab_payments'>[]
@@ -40,7 +45,7 @@ export type TabDetail = Tables<'tabs'> & {
 }
 
 const DETAIL_SELECT =
-    '*, customer:customers(id, name, phone), members:tab_members(*), items:tab_items(*, product:products(id, name, sku), variant:product_variants(id, name)), payments:tab_payments(*)'
+    '*, customer:customers(id, name, phone), members:tab_members(*), items:tab_items(*, product:products(id, name, sku), variant:product_variants(id, name), promotion:promotions(id, name, items:promotion_items(product_id, quantity))), payments:tab_payments(*)'
 
 export async function listTabs(
     supabase: AppSupabaseClient,
@@ -99,11 +104,16 @@ export async function addTabItems(
 ): Promise<TabDetail> {
     const { error } = await supabase.rpc('tab_add_items', {
         p_tab_id: id,
-        p_items: input.items.map(item => ({
-            product_id: item.product_id,
-            variant_id: item.variant_id ?? null,
-            quantity: item.quantity
-        }))
+        p_items: input.items.map(item =>
+            'promotion_id' in item
+                ? { promotion_id: item.promotion_id, quantity: item.quantity }
+                : {
+                      product_id: item.product_id,
+                      variant_id: item.variant_id ?? null,
+                      quantity: item.quantity,
+                      ...(item.discount !== undefined ? { discount: item.discount } : {})
+                  }
+        )
     })
     assertNoError(error)
     return getTab(supabase, id)

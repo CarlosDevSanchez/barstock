@@ -50,6 +50,31 @@ export const productCreateSchema = z.object({
 })
 export const productUpdateSchema = productCreateSchema.partial()
 
+/** One product line inside a fixed-price package. Unique product_id per promotion (enforced here + DB UNIQUE). */
+export const promotionItemSchema = z.object({
+    product_id: z.guid(),
+    quantity: positiveInt(100_000)
+})
+
+const uniqueProductIds = (items: Array<{ product_id: string }>, ctx: z.RefinementCtx) => {
+    const seen = new Set<string>()
+    for (let i = 0; i < items.length; i++) {
+        const productId = items[i]!.product_id
+        if (seen.has(productId)) {
+            ctx.addIssue({ code: 'custom', message: 'validation.duplicateProduct', path: [i, 'product_id'] })
+        }
+        seen.add(productId)
+    }
+}
+
+export const promotionCreateSchema = z.object({
+    name: requiredText(200),
+    package_price: money,
+    is_active: z.boolean().optional(),
+    items: z.array(promotionItemSchema).min(1, 'validation.itemsRequired').max(50).superRefine(uniqueProductIds)
+})
+export const promotionUpdateSchema = promotionCreateSchema.partial()
+
 // ---- People
 export const customerCreateSchema = z.object({
     name: requiredText(120),
@@ -86,20 +111,37 @@ export const inventoryAdjustSchema = z.object({
 })
 
 // ---- Sales and refunds: the client sends ids and quantities only; prices, taxes and totals come from the DB.
+// Each line is either a product (optional line discount) or a promotion package — never both (expanded in create_sale).
 export const PAYMENT_METHODS = ['cash', 'card', 'ewallet'] as const
+export const saleItemSchema = z
+    .object({
+        product_id: z.guid().optional(),
+        promotion_id: z.guid().optional(),
+        variant_id: nullableUuid,
+        quantity: positiveInt(100_000),
+        discount: money.optional()
+    })
+    .superRefine((value, ctx) => {
+        const hasProduct = value.product_id !== undefined
+        const hasPromo = value.promotion_id !== undefined
+        if (hasProduct === hasPromo) {
+            ctx.addIssue({ code: 'custom', message: 'validation.saleItemXor' })
+        }
+    })
+    .transform(value => {
+        if (value.promotion_id !== undefined) {
+            return { promotion_id: value.promotion_id, quantity: value.quantity }
+        }
+        return {
+            product_id: value.product_id as string,
+            ...(value.variant_id !== undefined ? { variant_id: value.variant_id } : {}),
+            quantity: value.quantity,
+            ...(value.discount !== undefined ? { discount: value.discount } : {})
+        }
+    })
 export const saleSchema = z.object({
     customer_id: nullableUuid,
-    items: z
-        .array(
-            z.object({
-                product_id: z.guid(),
-                variant_id: nullableUuid,
-                quantity: positiveInt(100_000),
-                discount: money.optional()
-            })
-        )
-        .min(1, 'validation.cartEmpty')
-        .max(100),
+    items: z.array(saleItemSchema).min(1, 'validation.cartEmpty').max(100),
     payment_method: z.enum(PAYMENT_METHODS),
     discount: money.optional()
 })
@@ -165,6 +207,10 @@ export const productsQuerySchema = paginationSchema.extend({
     // Refreshes specific products (e.g. the current cart) with their live price and stock.
     ids: uuidList
 })
+export const promotionsQuerySchema = paginationSchema.extend({
+    active: queryBoolean,
+    ids: uuidList
+})
 export const inventoryQuerySchema = paginationSchema.extend({ low: queryBoolean })
 export const topProductsQuerySchema = z.object({
     days: positiveInt(366).default(30),
@@ -181,6 +227,8 @@ export const reportQuerySchema = z.object({ from: z.iso.date(), to: z.iso.date()
 // ---- Inferred inputs (what services receive after validation)
 export type ProductCreate = z.output<typeof productCreateSchema>
 export type ProductUpdate = z.output<typeof productUpdateSchema>
+export type PromotionCreate = z.output<typeof promotionCreateSchema>
+export type PromotionUpdate = z.output<typeof promotionUpdateSchema>
 export type CategoryCreate = z.output<typeof categoryCreateSchema>
 export type CategoryUpdate = z.output<typeof categoryUpdateSchema>
 export type CustomerCreate = z.output<typeof customerCreateSchema>
@@ -191,6 +239,7 @@ export type SaleInput = z.output<typeof saleSchema>
 export type InviteUserInput = z.output<typeof inviteUserSchema>
 export type UpdateUserInput = z.output<typeof updateUserSchema>
 export type ProductsQuery = z.output<typeof productsQuerySchema>
+export type PromotionsQuery = z.output<typeof promotionsQuerySchema>
 export type TopProductsQuery = z.output<typeof topProductsQuerySchema>
 export type InventoryQuery = z.output<typeof inventoryQuerySchema>
 export type OrdersQuery = z.output<typeof ordersQuerySchema>

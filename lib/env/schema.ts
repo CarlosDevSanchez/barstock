@@ -26,7 +26,12 @@ export const serverEnvSchema = clientEnvSchema
         // container from docker-compose.r2.yml) instead of the real https://<account>.r2.cloudflarestorage.com.
         // Independent of the four R2_* vars above (still required, even if their values are dummy local ones) and
         // never set in production. Never documented as required; leave unset to use real R2.
-        R2_ENDPOINT_OVERRIDE: z.string().url().optional()
+        R2_ENDPOINT_OVERRIDE: z.string().url().optional(),
+        // LOCAL DEV ONLY, independent of R2_ENDPOINT_OVERRIDE: the host the BROWSER uses for signed GET URLs
+        // (e.g. http://localhost:9000), as opposed to the Docker-internal host (http://r2:9000) the app container
+        // uses to reach MinIO for uploads/deletes. Falls back to R2_ENDPOINT_OVERRIDE when unset (same host works
+        // for both when the app itself runs outside Docker, e.g. `bun run dev` on the host).
+        R2_PUBLIC_ENDPOINT_OVERRIDE: z.string().url().optional()
     })
     .superRefine((value, ctx) => {
         const present = R2_KEYS.filter(key => value[key] !== undefined)

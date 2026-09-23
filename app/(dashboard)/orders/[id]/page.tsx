@@ -31,6 +31,7 @@ import { useMoney, useSession } from '@/components/session-provider'
 import { ApiError, errorMessage } from '@/lib/api/client'
 import { ordersApi, type OrderDetail } from '@/lib/api/orders'
 import { roleAtLeast } from '@/lib/auth/roles'
+import { groupOrderItemsByPromotion } from '@/lib/order-item-groups'
 import { refundSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 
@@ -278,17 +279,56 @@ export default function OrderDetailPage() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {order.items.map(item => (
-                                    <TableRow key={item.id}>
-                                        <TableCell className="font-medium">{item.product.name}</TableCell>
-                                        <TableCell>{item.variant?.name || '-'}</TableCell>
-                                        <TableCell className="text-right">{item.quantity}</TableCell>
-                                        <TableCell className="text-right">{money(item.unit_price)}</TableCell>
-                                        <TableCell className="text-right">{money(item.discount)}</TableCell>
-                                        <TableCell className="text-right">{money(item.tax)}</TableCell>
-                                        <TableCell className="text-right font-semibold">{money(item.total)}</TableCell>
-                                    </TableRow>
-                                ))}
+                                {groupOrderItemsByPromotion(order.items).flatMap(group => {
+                                    if (group.kind === 'product') {
+                                        const item = group.item
+                                        return [
+                                            <TableRow key={item.id}>
+                                                <TableCell className="font-medium">{item.product.name}</TableCell>
+                                                <TableCell>{item.variant?.name || '-'}</TableCell>
+                                                <TableCell className="text-right">{item.quantity}</TableCell>
+                                                <TableCell className="text-right">{money(item.unit_price)}</TableCell>
+                                                <TableCell className="text-right">{money(item.discount)}</TableCell>
+                                                <TableCell className="text-right">{money(item.tax)}</TableCell>
+                                                <TableCell className="text-right font-semibold">
+                                                    {money(item.total)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ]
+                                    }
+                                    return [
+                                        <TableRow key={`promo-${group.promotionId}`} className="bg-muted/40">
+                                            <TableCell className="font-medium" colSpan={2}>
+                                                {t('promoGroup', {
+                                                    name: group.name,
+                                                    count: group.packageQty
+                                                })}
+                                            </TableCell>
+                                            <TableCell className="text-right">{group.packageQty}</TableCell>
+                                            <TableCell className="text-right">—</TableCell>
+                                            <TableCell className="text-right">—</TableCell>
+                                            <TableCell className="text-right">—</TableCell>
+                                            <TableCell className="text-right font-semibold">
+                                                {money(group.total)}
+                                            </TableCell>
+                                        </TableRow>,
+                                        ...group.items.map(item => (
+                                            <TableRow key={item.id}>
+                                                <TableCell className="font-medium pl-6 text-muted-foreground">
+                                                    {item.product.name}
+                                                </TableCell>
+                                                <TableCell>{item.variant?.name || '-'}</TableCell>
+                                                <TableCell className="text-right">{item.quantity}</TableCell>
+                                                <TableCell className="text-right">{money(item.unit_price)}</TableCell>
+                                                <TableCell className="text-right">{money(item.discount)}</TableCell>
+                                                <TableCell className="text-right">{money(item.tax)}</TableCell>
+                                                <TableCell className="text-right font-semibold">
+                                                    {money(item.total)}
+                                                </TableCell>
+                                            </TableRow>
+                                        ))
+                                    ]
+                                })}
                             </TableBody>
                         </Table>
 

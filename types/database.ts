@@ -243,6 +243,7 @@ export type Database = {
           id: string
           order_id: string
           product_id: string
+          promotion_id: string | null
           quantity: number
           tax: number
           tax_rate: number | null
@@ -256,6 +257,7 @@ export type Database = {
           id?: string
           order_id: string
           product_id: string
+          promotion_id?: string | null
           quantity: number
           tax?: number
           tax_rate?: number | null
@@ -269,6 +271,7 @@ export type Database = {
           id?: string
           order_id?: string
           product_id?: string
+          promotion_id?: string | null
           quantity?: number
           tax?: number
           tax_rate?: number | null
@@ -289,6 +292,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
             referencedColumns: ["id"]
           },
           {
@@ -555,6 +565,75 @@ export type Database = {
         }
         Relationships: []
       }
+      promotion_items: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          promotion_id: string
+          quantity: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          promotion_id: string
+          quantity: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          promotion_id?: string
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotion_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promotion_items_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promotions: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          package_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          package_price: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          package_price?: number
+          updated_at?: string
+        }
+        Relationships: []
+      }
       purchase_order_items: {
         Row: {
           created_at: string
@@ -733,8 +812,10 @@ export type Database = {
         Row: {
           added_by: string | null
           created_at: string
+          discount: number
           id: string
           product_id: string
+          promotion_id: string | null
           quantity: number
           tab_id: string
           tax_rate: number
@@ -745,8 +826,10 @@ export type Database = {
         Insert: {
           added_by?: string | null
           created_at?: string
+          discount?: number
           id?: string
           product_id: string
+          promotion_id?: string | null
           quantity: number
           tab_id: string
           tax_rate: number
@@ -757,8 +840,10 @@ export type Database = {
         Update: {
           added_by?: string | null
           created_at?: string
+          discount?: number
           id?: string
           product_id?: string
+          promotion_id?: string | null
           quantity?: number
           tab_id?: string
           tax_rate?: number
@@ -772,6 +857,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tab_items_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
             referencedColumns: ["id"]
           },
           {

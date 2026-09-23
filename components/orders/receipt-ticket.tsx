@@ -2,6 +2,7 @@
 
 import { useLocale, useTranslations } from 'next-intl'
 import { taxBreakdown } from '@/lib/receipt'
+import { groupOrderItemsByPromotion } from '@/lib/order-item-groups'
 import { formatMoney } from '@/lib/money'
 import { moneyLocale } from '@/lib/i18n/config'
 import type { OrderDetail } from '@/lib/api/orders'
@@ -16,6 +17,7 @@ interface ReceiptTicketProps {
  * Print-only, non-fiscal 80mm POS ticket (`docs/06-roadmap/decisiones-pendientes.md` D21): no CUFE, no QR, no DIAN
  * resolution number, no cash-received/change. Hidden on screen (`hidden print:block`); `app/globals.css` sizes the
  * printed page to 80mm and `app/(dashboard)/orders/[id]/page.tsx` hides the normal on-screen view while printing.
+ * Promotion packages are grouped under the promo name; component lines are indented under it.
  */
 export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
     const t = useTranslations('orders')
@@ -34,6 +36,7 @@ export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
     }
     const rows = taxBreakdown(order.items)
     const itemCount = order.items.reduce((sum, item) => sum + item.quantity, 0)
+    const groups = groupOrderItemsByPromotion(order.items)
 
     return (
         <div
@@ -98,19 +101,39 @@ export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
                     </tr>
                 </thead>
                 <tbody>
-                    {order.items.map(item => (
-                        <tr key={item.id}>
-                            <td className="pr-1 align-top">{item.quantity}</td>
-                            <td className="pr-1 align-top">
-                                {item.product.name}
-                                {item.variant?.name ? ` (${item.variant.name})` : ''}
-                            </td>
-                            <td className="pr-1 align-top text-right">
-                                {item.tax_rate !== null ? `${Math.round(item.tax_rate * 100)}%` : '-'}
-                            </td>
-                            <td className="align-top text-right">{money(item.total)}</td>
-                        </tr>
-                    ))}
+                    {groups.map(group => {
+                        if (group.kind === 'product') {
+                            const item = group.item
+                            return (
+                                <tr key={item.id}>
+                                    <td className="pr-1 align-top">{item.quantity}</td>
+                                    <td className="pr-1 align-top">
+                                        {item.product.name}
+                                        {item.variant?.name ? ` (${item.variant.name})` : ''}
+                                    </td>
+                                    <td className="pr-1 align-top text-right">
+                                        {item.tax_rate !== null ? `${Math.round(item.tax_rate * 100)}%` : '-'}
+                                    </td>
+                                    <td className="align-top text-right">{money(item.total)}</td>
+                                </tr>
+                            )
+                        }
+                        return (
+                            <tr key={`promo-${group.promotionId}`}>
+                                <td className="pr-1 align-top">{group.packageQty}</td>
+                                <td className="pr-1 align-top" colSpan={2}>
+                                    <div className="font-bold">{t('receiptPromo', { name: group.name })}</div>
+                                    {group.items.map(item => (
+                                        <div key={item.id} className="pl-2">
+                                            {item.quantity}× {item.product.name}
+                                            {item.variant?.name ? ` (${item.variant.name})` : ''}
+                                        </div>
+                                    ))}
+                                </td>
+                                <td className="align-top text-right">{money(group.total)}</td>
+                            </tr>
+                        )
+                    })}
                 </tbody>
             </table>
 

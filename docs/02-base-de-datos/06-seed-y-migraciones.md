@@ -20,6 +20,10 @@
 | `20260923000002_receipt.sql` | `order_items.tax_rate` (tasa aplicada, informativa para el ticket) con trigger de respaldo y *backfill*; claves `store_tax_id` y `store_logo_key` en `settings` |
 | `20260923000003_product_image_key.sql` | `products.image_key` (clave R2 generada por el servidor, con `CHECK` de formato); `image_url` queda en desuso |
 | `20260923000004_fix_cross_task_integration.sql` | `_close_tab` y `create_sale` escriben `order_items.tax_rate` explícitamente (la de `tab_items`, congelada al añadir, en vez de la actual del producto); *backfill* de las órdenes cerradas desde una cuenta |
+| `20260924000001_promotions.sql` | `promotions` / `promotion_items` (paquetes), `order_items.promotion_id` nullable, RLS gerente+ escribe / cajero+ lee, soft-delete sin hard delete API |
+| `20260924000002_create_sale_promotions.sql` | `create_sale` expande `{promotion_id, quantity}` a líneas por producto con precio asignado (espejo de `lib/promotion-allocate.ts`) |
+| `20260924000003_sales_report_promo_margin.sql` | `sales_report`: `promo_markdown`, COGS, utilidad bruta, top promociones y cogs/profit por SKU |
+| `20260925000001_tab_add_promotions.sql` | `tab_items.promotion_id` + `discount`; unique con promo; `tab_add_items` expande paquetes; `_tab_totals` / `_close_tab` alineados |
 
 `supabase/legacy/` conserva `schema.sql` y `fix_rls_policies.sql` como historia (**no ejecutar**). `fix_rls_policies.sql` no se migra: `…03`
 elimina todas las políticas existentes, incluidas las que ese parche haya creado en una base ya desplegada.
