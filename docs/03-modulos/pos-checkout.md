@@ -27,6 +27,12 @@ un payload distinto responde 409. Corrige el doble cobro por respuesta perdida (
 [offline y sincronización](../06-roadmap/offline-y-sincronizacion.md), que además documenta el resto del diseño
 offline, todavía sin implementar).
 
+**Navegar sin red:** mientras `useOnlineStatus()` es `false`, la búsqueda y el filtro por categoría del catálogo (y
+las promociones, clientes y líneas del carrito) se leen en memoria de una instantánea (`GET /api/v1/pos/snapshot`,
+`hooks/use-pos-snapshot.ts`, persistida en IndexedDB) en vez de pedirlos al servidor — F1 en
+[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md). Cobrar sigue deshabilitado sin red
+(`OfflineDisabledButton`): la instantánea solo respalda navegar y armar el carrito, nunca el cobro en sí.
+
 **Cuentas abiertas:** el carrito (productos y/o promociones) se puede enviar a una cuenta vía `tab_add_items` (misma expansión de paquetes que `create_sale`). Ver [cuentas-abiertas](cuentas-abiertas.md) y [promociones](promociones.md).
 
 ## Lo que el cliente envía y lo que decide la BD

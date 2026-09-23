@@ -3,7 +3,7 @@ import { product, page, settings, userWithRole, IntlProvider } from '../helpers/
 import { setupDom } from '../helpers/dom'
 
 setupDom()
-const { cleanup, fireEvent, render, screen, waitFor, within } = await import('@testing-library/react')
+const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import('@testing-library/react')
 
 const mouse = product({
     id: 'p-mouse',
@@ -34,8 +34,16 @@ const createSale = mock(async (_body: unknown, _idempotencyKey?: string) => ({
     total: 80.27
 }))
 const push = mock(() => {})
+const snapshot = mock(async () => ({
+    generated_at: new Date().toISOString(),
+    products: catalog,
+    promotions: [],
+    categories: [],
+    customers: []
+}))
 
 void mock.module('@/lib/api/products', () => ({ productsApi: { list, top: async () => [] } }))
+void mock.module('@/lib/api/pos', () => ({ posApi: { snapshot } }))
 void mock.module('@/lib/api/promotions', () => ({
     promotionsApi: { list: async () => page([]) }
 }))
@@ -75,6 +83,9 @@ const addToCart = (name: string, qty = 1) => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 }
 const openCart = () => fireEvent.click(screen.getByRole('button', { name: /^Cart:/ }))
+const setOnline = (value: boolean) => {
+    Object.defineProperty(navigator, 'onLine', { value, configurable: true })
+}
 // Scoped to the cart dialog: the bubble's own hover preview repeats "Total", so an unscoped query is ambiguous.
 const cartDialog = () => screen.getByRole('dialog', { name: /^Cart/ })
 const cartSummary = (label: string) =>
@@ -84,6 +95,7 @@ beforeEach(() => {
     useCartStore.getState().clearCart()
     list.mockClear()
     createSale.mockClear()
+    setOnline(true)
 })
 afterEach(cleanup)
 
@@ -307,5 +319,27 @@ describe('POS cart', () => {
         const [firstKey] = createSale.mock.calls[0]?.slice(1) ?? []
         const [secondKey] = createSale.mock.calls[1]?.slice(1) ?? []
         expect(firstKey).toBe(secondKey)
+    })
+
+    test('browsing keeps working offline from the last snapshot, search and category filter included', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        await waitFor(() => expect(snapshot).toHaveBeenCalled())
+
+        act(() => {
+            setOnline(false)
+            window.dispatchEvent(new Event('offline'))
+        })
+
+        // Still there, from the snapshot fetched while online, not from the (now failing) live list.
+        expect(screen.getByText('Wireless Mouse')).toBeTruthy()
+        expect(screen.getByText('USB-C Cable')).toBeTruthy()
+
+        fireEvent.change(screen.getByPlaceholderText('Search by name, SKU, or barcode...'), {
+            target: { value: 'cable' }
+        })
+        // The 300ms debounce (useDebouncedValue) plus this suite's own overhead can outrun the default 1s timeout.
+        await waitFor(() => expect(screen.queryByText('Wireless Mouse')).toBeNull(), { timeout: 3000 })
+        expect(screen.getByText('USB-C Cable')).toBeTruthy()
     })
 })

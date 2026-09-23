@@ -15,6 +15,7 @@ import {
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { apiPatch, apiPost, errorMessage } from '@/lib/api/client'
+import { idbClearAll } from '@/lib/offline/db'
 import { clearOfflineCaches } from '@/lib/pwa/clear-cache'
 import { APP_LOCALES, type AppLocale } from '@/lib/i18n/config'
 import { useCartStore } from '@/stores/cart'
@@ -45,8 +46,8 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
         }
         // The cart belongs to the session: never leave it behind for the next person at this till.
         clearCart()
-        // Same reason, for a shared/kiosk device: the offline caches are per-session, not per-device.
-        await clearOfflineCaches()
+        // Same reason, for a shared/kiosk device: the offline caches and the POS snapshot are per-session, not per-device.
+        await Promise.all([clearOfflineCaches(), idbClearAll()])
         router.push('/login')
         router.refresh()
     }

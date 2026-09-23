@@ -21,7 +21,29 @@ export type ProductListItem = Omit<Tables<'products'>, 'image_url' | 'image_key'
  * delete route needs it to find the previous object to replace). */
 export type ProductDetail = Omit<Tables<'products'>, 'image_url'> & { image_url: string | null }
 
-const LIST_SELECT = '*, category:categories(id, name), inventory(quantity, variant_id)'
+/** Shared with `getPosSnapshot` (lib/server/services/pos.ts), so both return the same row shape. */
+export const LIST_SELECT = '*, category:categories(id, name), inventory(quantity, variant_id)'
+
+/** Turns raw `LIST_SELECT` rows into `ProductListItem`s (stock derived, image key swapped for a signed URL). */
+export async function mapProductRows<
+    T extends {
+        inventory: Array<{ quantity: number; variant_id: string | null }>
+        image_url: string | null
+        image_key: string | null
+    }
+>(
+    data: T[]
+): Promise<
+    Array<Omit<T, 'inventory' | 'image_url' | 'image_key'> & { stock: number | null; image_url: string | null }>
+> {
+    return Promise.all(
+        data.map(async ({ inventory, image_url: _legacy, image_key, ...product }) => ({
+            ...product,
+            stock: inventory.find(row => row.variant_id === null)?.quantity ?? null,
+            image_url: await trySignedGetUrl(image_key)
+        }))
+    )
+}
 
 export async function listProducts(
     supabase: AppSupabaseClient,
@@ -45,13 +67,7 @@ export async function listProducts(
     const { data, count, error } = await query.range(from, to)
     assertNoError(error)
 
-    const rows = await Promise.all(
-        data.map(async ({ inventory, image_url: _legacy, image_key, ...product }) => ({
-            ...product,
-            stock: inventory.find(row => row.variant_id === null)?.quantity ?? null,
-            image_url: await trySignedGetUrl(image_key)
-        }))
-    )
+    const rows = await mapProductRows(data)
     return { rows, total: count ?? 0 }
 }
 

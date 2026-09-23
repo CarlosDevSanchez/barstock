@@ -8,6 +8,7 @@ import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { currencyDecimals } from '@/lib/money'
+import type { Paginated } from '@/lib/api/types'
 import { categoriesApi } from '@/lib/api/categories'
 import { errorMessage } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
@@ -20,9 +21,11 @@ import { allocatePackagePrice } from '@/lib/promotion-allocate'
 import { useMoney, useSession } from '@/components/session-provider'
 import type { PaymentMethod } from '@/types'
 import { useCartStore } from '@/stores/cart'
-import { useApiQuery } from '@/hooks/use-api-query'
-import { useInfiniteApiList } from '@/hooks/use-infinite-api-list'
+import { type ApiQuery, useApiQuery } from '@/hooks/use-api-query'
+import { type InfiniteApiList, useInfiniteApiList } from '@/hooks/use-infinite-api-list'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
+import { useOnlineStatus } from '@/hooks/use-online-status'
+import { usePosSnapshot } from '@/hooks/use-pos-snapshot'
 import { AddToTabDialog } from '@/components/pos/add-to-tab-dialog'
 import { CartBubble } from '@/components/pos/cart-bubble'
 import { CartSheet, type CartLineView } from '@/components/pos/cart-sheet'
@@ -35,6 +38,28 @@ import { TopProducts } from '@/components/pos/top-products'
 const PAGE_SIZE = 30
 const ALL = 'all'
 
+function matchesOfflineProduct(product: ProductListItem, category: string, search: string): boolean {
+    if (category !== ALL && product.category_id !== category) return false
+    if (!search) return true
+    const needle = search.toLowerCase()
+    return (
+        product.name.toLowerCase().includes(needle) ||
+        product.sku.toLowerCase().includes(needle) ||
+        (product.barcode ?? '').toLowerCase().includes(needle)
+    )
+}
+
+/** Wraps an already-loaded array (from the offline snapshot) as the shape `useApiQuery` callers expect. */
+function snapshotQuery<T>(rows: T[], reload: () => void): ApiQuery<Paginated<T>> {
+    return {
+        data: { data: rows, page: 1, pageSize: Math.max(rows.length, 1), total: rows.length },
+        loading: false,
+        error: undefined,
+        stale: true,
+        reload
+    }
+}
+
 export default function POSPage() {
     const t = useTranslations('pos')
     const tTabs = useTranslations('tabs')
@@ -42,6 +67,8 @@ export default function POSPage() {
     const { settings } = useSession()
     const money = useMoney()
     const decimals = currencyDecimals(settings.currency)
+    const online = useOnlineStatus()
+    const snapshot = usePosSnapshot()
 
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedCategory, setSelectedCategory] = useState(ALL)
@@ -104,7 +131,11 @@ export default function POSPage() {
         clearPending()
     }
 
-    const catalog = useInfiniteApiList<ProductListItem>(
+    // Every query below reads live over the network while online, and falls back to the offline snapshot (F1,
+    // docs/06-roadmap/offline-y-sincronizacion.md) while not: search and category filtering happen in memory
+    // against whatever snapshot was last persisted (possibly stale, possibly none yet). Checkout stays disabled
+    // offline (OfflineDisabledButton in CartSheet), so nothing here needs to be correct enough to sell from.
+    const liveCatalog = useInfiniteApiList<ProductListItem>(
         (page, pageSize, signal) =>
             productsApi.list(
                 {
@@ -119,13 +150,33 @@ export default function POSPage() {
         JSON.stringify({ search, selectedCategory }),
         PAGE_SIZE
     )
-    const categories = useApiQuery(signal => categoriesApi.list({ pageSize: 100 }, signal), 'categories')
-    const customers = useApiQuery(signal => customersApi.list({ pageSize: 100 }, signal), 'customers')
+    const offlineCatalogItems = useMemo(
+        () =>
+            (snapshot.data?.products ?? []).filter(product => matchesOfflineProduct(product, selectedCategory, search)),
+        [snapshot.data, selectedCategory, search]
+    )
+    const catalog: InfiniteApiList<ProductListItem> = online
+        ? liveCatalog
+        : {
+              items: offlineCatalogItems,
+              total: offlineCatalogItems.length,
+              loading: false,
+              loadingMore: false,
+              error: undefined,
+              hasMore: false,
+              loadMore: () => {},
+              reload: snapshot.refresh
+          }
+
+    const liveCategories = useApiQuery(signal => categoriesApi.list({ pageSize: 100 }, signal), 'categories')
+    const categoryOptions = online ? (liveCategories.data?.data ?? []) : (snapshot.data?.categories ?? [])
+    const liveCustomers = useApiQuery(signal => customersApi.list({ pageSize: 100 }, signal), 'customers')
     const openTabs = useApiQuery(signal => tabsApi.list({ status: 'open', pageSize: 100 }, signal), 'open-tabs')
-    const activePromos = useApiQuery(
+    const liveActivePromos = useApiQuery(
         signal => promotionsApi.list({ pageSize: 100, active: true }, signal),
         'pos-promotions'
     )
+    const activePromos = online ? liveActivePromos : snapshotQuery(snapshot.data?.promotions ?? [], snapshot.refresh)
 
     const productIds = items
         .filter(item => item.kind === 'product')
@@ -137,17 +188,31 @@ export default function POSPage() {
         .map(item => item.promotionId)
         .sort()
         .join(',')
-    const cartProducts = useApiQuery(
+    const liveCartProducts = useApiQuery(
         signal => (productIds ? productsApi.list({ ids: productIds, pageSize: 100 }, signal) : Promise.resolve(null)),
         `cart-products:${productIds}`
     )
-    const cartPromos = useApiQuery(
+    const liveCartPromos = useApiQuery(
         signal =>
             promoIds
                 ? promotionsApi.list({ ids: promoIds, pageSize: 100, active: true }, signal)
                 : Promise.resolve(null),
         `cart-promos:${promoIds}`
     )
+    const cartIds = new Set(productIds ? productIds.split(',') : [])
+    const cartPromoIds = new Set(promoIds ? promoIds.split(',') : [])
+    const cartProducts = online
+        ? liveCartProducts
+        : snapshotQuery(
+              (snapshot.data?.products ?? []).filter(product => cartIds.has(product.id)),
+              snapshot.refresh
+          )
+    const cartPromos = online
+        ? liveCartPromos
+        : snapshotQuery(
+              (snapshot.data?.promotions ?? []).filter(promotion => cartPromoIds.has(promotion.id)),
+              snapshot.refresh
+          )
 
     const products = useMemo(() => {
         const map = new Map<string, ProductListItem>()
@@ -229,7 +294,9 @@ export default function POSPage() {
         }
     }
     const totals = previewTotals(previewLines, discount, decimals)
-    const activeCustomers = (customers.data?.data ?? []).filter(customer => customer.is_active)
+    const activeCustomers = online
+        ? (liveCustomers.data?.data ?? []).filter(customer => customer.is_active)
+        : (snapshot.data?.customers ?? [])
     const canAddToTab = lines.length > 0 && !blocked
 
     const handleCheckout = async () => {
@@ -300,7 +367,7 @@ export default function POSPage() {
                     </SelectTrigger>
                     <SelectContent>
                         <SelectItem value={ALL}>{t('allCategories')}</SelectItem>
-                        {(categories.data?.data ?? []).map(category => (
+                        {categoryOptions.map(category => (
                             <SelectItem key={category.id} value={category.id}>
                                 {category.name}
                             </SelectItem>

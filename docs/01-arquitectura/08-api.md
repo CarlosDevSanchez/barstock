@@ -58,7 +58,8 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | `suppliers`, `suppliers/[id]` | GET/POST/PATCH · DELETE | gerente · admin | DELETE = borrado lógico (`deleted_at`) |
 | `inventory` | GET | cajero | `?low` y `summary` (`total_units`, `item_count`, `low_stock_count`, `stock_value`) sobre todo el conjunto filtrado |
 | `inventory/[id]/adjust` | POST | gerente | RPC `adjust_inventory`; `{ delta, reason }` |
-| `sales` | POST | cajero | RPC `create_sale`; ítems producto **o** promo; precios/totales de la BD (promo → precio asignado) |
+| `sales` | POST | cajero | RPC `create_sale`; ítems producto **o** promo; precios/totales de la BD (promo → precio asignado); idempotente vía cabecera `Idempotency-Key` |
+| `pos/snapshot` | GET | cajero | Productos/promociones activos, categorías y clientes activos sin paginar (tope 2000 filas/tabla); respalda el POS sin red ([pos-checkout](../03-modulos/pos-checkout.md)) |
 | `orders`, `orders/[id]` | GET | cajero | Cajero: solo las suyas (RLS). `?status&customer_id&from&to&q` (q = número de orden) |
 | `orders/[id]/refund` | POST | gerente | RPC `refund_order`; `{ reason }`; idempotente |
 | `tabs`, `tabs/[id]` | GET/POST · GET | cajero | Cuentas abiertas ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)); `?status`; el detalle incluye ítems, personas, pagos y totales (`tab_summary`) |

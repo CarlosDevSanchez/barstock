@@ -1,10 +1,11 @@
 # PWA y modo offline (lectura)
 
-> Nuevo en la etapa 2 · Confianza: **[Verificado]** (`test/components/use-online-status.test.tsx`, `test/components/connection-status.test.tsx`, `test/components/install-banner.test.tsx`, `lib/api/client.test.ts`, `e2e/offline.e2e.ts`).
+> Nuevo en la etapa 2, instantánea del POS (F1) añadida después · Confianza: **[Verificado]** (`test/components/use-online-status.test.tsx`, `test/components/connection-status.test.tsx`, `test/components/install-banner.test.tsx`, `lib/api/client.test.ts`, `test/components/use-pos-snapshot.test.tsx`, `test/components/pos.test.tsx`, `test/integration/pos-snapshot.test.ts`, `lib/offline/db.test.ts`, `e2e/offline.e2e.ts`).
 
 La app es instalable (escritorio y Android/iOS) y sigue mostrando las **vistas ya visitadas** sin red, con avisos claros
-de conexión. **No hay cola de escrituras sin red**: eso queda documentado como plan en
-[offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md) (D16 en
+de conexión. El POS además mantiene una instantánea propia del catálogo (F1, ver más abajo) para poder navegar y
+buscar productos sin red aunque no se haya visitado esa búsqueda exacta antes. **No hay cola de escrituras sin red**:
+eso queda documentado como plan en [offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md) (D16 en
 [decisiones-pendientes](../06-roadmap/decisiones-pendientes.md)).
 
 ## Piezas
@@ -21,6 +22,27 @@ de conexión. **No hay cola de escrituras sin red**: eso queda documentado como 
 | `hooks/use-online-status.ts` | `useSyncExternalStore` sobre `navigator.onLine` y los eventos `online`/`offline` |
 | `components/pwa/offline-disabled-button.tsx` | Botón que se deshabilita solo (con tooltip) mientras no hay red: usado en cobrar, añadir/pagar cuenta y ajustar inventario |
 | `lib/pwa/clear-cache.ts` | Borra las cachés de HTML/API al cerrar sesión (dispositivo compartido) |
+| `lib/offline/db.ts` | Envoltorio mínimo de IndexedDB (dos stores: `snapshot`, `outbox` — este último reservado, sin usar todavía). No-op si `indexedDB` no existe (pestaña privada, entorno de test) |
+| `hooks/use-pos-snapshot.ts` + `app/api/v1/pos/snapshot/route.ts` | Instantánea del catálogo del POS (F1, ver abajo) |
+
+## Instantánea del catálogo del POS (F1)
+
+`GET /api/v1/pos/snapshot` (`lib/server/services/pos.ts`) devuelve de una vez los productos y promociones activos, las
+categorías y los clientes activos, en la misma forma que ya usan `/products` y `/promotions` (sin paginar; pensado
+para el catálogo completo de un solo negocio, tope de 2000 filas por tabla). `hooks/use-pos-snapshot.ts` la pide al
+montar el POS, cada 5 minutos y al volver la conexión, y la persiste en IndexedDB (`lib/offline/db.ts`) para que esté
+disponible de inmediato en la siguiente carga, incluso sin red.
+
+`app/(dashboard)/pos/page.tsx` usa esta instantánea **solo mientras `useOnlineStatus()` es `false`**: la búsqueda y el
+filtro por categoría pasan a hacerse en memoria contra el último catálogo guardado, en vez de pedir `/products` con
+paginación. Corrige el error #4 del diseño original de la cola offline (la caché del service worker está indexada por
+URL+query exacta: una búsqueda nueva sin red no tenía de dónde salir). Cobrar sigue deshabilitado sin red
+(`OfflineDisabledButton`): la instantánea solo respalda **navegar y armar el carrito**, nunca el cálculo final de
+precios/stock, que sigue siendo responsabilidad exclusiva del servidor. Ver F1 en
+[offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md).
+
+El logout borra la instantánea (`idbClearAll`, junto con `clearOfflineCaches`): es un dispositivo compartido, no debe
+quedar el catálogo (ni los clientes, que incluyen email/teléfono) de la sesión anterior.
 
 ## Pantalla completa (modo standalone)
 
@@ -78,8 +100,10 @@ datos silenciosa, solo un paso menos preventivo que en los cuatro puntos de arri
 ## Pruebas
 
 - Unitarias: `hooks/use-online-status` (evento `online`/`offline`), `lib/api/client.test.ts` (mapeo `network_offline`
-  y `X-From-Cache` → `isStale`).
-- Componente: `components/connection-status.tsx` (badge + toasts).
+  y `X-From-Cache` → `isStale`), `lib/offline/db.test.ts` (no-op sin `indexedDB`).
+- Componente: `components/connection-status.tsx` (badge + toasts); `use-pos-snapshot.test.tsx` (fetch al montar,
+  `refresh()`, una petición fallida conserva lo ya cargado); `pos.test.tsx` (navegar y buscar sin red sigue
+  funcionando desde la instantánea).
 - E2E (`e2e/offline.e2e.ts`, requiere el build de producción): visita `/products` y `/pos` con red, agrega un producto
   al carrito, fuerza `context.setOffline(true)`, comprueba que la vista se sigue viendo, el badge y el toast avisan, y
   el botón de cobrar está deshabilitado; luego `setOffline(false)` y comprueba el toast de reconexión.
