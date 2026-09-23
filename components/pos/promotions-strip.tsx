@@ -68,11 +68,11 @@ export function PromotionsStrip({
                     ))}
                 </div>
             ) : (
-                <div className="flex gap-3 overflow-x-auto pb-1 -mx-1 px-1 pt-2">
+                <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-1 px-4 pt-2 max-sm:mx-0 max-sm:px-0">
                     {promotions.map(promo => {
                         const key = pendingKey(promo.id)
                         return (
-                            <div key={promo.id} className="w-44 h-full shrink-0">
+                            <div key={promo.id} className="w-44 h-full shrink-0 snap-start">
                                 <PromotionCard
                                     promotion={promo}
                                     pending={pendingId === key}

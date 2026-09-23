@@ -1,6 +1,10 @@
 {
   "nav": {
     "label": "Navegación principal",
+    "more": "Más",
+    "back": "Volver",
+    "toggle": "Mostrar u ocultar barra lateral",
+    "mobileLabel": "Navegación móvil",
     "dashboard": "Panel",
     "pos": "Caja",
     "products": "Productos",
@@ -30,6 +34,8 @@
     "delete": "Eliminar",
     "edit": "Editar",
     "actions": "Acciones",
+    "accountMenu": "Menú de la cuenta",
+    "filters": "Filtros",
     "status": "Estado",
     "active": "Activo",
     "inactive": "Inactivo",

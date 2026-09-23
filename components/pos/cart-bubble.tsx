@@ -39,7 +39,7 @@ export function CartBubble({ itemCount, total, lines, hasProblem, openTabsLabel,
     }
 
     return (
-        <div className="fixed bottom-6 right-6 z-40 group">
+        <div className="fixed bottom-[calc(4rem+env(safe-area-inset-bottom)+1rem)] right-4 z-40 group touch-manipulation lg:bottom-6 lg:right-6">
             {itemCount > 0 && (
                 <div className="hidden sm:block absolute bottom-full right-0 mb-2 w-64 rounded-xl border bg-popover p-3 text-sm shadow-lg opacity-0 pointer-events-none -translate-y-1 transition-all group-hover:opacity-100 group-hover:translate-y-0 group-focus-within:opacity-100 group-focus-within:translate-y-0">
                     <ul className="space-y-1">
@@ -63,20 +63,22 @@ export function CartBubble({ itemCount, total, lines, hasProblem, openTabsLabel,
                 onTransitionEnd={() => setBump(false)}
                 aria-label={t('cartBubble', { count: itemCount, total: money(total) })}
                 className={cn(
-                    'flex items-center gap-2 rounded-full shadow-xl px-4 py-3 text-white transition-transform duration-300',
+                    'flex max-w-[calc(100vw-2rem)] items-center gap-2 rounded-full shadow-xl px-4 py-3 text-white transition-transform duration-300',
                     hasProblem ? 'bg-red-600 hover:bg-red-700' : 'bg-emerald-600 hover:bg-emerald-700',
                     bump && 'scale-110'
                 )}
             >
-                <span className="relative">
+                <span className="relative shrink-0">
                     <ShoppingCart className="h-6 w-6" />
                     <span className="absolute -top-2 -right-2 flex h-5 min-w-5 items-center justify-center rounded-full bg-white px-1 text-xs font-bold text-emerald-700">
                         {itemCount}
                     </span>
                 </span>
-                {itemCount > 0 && <span className="font-semibold">{money(total)}</span>}
+                {itemCount > 0 && <span className="truncate font-semibold">{money(total)}</span>}
                 {openTabsLabel && (
-                    <span className="rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">{openTabsLabel}</span>
+                    <span className="shrink-0 truncate rounded-full bg-white/20 px-2 py-0.5 text-xs font-medium">
+                        {openTabsLabel}
+                    </span>
                 )}
             </button>
         </div>

@@ -28,9 +28,9 @@ const linksFor = (role: 'cashier' | 'manager' | 'admin') => {
             </AppShell>
         </IntlProvider>
     )
-    // A single <nav>: the mobile sheet reuses the same tree instead of rendering a second copy.
-    expect(screen.getAllByRole('navigation')).toHaveLength(1)
-    const nav = screen.getByRole('navigation')
+    // Two <nav>s: the sidebar's full nav (also reused by the mobile "More" sheet) and the mobile bottom nav.
+    expect(screen.getAllByRole('navigation')).toHaveLength(2)
+    const nav = screen.getByRole('navigation', { name: 'Main navigation' })
     return Array.from(nav.querySelectorAll('a')).map(link => link.textContent)
 }
 

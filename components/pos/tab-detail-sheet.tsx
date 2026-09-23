@@ -280,7 +280,10 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                         </SheetTitle>
                                     </SheetHeader>
 
-                                    <div className="px-4 pb-4 space-y-4 flex-1">
+                                    <div
+                                        className="px-4 space-y-4 flex-1"
+                                        style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+                                    >
                                         {/* Items */}
                                         <div>
                                             <h3 className="text-sm font-semibold mb-2">{t('items')}</h3>
@@ -456,7 +459,7 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                                 </OfflineDisabledButton>
 
                                                 {tab.members.length > 1 && (
-                                                    <div className="flex gap-2 text-xs">
+                                                    <div className="flex flex-wrap gap-2 text-xs">
                                                         <Button
                                                             type="button"
                                                             size="sm"

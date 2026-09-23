@@ -42,6 +42,8 @@ const renderPage = (role: 'cashier' | 'manager', storeSettings = settings) =>
     )
 
 const type = (label: string, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } })
+// Two "Add Product" buttons exist (desktop + mobile FAB); jsdom applies no CSS, so both are visible to queries.
+const clickAddProduct = () => fireEvent.click(screen.getAllByRole('button', { name: /Add Product/ })[0]!)
 
 beforeEach(() => {
     create.mockClear()
@@ -53,18 +55,18 @@ afterEach(cleanup)
 describe('who can edit the catalog', () => {
     test('a cashier only browses: no add, edit or delete controls and no cost column', async () => {
         renderPage('cashier')
-        await screen.findByText('Wireless Mouse')
-        expect(screen.queryByRole('button', { name: /Add Product/ })).toBeNull()
-        expect(screen.queryByRole('button', { name: /^Edit / })).toBeNull()
-        expect(screen.queryByRole('button', { name: /^Delete / })).toBeNull()
+        await screen.findAllByText('Wireless Mouse')
+        expect(screen.queryAllByRole('button', { name: /Add Product/ })).toHaveLength(0)
+        expect(within(screen.getByRole('table')).queryByRole('button', { name: /^Edit / })).toBeNull()
+        expect(within(screen.getByRole('table')).queryByRole('button', { name: /^Delete / })).toBeNull()
         expect(screen.queryByText('Cost')).toBeNull()
     })
 
     test('a manager sees the controls and the cost', async () => {
         renderPage('manager')
-        await screen.findByText('Wireless Mouse')
-        expect(screen.getByRole('button', { name: /Add Product/ })).toBeTruthy()
-        expect(screen.getByRole('button', { name: 'Edit Wireless Mouse' })).toBeTruthy()
+        await screen.findAllByText('Wireless Mouse')
+        expect(screen.getAllByRole('button', { name: /Add Product/ })[0]).toBeTruthy()
+        expect(within(screen.getByRole('table')).getByRole('button', { name: 'Edit Wireless Mouse' })).toBeTruthy()
         expect(screen.getByText('Cost')).toBeTruthy()
     })
 })
@@ -72,15 +74,15 @@ describe('who can edit the catalog', () => {
 describe('product form validation', () => {
     const openNewProduct = async () => {
         renderPage('manager')
-        await screen.findByText('Wireless Mouse')
-        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        await screen.findAllByText('Wireless Mouse')
+        clickAddProduct()
         return screen.findByRole('dialog')
     }
 
     test('a new product starts with the store default tax rate from Settings', async () => {
         renderPage('manager', { ...settings, tax_rate: 0.0725 })
-        await screen.findByText('Wireless Mouse')
-        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        await screen.findAllByText('Wireless Mouse')
+        clickAddProduct()
         await screen.findByRole('dialog')
         expect((screen.getByLabelText('Tax Rate (%)') as HTMLInputElement).value).toBe('7.25')
     })
@@ -132,8 +134,8 @@ describe('product form validation', () => {
 
     test('editing starts from the stored values (tax shown as a percentage) and PATCHes', async () => {
         renderPage('manager')
-        await screen.findByText('Wireless Mouse')
-        fireEvent.click(screen.getByRole('button', { name: 'Edit Wireless Mouse' }))
+        await screen.findAllByText('Wireless Mouse')
+        fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: 'Edit Wireless Mouse' }))
         const dialog = await screen.findByRole('dialog')
 
         expect((screen.getByLabelText('Tax Rate (%)') as HTMLInputElement).value).toBe('7.25')
@@ -150,16 +152,16 @@ describe('product form validation', () => {
 describe('image picker visibility (storage_configured)', () => {
     test('shows the image picker when storage is configured (the default fixture)', async () => {
         renderPage('manager')
-        await screen.findByText('Wireless Mouse')
-        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        await screen.findAllByText('Wireless Mouse')
+        clickAddProduct()
         const dialog = await screen.findByRole('dialog')
         expect(within(dialog).getByRole('button', { name: 'Add Image' })).toBeTruthy()
     })
 
     test('hides the image picker when R2 is not configured, instead of letting someone pick a file that will 503', async () => {
         renderPage('manager', { ...settings, storage_configured: false })
-        await screen.findByText('Wireless Mouse')
-        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        await screen.findAllByText('Wireless Mouse')
+        clickAddProduct()
         const dialog = await screen.findByRole('dialog')
         expect(within(dialog).queryByRole('button', { name: 'Add Image' })).toBeNull()
         expect(within(dialog).queryByRole('button', { name: 'Change Image' })).toBeNull()
@@ -169,8 +171,8 @@ describe('image picker visibility (storage_configured)', () => {
 describe('SKU suggestion', () => {
     const openNewProduct = async () => {
         renderPage('manager')
-        await screen.findByText('Wireless Mouse')
-        fireEvent.click(screen.getByRole('button', { name: /Add Product/ }))
+        await screen.findAllByText('Wireless Mouse')
+        clickAddProduct()
         return screen.findByRole('dialog')
     }
 
@@ -204,8 +206,8 @@ describe('SKU suggestion', () => {
 
     test('editing an existing product never autofills the SKU when the name changes', async () => {
         renderPage('manager')
-        await screen.findByText('Wireless Mouse')
-        fireEvent.click(screen.getByRole('button', { name: 'Edit Wireless Mouse' }))
+        await screen.findAllByText('Wireless Mouse')
+        fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: 'Edit Wireless Mouse' }))
         await screen.findByRole('dialog')
 
         expect((screen.getByLabelText('SKU *') as HTMLInputElement).value).toBe('ELEC-001')
@@ -268,8 +270,8 @@ describe('SKU suggestion', () => {
 describe('deleting', () => {
     test('asks for confirmation first and only then deletes', async () => {
         renderPage('manager')
-        await screen.findByText('Wireless Mouse')
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Wireless Mouse' }))
+        await screen.findAllByText('Wireless Mouse')
+        fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: 'Delete Wireless Mouse' }))
 
         const dialog = await screen.findByRole('alertdialog')
         expect(within(dialog).getByText('Delete product?')).toBeTruthy()
@@ -279,7 +281,7 @@ describe('deleting', () => {
         await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
         expect(remove).not.toHaveBeenCalled()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Wireless Mouse' }))
+        fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: 'Delete Wireless Mouse' }))
         fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
         await waitFor(() => expect(remove).toHaveBeenCalledWith('p-1'))
     })

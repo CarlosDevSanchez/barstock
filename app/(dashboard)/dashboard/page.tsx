@@ -45,8 +45,8 @@ export default function DashboardPage() {
             </div>
 
             {/* KPI Cards */}
-            <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4">
-                <Card className="rounded-2xl shadow-sm border-emerald-100 dark:border-emerald-900/30">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+                <Card className="rounded-2xl border-emerald-100 dark:border-emerald-900/30">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t('todayRevenue')}</CardTitle>
                         <DollarSign className="h-4 w-4 text-emerald-600" />
@@ -60,7 +60,7 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl shadow-sm">
+                <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t('monthlyRevenue')}</CardTitle>
                         <DollarSign className="h-4 w-4 text-blue-600" />
@@ -71,7 +71,7 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl shadow-sm">
+                <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t('customers')}</CardTitle>
                         <Users className="h-4 w-4 text-purple-600" />
@@ -82,7 +82,7 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl shadow-sm border-red-100 dark:border-red-900/30">
+                <Card className="rounded-2xl border-red-100 dark:border-red-900/30">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t('lowStock')}</CardTitle>
                         <AlertTriangle className="h-4 w-4 text-red-600" />
@@ -95,14 +95,14 @@ export default function DashboardPage() {
             </div>
 
             {/* Charts */}
-            <div className="grid gap-4 md:grid-cols-2">
-                <Card className="rounded-2xl shadow-sm">
+            <div className="grid gap-4 lg:grid-cols-2">
+                <Card className="min-w-0 rounded-2xl">
                     <CardHeader>
                         <CardTitle>{t('salesOverview')}</CardTitle>
                         <CardDescription>{t('revenueLast7Days')}</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={300}>
+                    <CardContent className="h-[220px] lg:h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
                             <LineChart data={salesData}>
                                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                                 <XAxis dataKey="date" className="text-xs" />
@@ -114,13 +114,13 @@ export default function DashboardPage() {
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl shadow-sm">
+                <Card className="min-w-0 rounded-2xl">
                     <CardHeader>
                         <CardTitle>{t('topProducts')}</CardTitle>
                         <CardDescription>{t('bestSelling')}</CardDescription>
                     </CardHeader>
-                    <CardContent>
-                        <ResponsiveContainer width="100%" height={300}>
+                    <CardContent className="h-[220px] lg:h-[300px]">
+                        <ResponsiveContainer width="100%" height="100%">
                             <BarChart data={stats.top_products}>
                                 <CartesianGrid strokeDasharray="3 3" className="stroke-muted" />
                                 <XAxis dataKey="name" className="text-xs" />
@@ -134,7 +134,7 @@ export default function DashboardPage() {
             </div>
 
             {/* Low Stock Alerts */}
-            <Card className="rounded-2xl shadow-sm">
+            <Card className="rounded-2xl">
                 <CardHeader>
                     <CardTitle className="flex items-center gap-2">
                         <AlertTriangle className="h-5 w-5 text-red-600" />
@@ -150,20 +150,20 @@ export default function DashboardPage() {
                             {stats.low_stock_items.map(item => (
                                 <div
                                     key={item.inventory_id}
-                                    className="flex items-center justify-between p-3 rounded-xl bg-muted"
+                                    className="flex items-center justify-between gap-3 p-3 rounded-xl bg-muted"
                                 >
-                                    <div className="flex items-center gap-3">
-                                        <div className="p-2 rounded-lg bg-background">
+                                    <div className="flex min-w-0 items-center gap-3">
+                                        <div className="p-2 rounded-lg bg-background shrink-0">
                                             <Package className="h-4 w-4" />
                                         </div>
-                                        <div>
-                                            <p className="font-medium">{item.product_name}</p>
-                                            <p className="text-sm text-muted-foreground">
+                                        <div className="min-w-0">
+                                            <p className="truncate font-medium">{item.product_name}</p>
+                                            <p className="truncate text-sm text-muted-foreground">
                                                 {t('sku', { sku: item.sku })}
                                             </p>
                                         </div>
                                     </div>
-                                    <div className="text-right">
+                                    <div className="shrink-0 text-right">
                                         <p
                                             className={cn(
                                                 'font-bold',

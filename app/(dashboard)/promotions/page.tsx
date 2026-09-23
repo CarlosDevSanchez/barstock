@@ -6,10 +6,9 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Gift, Plus, Search, Edit, Trash2 } from 'lucide-react'
+import { Gift, Plus, Edit, Trash2 } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Form } from '@/components/ui/form'
@@ -19,6 +18,10 @@ import { SelectField, SwitchField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
+import { PageHeader } from '@/components/page-header'
+import { FilterBar } from '@/components/filter-bar'
+import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useMoney, useSession } from '@/components/session-provider'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
 import { promotionsApi, type PromotionListItem } from '@/lib/api/promotions'
@@ -143,13 +146,13 @@ function PromotionDialog({ promotion, productOptions, productById, onClose, onSa
                                     </Button>
                                 </div>
                                 {fields.map((field, index) => (
-                                    <div key={field.id} className="flex items-end gap-2">
+                                    <div key={field.id} className="flex flex-wrap items-end gap-2">
                                         <SelectField
                                             name={`items.${index}.product_id`}
                                             label={t('product')}
                                             placeholder={t('selectProduct')}
                                             options={productOptions}
-                                            className="flex-1"
+                                            className="min-w-40 flex-1"
                                         />
                                         <TextField
                                             name={`items.${index}.quantity`}
@@ -241,176 +244,214 @@ export default function PromotionsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold">{t('title')}</h1>
-                    <p className="text-muted-foreground">{t('subtitle')}</p>
-                </div>
-                {canManage && (
-                    <Button onClick={() => setEditing(null)}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        {t('addPromotion')}
-                    </Button>
-                )}
-            </div>
+            <PageHeader
+                title={t('title')}
+                description={t('subtitle')}
+                primaryAction={
+                    canManage ? { label: t('addPromotion'), icon: Plus, onClick: () => setEditing(null) } : undefined
+                }
+            />
 
-            <Card className="rounded-2xl p-6">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder={t('searchPlaceholder')}
-                            value={searchQuery}
-                            onChange={e => {
-                                setSearchQuery(e.target.value)
-                                reset()
-                            }}
-                            className="pl-10"
-                        />
-                    </div>
-                </div>
+            <FilterBar
+                search={searchQuery}
+                onSearchChange={value => {
+                    setSearchQuery(value)
+                    reset()
+                }}
+                searchPlaceholder={t('searchPlaceholder')}
+            />
 
-                {promotions.error ? (
-                    <QueryError error={promotions.error} onRetry={promotions.reload} />
-                ) : !promotions.data ? (
-                    <PageSpinner />
-                ) : (
-                    <>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>{t('colPromotion')}</TableHead>
-                                    <TableHead>{t('colPrice')}</TableHead>
-                                    <TableHead>{t('colItems')}</TableHead>
-                                    <TableHead>{t('colPackages')}</TableHead>
-                                    <TableHead>{tc('status')}</TableHead>
-                                    {canManage && <TableHead className="text-right">{tc('actions')}</TableHead>}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {promotions.data.data.map(promotion => {
-                                    const inactiveComponents = promotion.items.filter(
-                                        item => !item.product?.is_active || item.product.deleted_at
-                                    )
-                                    const bottlenecks = new Set(packageBottleneckProductIds(componentRows(promotion)))
-                                    return (
-                                        <TableRow key={promotion.id}>
-                                            <TableCell>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
-                                                        <Gift className="h-4 w-4 text-amber-700 dark:text-amber-400" />
-                                                    </div>
-                                                    <div>
-                                                        <span className="font-medium">{promotion.name}</span>
-                                                        {inactiveComponents.length > 0 && (
-                                                            <p className="text-xs text-amber-700 dark:text-amber-400">
-                                                                {t('unavailableComponents', {
-                                                                    count: inactiveComponents.length
-                                                                })}
-                                                            </p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>{money(promotion.package_price)}</TableCell>
-                                            <TableCell>
-                                                <div className="space-y-0.5 text-sm">
-                                                    {promotion.items.map(item => {
-                                                        const isBottleneck = bottlenecks.has(item.product_id)
-                                                        const stockLabel =
-                                                            item.product?.stock === null ||
-                                                            item.product?.stock === undefined
-                                                                ? t('componentStockUnknown')
-                                                                : t('componentStock', {
-                                                                      count: item.product.stock
-                                                                  })
-                                                        return (
-                                                            <div
-                                                                key={item.id}
-                                                                className={cn(
-                                                                    'flex flex-wrap items-center gap-1.5',
-                                                                    isBottleneck && 'font-medium'
-                                                                )}
-                                                            >
-                                                                <span>
-                                                                    {item.quantity}×{' '}
-                                                                    {item.product?.name ?? t('unknownProduct')}
-                                                                </span>
-                                                                <span className="text-xs text-muted-foreground">
-                                                                    · {stockLabel}
-                                                                </span>
-                                                                {isBottleneck && promotion.available !== null && (
-                                                                    <Badge
-                                                                        variant="outline"
-                                                                        className="text-[10px] text-amber-800 border-amber-300"
-                                                                    >
-                                                                        {t('bottleneck')}
-                                                                    </Badge>
+            {promotions.error ? (
+                <QueryError error={promotions.error} onRetry={promotions.reload} />
+            ) : !promotions.data ? (
+                <PageSpinner />
+            ) : (
+                <>
+                    <ResponsiveList
+                        items={promotions.data.data}
+                        keyOf={promotion => promotion.id}
+                        table={
+                            <Card className="rounded-2xl p-6">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>{t('colPromotion')}</TableHead>
+                                            <TableHead>{t('colPrice')}</TableHead>
+                                            <TableHead>{t('colItems')}</TableHead>
+                                            <TableHead>{t('colPackages')}</TableHead>
+                                            <TableHead>{tc('status')}</TableHead>
+                                            {canManage && <TableHead className="text-right">{tc('actions')}</TableHead>}
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {promotions.data.data.map(promotion => {
+                                            const inactiveComponents = promotion.items.filter(
+                                                item => !item.product?.is_active || item.product.deleted_at
+                                            )
+                                            const bottlenecks = new Set(
+                                                packageBottleneckProductIds(componentRows(promotion))
+                                            )
+                                            return (
+                                                <TableRow key={promotion.id}>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 rounded-lg bg-amber-100 dark:bg-amber-900/30">
+                                                                <Gift className="h-4 w-4 text-amber-700 dark:text-amber-400" />
+                                                            </div>
+                                                            <div>
+                                                                <span className="font-medium">{promotion.name}</span>
+                                                                {inactiveComponents.length > 0 && (
+                                                                    <p className="text-xs text-amber-700 dark:text-amber-400">
+                                                                        {t('unavailableComponents', {
+                                                                            count: inactiveComponents.length
+                                                                        })}
+                                                                    </p>
                                                                 )}
                                                             </div>
-                                                        )
-                                                    })}
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                {promotion.available === null ? (
-                                                    <span className="text-muted-foreground">
-                                                        {t('packagesUnavailable')}
-                                                    </span>
-                                                ) : (
-                                                    <Badge
-                                                        variant={promotion.available <= 0 ? 'destructive' : 'secondary'}
-                                                    >
-                                                        {t('packagesAvailable', { count: promotion.available })}
-                                                    </Badge>
-                                                )}
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant={promotion.is_active ? 'default' : 'secondary'}>
-                                                    {promotion.is_active ? tc('active') : tc('inactive')}
-                                                </Badge>
-                                            </TableCell>
-                                            {canManage && (
-                                                <TableCell className="text-right">
-                                                    <div className="flex justify-end gap-2">
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            aria-label={t('editAria', { name: promotion.name })}
-                                                            onClick={() => setEditing(promotion)}
-                                                        >
-                                                            <Edit className="h-4 w-4" />
-                                                        </Button>
-                                                        <Button
-                                                            size="sm"
-                                                            variant="ghost"
-                                                            className="text-red-600 hover:text-red-700"
-                                                            aria-label={t('deleteAria', { name: promotion.name })}
-                                                            onClick={() => setToDelete(promotion)}
-                                                        >
-                                                            <Trash2 className="h-4 w-4" />
-                                                        </Button>
-                                                    </div>
-                                                </TableCell>
-                                            )}
-                                        </TableRow>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>{money(promotion.package_price)}</TableCell>
+                                                    <TableCell>
+                                                        <div className="space-y-0.5 text-sm">
+                                                            {promotion.items.map(item => {
+                                                                const isBottleneck = bottlenecks.has(item.product_id)
+                                                                const stockLabel =
+                                                                    item.product?.stock === null ||
+                                                                    item.product?.stock === undefined
+                                                                        ? t('componentStockUnknown')
+                                                                        : t('componentStock', {
+                                                                              count: item.product.stock
+                                                                          })
+                                                                return (
+                                                                    <div
+                                                                        key={item.id}
+                                                                        className={cn(
+                                                                            'flex flex-wrap items-center gap-1.5',
+                                                                            isBottleneck && 'font-medium'
+                                                                        )}
+                                                                    >
+                                                                        <span>
+                                                                            {item.quantity}×{' '}
+                                                                            {item.product?.name ?? t('unknownProduct')}
+                                                                        </span>
+                                                                        <span className="text-xs text-muted-foreground">
+                                                                            · {stockLabel}
+                                                                        </span>
+                                                                        {isBottleneck &&
+                                                                            promotion.available !== null && (
+                                                                                <Badge
+                                                                                    variant="outline"
+                                                                                    className="text-[10px] text-amber-800 border-amber-300"
+                                                                                >
+                                                                                    {t('bottleneck')}
+                                                                                </Badge>
+                                                                            )}
+                                                                    </div>
+                                                                )
+                                                            })}
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {promotion.available === null ? (
+                                                            <span className="text-muted-foreground">
+                                                                {t('packagesUnavailable')}
+                                                            </span>
+                                                        ) : (
+                                                            <Badge
+                                                                variant={
+                                                                    promotion.available <= 0
+                                                                        ? 'destructive'
+                                                                        : 'secondary'
+                                                                }
+                                                            >
+                                                                {t('packagesAvailable', { count: promotion.available })}
+                                                            </Badge>
+                                                        )}
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={promotion.is_active ? 'default' : 'secondary'}>
+                                                            {promotion.is_active ? tc('active') : tc('inactive')}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    {canManage && (
+                                                        <TableCell className="text-right">
+                                                            <div className="flex justify-end gap-2">
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    aria-label={t('editAria', { name: promotion.name })}
+                                                                    onClick={() => setEditing(promotion)}
+                                                                >
+                                                                    <Edit className="h-4 w-4" />
+                                                                </Button>
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    className="text-red-600 hover:text-red-700"
+                                                                    aria-label={t('deleteAria', {
+                                                                        name: promotion.name
+                                                                    })}
+                                                                    onClick={() => setToDelete(promotion)}
+                                                                >
+                                                                    <Trash2 className="h-4 w-4" />
+                                                                </Button>
+                                                            </div>
+                                                        </TableCell>
+                                                    )}
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </Card>
+                        }
+                        renderCard={promotion => (
+                            <ListCardRow
+                                title={promotion.name}
+                                subtitle={money(promotion.package_price)}
+                                value={
+                                    promotion.available === null ? (
+                                        <span className="text-xs text-muted-foreground">
+                                            {t('packagesUnavailable')}
+                                        </span>
+                                    ) : (
+                                        <Badge variant={promotion.available <= 0 ? 'destructive' : 'secondary'}>
+                                            {t('packagesAvailable', { count: promotion.available })}
+                                        </Badge>
                                     )
-                                })}
-                            </TableBody>
-                        </Table>
-                        {promotions.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">{t('noPromotions')}</p>
+                                }
+                                menu={
+                                    canManage && (
+                                        <>
+                                            <DropdownMenuItem onClick={() => setEditing(promotion)}>
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                {tc('edit')}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                className="text-red-600"
+                                                onClick={() => setToDelete(promotion)}
+                                            >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                {tc('delete')}
+                                            </DropdownMenuItem>
+                                        </>
+                                    )
+                                }
+                            />
                         )}
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={promotions.data.total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                        />
-                    </>
-                )}
-            </Card>
+                    />
+                    {promotions.data.data.length === 0 && (
+                        <p className="py-8 text-center text-muted-foreground">{t('noPromotions')}</p>
+                    )}
+                    <Pagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={promotions.data.total}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                    />
+                </>
+            )}
 
             {editing !== undefined && (
                 <PromotionDialog

@@ -91,8 +91,8 @@ export default function SettingsPage() {
 
             <Form {...form}>
                 <form onSubmit={onSubmit} noValidate className="space-y-6">
-                    <div className="grid gap-6 md:grid-cols-2">
-                        <Card className="rounded-2xl">
+                    <div className="grid gap-6 lg:grid-cols-2">
+                        <Card className="min-w-0 rounded-2xl">
                             <CardHeader>
                                 <CardTitle className="flex items-center gap-2">
                                     <SettingsIcon className="h-5 w-5 text-emerald-600" />
@@ -135,7 +135,7 @@ export default function SettingsPage() {
                             </CardContent>
                         </Card>
 
-                        <Card className="rounded-2xl">
+                        <Card className="min-w-0 rounded-2xl">
                             <CardHeader>
                                 <CardTitle>{t('business')}</CardTitle>
                                 <CardDescription>{t('businessDesc')}</CardDescription>
@@ -172,12 +172,12 @@ export default function SettingsPage() {
                             </CardContent>
                         </Card>
 
-                        <Card className="rounded-2xl md:col-span-2">
+                        <Card className="min-w-0 rounded-2xl lg:col-span-2">
                             <CardHeader>
                                 <CardTitle>{t('receipt')}</CardTitle>
                                 <CardDescription>{t('receiptDesc')}</CardDescription>
                             </CardHeader>
-                            <CardContent className="grid gap-4 md:grid-cols-2">
+                            <CardContent className="grid gap-4 lg:grid-cols-2">
                                 <TextField name="receipt_template.header" label={t('header')} />
                                 <TextField name="receipt_template.footer" label={t('footer')} />
                             </CardContent>

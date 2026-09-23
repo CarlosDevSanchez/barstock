@@ -41,24 +41,26 @@ afterEach(cleanup)
 describe('who can delete suppliers', () => {
     test('a manager can edit but not delete', async () => {
         renderPage('manager')
-        await screen.findByText('Acme Supply Co')
-        expect(screen.getByRole('button', { name: 'Edit Acme Supply Co' })).toBeTruthy()
-        expect(screen.queryByRole('button', { name: /^Delete / })).toBeNull()
+        await screen.findAllByText('Acme Supply Co')
+        const table = within(screen.getByRole('table'))
+        expect(table.getByRole('button', { name: 'Edit Acme Supply Co' })).toBeTruthy()
+        expect(table.queryByRole('button', { name: /^Delete / })).toBeNull()
     })
 
     test('an admin can edit and delete', async () => {
         renderPage('admin')
-        await screen.findByText('Acme Supply Co')
-        expect(screen.getByRole('button', { name: 'Edit Acme Supply Co' })).toBeTruthy()
-        expect(screen.getByRole('button', { name: 'Delete Acme Supply Co' })).toBeTruthy()
+        await screen.findAllByText('Acme Supply Co')
+        const table = within(screen.getByRole('table'))
+        expect(table.getByRole('button', { name: 'Edit Acme Supply Co' })).toBeTruthy()
+        expect(table.getByRole('button', { name: 'Delete Acme Supply Co' })).toBeTruthy()
     })
 })
 
 describe('editing', () => {
     test('starts from the stored values and PATCHes', async () => {
         renderPage('manager')
-        await screen.findByText('Acme Supply Co')
-        fireEvent.click(screen.getByRole('button', { name: 'Edit Acme Supply Co' }))
+        await screen.findAllByText('Acme Supply Co')
+        fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: 'Edit Acme Supply Co' }))
         const dialog = await screen.findByRole('dialog')
 
         expect((screen.getByLabelText('Contact Person') as HTMLInputElement).value).toBe('John Smith')
@@ -74,8 +76,9 @@ describe('editing', () => {
 describe('deleting', () => {
     test('asks for confirmation first and only then deletes', async () => {
         renderPage('admin')
-        await screen.findByText('Acme Supply Co')
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Acme Supply Co' }))
+        await screen.findAllByText('Acme Supply Co')
+        const table = within(screen.getByRole('table'))
+        fireEvent.click(table.getByRole('button', { name: 'Delete Acme Supply Co' }))
 
         const dialog = await screen.findByRole('alertdialog')
         expect(within(dialog).getByText('Delete supplier?')).toBeTruthy()
@@ -85,7 +88,7 @@ describe('deleting', () => {
         await waitFor(() => expect(screen.queryByRole('alertdialog')).toBeNull())
         expect(remove).not.toHaveBeenCalled()
 
-        fireEvent.click(screen.getByRole('button', { name: 'Delete Acme Supply Co' }))
+        fireEvent.click(table.getByRole('button', { name: 'Delete Acme Supply Co' }))
         fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
         await waitFor(() => expect(remove).toHaveBeenCalledWith('s-1'))
     })

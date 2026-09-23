@@ -52,4 +52,5 @@ export async function newSession(browser: Browser, role: TestRole): Promise<Page
     return page
 }
 
-export const navLinks = async (page: Page) => page.locator('nav[aria-label] a').allTextContents()
+// Scoped to the sidebar's own nav: the mobile bottom nav has its own `nav[aria-label]` with only 4 tabs.
+export const navLinks = async (page: Page) => page.locator('[data-slot="sidebar"] nav[aria-label] a').allTextContents()

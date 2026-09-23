@@ -135,24 +135,25 @@ export default function OrderDetailPage() {
     return (
         <div className="space-y-6">
             <div className="print:hidden space-y-6" data-testid="order-detail-view">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-4 lg:flex-row lg:items-center lg:justify-between">
                     <div className="flex items-center gap-4">
                         <Button
                             variant="ghost"
                             size="icon"
                             aria-label={t('backAria')}
                             onClick={() => router.push('/orders')}
+                            className="hidden lg:inline-flex"
                         >
                             <ArrowLeft className="h-5 w-5" />
                         </Button>
-                        <div>
-                            <h1 className="text-3xl font-bold">{t('detailsTitle')}</h1>
-                            <p className="text-muted-foreground">
+                        <div className="min-w-0">
+                            <h1 className="text-xl font-bold truncate lg:text-3xl">{t('detailsTitle')}</h1>
+                            <p className="text-muted-foreground truncate">
                                 {t('orderNumberSubtitle', { orderNumber: order.order_number })}
                             </p>
                         </div>
                     </div>
-                    <div className="flex gap-2">
+                    <div className="flex flex-wrap gap-2">
                         <Button variant="outline" onClick={() => window.print()}>
                             <Printer className="mr-2 h-4 w-4" />
                             {t('print')}
@@ -167,20 +168,22 @@ export default function OrderDetailPage() {
                 </div>
 
                 <div className="grid gap-6 md:grid-cols-2">
-                    <Card className="rounded-2xl">
+                    <Card className="min-w-0 rounded-2xl">
                         <CardHeader>
                             <CardTitle>{t('orderInfo')}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                            <div className="flex justify-between">
+                            <div className="flex justify-between gap-4">
                                 <span className="text-muted-foreground">{t('orderNumber')}</span>
-                                <span className="font-semibold">{order.order_number}</span>
+                                <span className="min-w-0 truncate text-right font-semibold">{order.order_number}</span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between gap-4">
                                 <span className="text-muted-foreground">{t('date')}</span>
-                                <span>{format(new Date(order.created_at), 'PPp', { locale: dateLocale })}</span>
+                                <span className="min-w-0 break-words text-right">
+                                    {format(new Date(order.created_at), 'PPp', { locale: dateLocale })}
+                                </span>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between gap-4">
                                 <span className="text-muted-foreground">{t('status')}</span>
                                 <Badge
                                     variant={
@@ -194,14 +197,16 @@ export default function OrderDetailPage() {
                                     {statusLabel(order.status)}
                                 </Badge>
                             </div>
-                            <div className="flex justify-between">
+                            <div className="flex justify-between gap-4">
                                 <span className="text-muted-foreground">{t('createdBy')}</span>
-                                <span>{order.created_by_name || t('system')}</span>
+                                <span className="min-w-0 break-words text-right">
+                                    {order.created_by_name || t('system')}
+                                </span>
                             </div>
                             {order.payments.length > 0 && (
-                                <div className="flex justify-between">
+                                <div className="flex justify-between gap-4">
                                     <span className="text-muted-foreground">{t('payment')}</span>
-                                    <span>
+                                    <span className="min-w-0 break-words text-right">
                                         {order.payments
                                             .map(p => `${paymentLabel(p.payment_method)} (${money(p.amount)})`)
                                             .join(', ')}
@@ -209,9 +214,9 @@ export default function OrderDetailPage() {
                                 </div>
                             )}
                             {order.tab && (
-                                <div className="flex justify-between">
+                                <div className="flex justify-between gap-4">
                                     <span className="text-muted-foreground">{t('tab')}</span>
-                                    <span>
+                                    <span className="min-w-0 break-words text-right">
                                         {t('tabValue', { tabNumber: order.tab.tab_number, label: order.tab.label })}
                                     </span>
                                 </div>
@@ -219,7 +224,7 @@ export default function OrderDetailPage() {
                             {order.status === 'refunded' && (
                                 <div className="flex justify-between gap-4">
                                     <span className="text-muted-foreground">{t('refundLabel')}</span>
-                                    <span className="text-right">
+                                    <span className="min-w-0 break-words text-right">
                                         {order.refunded_at &&
                                             format(new Date(order.refunded_at), 'PPp', { locale: dateLocale })}
                                         {order.refund_reason && (
@@ -233,25 +238,27 @@ export default function OrderDetailPage() {
                         </CardContent>
                     </Card>
 
-                    <Card className="rounded-2xl">
+                    <Card className="min-w-0 rounded-2xl">
                         <CardHeader>
                             <CardTitle>{t('customerInfo')}</CardTitle>
                         </CardHeader>
                         <CardContent className="space-y-3">
-                            <div className="flex justify-between">
+                            <div className="flex justify-between gap-4">
                                 <span className="text-muted-foreground">{t('name')}</span>
-                                <span className="font-semibold">{order.customer?.name || t('walkInCustomer')}</span>
+                                <span className="min-w-0 truncate text-right font-semibold">
+                                    {order.customer?.name || t('walkInCustomer')}
+                                </span>
                             </div>
                             {order.customer?.email && (
-                                <div className="flex justify-between">
+                                <div className="flex justify-between gap-4">
                                     <span className="text-muted-foreground">{t('email')}</span>
-                                    <span>{order.customer.email}</span>
+                                    <span className="min-w-0 truncate text-right">{order.customer.email}</span>
                                 </div>
                             )}
                             {order.customer?.phone && (
-                                <div className="flex justify-between">
+                                <div className="flex justify-between gap-4">
                                     <span className="text-muted-foreground">{t('phone')}</span>
-                                    <span>{order.customer.phone}</span>
+                                    <span className="min-w-0 truncate text-right">{order.customer.phone}</span>
                                 </div>
                             )}
                         </CardContent>

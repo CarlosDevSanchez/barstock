@@ -21,6 +21,16 @@ de conexión. **No hay cola de escrituras sin red**: eso queda documentado como 
 | `components/pwa/offline-disabled-button.tsx` | Botón que se deshabilita solo (con tooltip) mientras no hay red: usado en cobrar, añadir/pagar cuenta y ajustar inventario |
 | `lib/pwa/clear-cache.ts` | Borra las cachés de HTML/API al cerrar sesión (dispositivo compartido) |
 
+## Pantalla completa (modo standalone)
+
+`app/layout.tsx` fija `viewport: { viewportFit: 'cover', width: 'device-width', initialScale: 1, themeColor: [...] }`
+(claro/oscuro) y `metadata.appleWebApp.statusBarStyle: 'black-translucent'`. `viewportFit: 'cover'` deja que el contenido
+ocupe también el área de los "notches"/home indicator; `black-translucent` hace que la barra de estado de iOS se dibuje
+encima del contenido en vez de dejar una franja blanca. Por eso `TopBar`, `BottomNav`, el FAB y las hojas inferiores
+(`components/shell/*`, `components/fab.tsx`, `components/ui/dialog.tsx`) añaden `env(safe-area-inset-top)` /
+`env(safe-area-inset-bottom)` a mano en vez de confiar en el padding del navegador. Detalle del shell responsive en
+[UI y diseño](06-ui-y-diseno.md).
+
 ## Estrategia del service worker
 
 | Petición | Estrategia |

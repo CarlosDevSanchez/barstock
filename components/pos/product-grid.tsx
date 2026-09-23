@@ -19,7 +19,7 @@ interface ProductGridProps {
     onConfirm: () => void
 }
 
-const GRID_CLASSES = 'grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5 xl:grid-cols-6 gap-3'
+const GRID_CLASSES = 'grid grid-cols-2 @md:grid-cols-3 @2xl:grid-cols-4 @5xl:grid-cols-6 gap-3'
 
 function CardSkeleton() {
     return (
@@ -35,7 +35,9 @@ function CardSkeleton() {
 }
 
 /** Grid + infinite scroll for the POS catalog. The scroll itself happens on `<main>` (app-shell); this only watches
- * a sentinel at the end of the list and asks the hook for the next page when it comes into view. */
+ * a sentinel at the end of the list and asks the hook for the next page when it comes into view. Sized off the grid's
+ * own width via a container query (`@container`), not the viewport, since the sidebar and cart bubble change how much
+ * width is actually available. */
 export function ProductGrid({
     catalog,
     pendingId,
@@ -68,16 +70,18 @@ export function ProductGrid({
 
     if (catalog.loading) {
         return (
-            <div className={GRID_CLASSES}>
-                {Array.from({ length: 12 }, (_, index) => (
-                    <CardSkeleton key={index} />
-                ))}
+            <div className="@container">
+                <div className={GRID_CLASSES}>
+                    {Array.from({ length: 12 }, (_, index) => (
+                        <CardSkeleton key={index} />
+                    ))}
+                </div>
             </div>
         )
     }
 
     return (
-        <div>
+        <div className="@container">
             <div className={GRID_CLASSES}>
                 {catalog.items.map(product => {
                     const maxQty = maxAddable(product.stock, qtyInCart(product.id))

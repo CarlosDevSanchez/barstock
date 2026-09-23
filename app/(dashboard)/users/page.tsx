@@ -7,10 +7,9 @@ import { format } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Search, UserPlus, UserCog } from 'lucide-react'
+import { UserPlus, UserCog } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -28,6 +27,10 @@ import { SelectField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
+import { PageHeader } from '@/components/page-header'
+import { FilterBar } from '@/components/filter-bar'
+import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
+import { DropdownMenuItem, DropdownMenuSeparator } from '@/components/ui/dropdown-menu'
 import { useSession } from '@/components/session-provider'
 import { errorMessage } from '@/lib/api/client'
 import { usersApi, type UserListItem } from '@/lib/api/users'
@@ -121,138 +124,179 @@ export default function UsersPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold">{t('title')}</h1>
-                    <p className="text-muted-foreground">{t('subtitle')}</p>
-                </div>
-                <Button onClick={() => setInviting(true)}>
-                    <UserPlus className="mr-2 h-4 w-4" />
-                    {t('inviteUser')}
-                </Button>
-            </div>
+            <PageHeader
+                title={t('title')}
+                description={t('subtitle')}
+                primaryAction={{ label: t('inviteUser'), icon: UserPlus, onClick: () => setInviting(true) }}
+            />
 
-            <Card className="rounded-2xl p-6">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder={t('searchPlaceholder')}
-                            value={searchQuery}
-                            onChange={e => {
-                                setSearchQuery(e.target.value)
-                                reset()
-                            }}
-                            className="pl-10"
-                        />
-                    </div>
-                </div>
+            <FilterBar
+                search={searchQuery}
+                onSearchChange={value => {
+                    setSearchQuery(value)
+                    reset()
+                }}
+                searchPlaceholder={t('searchPlaceholder')}
+            />
 
-                {users.error ? (
-                    <QueryError error={users.error} onRetry={users.reload} />
-                ) : !users.data ? (
-                    <PageSpinner />
-                ) : (
-                    <>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>{t('colUser')}</TableHead>
-                                    <TableHead>{t('colRole')}</TableHead>
-                                    <TableHead>{tc('status')}</TableHead>
-                                    <TableHead>{t('colJoined')}</TableHead>
-                                    <TableHead className="text-right">{tc('actions')}</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {users.data.data.map(row => {
-                                    const isMe = row.id === me.id
-                                    return (
-                                        <TableRow key={row.id}>
-                                            <TableCell>
-                                                <div className="flex items-center gap-3">
-                                                    <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
-                                                        <UserCog className="h-4 w-4 text-emerald-600" />
-                                                    </div>
-                                                    <div>
-                                                        <p className="font-medium">
-                                                            {row.full_name || row.email}
-                                                            {isMe && (
-                                                                <span className="text-muted-foreground">
-                                                                    {' '}
-                                                                    {t('you')}
-                                                                </span>
-                                                            )}
-                                                        </p>
-                                                        {row.full_name && (
-                                                            <p className="text-sm text-muted-foreground">{row.email}</p>
-                                                        )}
-                                                    </div>
-                                                </div>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Select
-                                                    value={row.role}
-                                                    disabled={isMe}
-                                                    onValueChange={value => changeRole(row, value as UserRole)}
-                                                >
-                                                    <SelectTrigger
-                                                        className="w-32"
-                                                        aria-label={t('roleAria', { email: row.email })}
-                                                    >
-                                                        <SelectValue />
-                                                    </SelectTrigger>
-                                                    <SelectContent>
-                                                        {roleOptions.map(option => (
-                                                            <SelectItem key={option.value} value={option.value}>
-                                                                {option.label}
-                                                            </SelectItem>
-                                                        ))}
-                                                    </SelectContent>
-                                                </Select>
-                                            </TableCell>
-                                            <TableCell>
-                                                <Badge variant={row.is_active ? 'default' : 'secondary'}>
-                                                    {row.is_active ? tc('active') : t('disabled')}
-                                                </Badge>
-                                            </TableCell>
-                                            <TableCell>
-                                                {format(new Date(row.created_at), 'MMM dd, yyyy', {
-                                                    locale: dateLocale
-                                                })}
-                                            </TableCell>
-                                            <TableCell className="text-right">
-                                                {!isMe && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className={
-                                                            row.is_active ? 'text-red-600 hover:text-red-700' : ''
-                                                        }
-                                                        onClick={() => setToToggle(row)}
-                                                    >
-                                                        {row.is_active ? t('disable') : t('enable')}
-                                                    </Button>
-                                                )}
-                                            </TableCell>
+            {users.error ? (
+                <QueryError error={users.error} onRetry={users.reload} />
+            ) : !users.data ? (
+                <PageSpinner />
+            ) : (
+                <>
+                    <ResponsiveList
+                        items={users.data.data}
+                        keyOf={row => row.id}
+                        table={
+                            <Card className="rounded-2xl p-6">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>{t('colUser')}</TableHead>
+                                            <TableHead>{t('colRole')}</TableHead>
+                                            <TableHead>{tc('status')}</TableHead>
+                                            <TableHead>{t('colJoined')}</TableHead>
+                                            <TableHead className="text-right">{tc('actions')}</TableHead>
                                         </TableRow>
-                                    )
-                                })}
-                            </TableBody>
-                        </Table>
-                        {users.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
-                        )}
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={users.data.total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                        />
-                    </>
-                )}
-            </Card>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {users.data.data.map(row => {
+                                            const isMe = row.id === me.id
+                                            return (
+                                                <TableRow key={row.id}>
+                                                    <TableCell>
+                                                        <div className="flex items-center gap-3">
+                                                            <div className="p-2 rounded-lg bg-emerald-100 dark:bg-emerald-900/30">
+                                                                <UserCog className="h-4 w-4 text-emerald-600" />
+                                                            </div>
+                                                            <div>
+                                                                <p className="font-medium">
+                                                                    {row.full_name || row.email}
+                                                                    {isMe && (
+                                                                        <span className="text-muted-foreground">
+                                                                            {' '}
+                                                                            {t('you')}
+                                                                        </span>
+                                                                    )}
+                                                                </p>
+                                                                {row.full_name && (
+                                                                    <p className="text-sm text-muted-foreground">
+                                                                        {row.email}
+                                                                    </p>
+                                                                )}
+                                                            </div>
+                                                        </div>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Select
+                                                            value={row.role}
+                                                            disabled={isMe}
+                                                            onValueChange={value => changeRole(row, value as UserRole)}
+                                                        >
+                                                            <SelectTrigger
+                                                                className="w-32"
+                                                                aria-label={t('roleAria', { email: row.email })}
+                                                            >
+                                                                <SelectValue />
+                                                            </SelectTrigger>
+                                                            <SelectContent>
+                                                                {roleOptions.map(option => (
+                                                                    <SelectItem key={option.value} value={option.value}>
+                                                                        {option.label}
+                                                                    </SelectItem>
+                                                                ))}
+                                                            </SelectContent>
+                                                        </Select>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        <Badge variant={row.is_active ? 'default' : 'secondary'}>
+                                                            {row.is_active ? tc('active') : t('disabled')}
+                                                        </Badge>
+                                                    </TableCell>
+                                                    <TableCell>
+                                                        {format(new Date(row.created_at), 'MMM dd, yyyy', {
+                                                            locale: dateLocale
+                                                        })}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">
+                                                        {!isMe && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className={
+                                                                    row.is_active
+                                                                        ? 'text-red-600 hover:text-red-700'
+                                                                        : ''
+                                                                }
+                                                                onClick={() => setToToggle(row)}
+                                                            >
+                                                                {row.is_active ? t('disable') : t('enable')}
+                                                            </Button>
+                                                        )}
+                                                    </TableCell>
+                                                </TableRow>
+                                            )
+                                        })}
+                                    </TableBody>
+                                </Table>
+                            </Card>
+                        }
+                        renderCard={row => {
+                            const isMe = row.id === me.id
+                            return (
+                                <ListCardRow
+                                    title={
+                                        <>
+                                            {row.full_name || row.email}
+                                            {isMe && <span className="text-muted-foreground"> {t('you')}</span>}
+                                        </>
+                                    }
+                                    subtitle={row.full_name ? row.email : tc(`role.${row.role}`)}
+                                    value={
+                                        <Badge variant={row.is_active ? 'default' : 'secondary'}>
+                                            {row.is_active ? tc('active') : t('disabled')}
+                                        </Badge>
+                                    }
+                                    menu={
+                                        !isMe && (
+                                            <>
+                                                {roleOptions.map(option => (
+                                                    <DropdownMenuItem
+                                                        key={option.value}
+                                                        disabled={option.value === row.role}
+                                                        onClick={() => changeRole(row, option.value)}
+                                                    >
+                                                        {option.label}
+                                                        {option.value === row.role && ` (${tc('active')})`}
+                                                    </DropdownMenuItem>
+                                                ))}
+                                                <DropdownMenuSeparator />
+                                                <DropdownMenuItem
+                                                    className={row.is_active ? 'text-red-600' : ''}
+                                                    onClick={() => setToToggle(row)}
+                                                >
+                                                    {row.is_active ? t('disable') : t('enable')}
+                                                </DropdownMenuItem>
+                                            </>
+                                        )
+                                    }
+                                />
+                            )
+                        }}
+                    />
+                    {users.data.data.length === 0 && (
+                        <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
+                    )}
+                    <Pagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={users.data.total}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                    />
+                </>
+            )}
 
             {inviting && (
                 <InviteDialog

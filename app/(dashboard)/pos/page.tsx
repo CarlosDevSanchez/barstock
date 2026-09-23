@@ -268,8 +268,8 @@ export default function POSPage() {
     }
 
     return (
-        <div className="flex flex-col gap-4">
-            <div>
+        <div className="space-y-6">
+            <div className="hidden lg:block">
                 <h1 className="text-3xl font-bold">{t('title')}</h1>
                 <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>

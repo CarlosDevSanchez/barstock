@@ -80,18 +80,19 @@ export default function CustomerDetailPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between gap-4">
+            <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
                 <div className="flex items-center gap-4">
                     <Button
                         variant="ghost"
                         size="icon"
                         aria-label={t('backAria')}
                         onClick={() => router.push('/customers')}
+                        className="hidden lg:inline-flex"
                     >
                         <ArrowLeft className="h-5 w-5" />
                     </Button>
-                    <div>
-                        <h1 className="text-3xl font-bold">{customer.name}</h1>
+                    <div className="min-w-0">
+                        <h1 className="truncate text-xl font-bold lg:text-3xl">{customer.name}</h1>
                         <p className="text-muted-foreground">{t('detailsSubtitle')}</p>
                     </div>
                 </div>
@@ -101,7 +102,7 @@ export default function CustomerDetailPage() {
                 </Button>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 xl:grid-cols-4">
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t('totalSpent')}</CardTitle>
@@ -148,16 +149,16 @@ export default function CustomerDetailPage() {
                 <CardHeader>
                     <CardTitle>{t('contactInfo')}</CardTitle>
                 </CardHeader>
-                <CardContent className="grid gap-4 md:grid-cols-2">
-                    <div>
+                <CardContent className="grid gap-4 lg:grid-cols-2">
+                    <div className="min-w-0">
                         <p className="text-sm text-muted-foreground">{t('email')}</p>
-                        <p className="font-medium">{customer.email || '-'}</p>
+                        <p className="truncate font-medium">{customer.email || '-'}</p>
                     </div>
-                    <div>
+                    <div className="min-w-0">
                         <p className="text-sm text-muted-foreground">{t('phone')}</p>
-                        <p className="font-medium">{customer.phone || '-'}</p>
+                        <p className="truncate font-medium">{customer.phone || '-'}</p>
                     </div>
-                    <div className="md:col-span-2">
+                    <div className="lg:col-span-2">
                         <p className="text-sm text-muted-foreground">{t('address')}</p>
                         <p className="font-medium">{customer.address || '-'}</p>
                     </div>

@@ -6,10 +6,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Edit, Plus, Search, Trash2, Users } from 'lucide-react'
+import { Edit, Plus, Trash2, Users } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
@@ -19,6 +18,9 @@ import { SwitchField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
+import { PageHeader } from '@/components/page-header'
+import { FilterBar } from '@/components/filter-bar'
+import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
 import { useMoney, useSession } from '@/components/session-provider'
 import { errorMessage } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
@@ -125,136 +127,146 @@ export default function CustomersPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold">{t('title')}</h1>
-                    <p className="text-muted-foreground">{t('subtitle')}</p>
-                </div>
-                <Button onClick={() => setEditing(null)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t('addCustomer')}
-                </Button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card className="rounded-2xl p-6">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-                            <Users className="h-6 w-6 text-emerald-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-muted-foreground">
-                                {search ? t('matchingCustomers') : t('totalCustomers')}
-                            </p>
-                            <p className="text-2xl font-bold">{customers.data?.total ?? '-'}</p>
-                        </div>
-                    </div>
-                </Card>
-            </div>
+            <PageHeader
+                title={t('title')}
+                description={t('subtitle')}
+                primaryAction={{ label: t('addCustomer'), icon: Plus, onClick: () => setEditing(null) }}
+            />
 
             <Card className="rounded-2xl p-6">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder={t('searchPlaceholder')}
-                            value={searchQuery}
-                            onChange={e => {
-                                setSearchQuery(e.target.value)
-                                reset()
-                            }}
-                            className="pl-10"
-                        />
+                <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+                        <Users className="h-6 w-6 text-emerald-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-muted-foreground">
+                            {search ? t('matchingCustomers') : t('totalCustomers')}
+                        </p>
+                        <p className="text-2xl font-bold">{customers.data?.total ?? '-'}</p>
                     </div>
                 </div>
-
-                {customers.error ? (
-                    <QueryError error={customers.error} onRetry={customers.reload} />
-                ) : !customers.data ? (
-                    <PageSpinner />
-                ) : (
-                    <>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>{t('colName')}</TableHead>
-                                    <TableHead>{t('colEmail')}</TableHead>
-                                    <TableHead>{t('colPhone')}</TableHead>
-                                    <TableHead>{t('colLoyalty')}</TableHead>
-                                    <TableHead>{t('colTotalSpent')}</TableHead>
-                                    <TableHead>{t('colStatus')}</TableHead>
-                                    <TableHead className="text-right">{tc('actions')}</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {customers.data.data.map(customer => (
-                                    <TableRow
-                                        key={customer.id}
-                                        className="cursor-pointer hover:bg-muted/50"
-                                        onClick={() => router.push(`/customers/${customer.id}`)}
-                                    >
-                                        <TableCell className="font-medium">{customer.name}</TableCell>
-                                        <TableCell>{customer.email || '-'}</TableCell>
-                                        <TableCell>{customer.phone || '-'}</TableCell>
-                                        <TableCell>
-                                            <Badge variant="secondary">
-                                                {t('points', { count: customer.loyalty_points })}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="font-semibold text-emerald-600">
-                                            {money(customer.total_spent)}
-                                        </TableCell>
-                                        <TableCell>
-                                            <Badge variant={customer.is_active ? 'default' : 'secondary'}>
-                                                {customer.is_active ? tc('active') : tc('inactive')}
-                                            </Badge>
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    aria-label={t('editAria', { name: customer.name })}
-                                                    onClick={e => {
-                                                        e.stopPropagation()
-                                                        setEditing(customer)
-                                                    }}
-                                                >
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
-                                                {canDelete && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-red-600 hover:text-red-700"
-                                                        aria-label={t('deleteAria', { name: customer.name })}
-                                                        onClick={e => {
-                                                            e.stopPropagation()
-                                                            setToDelete(customer)
-                                                        }}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        {customers.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
-                        )}
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={customers.data.total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                        />
-                    </>
-                )}
             </Card>
+
+            <FilterBar
+                search={searchQuery}
+                onSearchChange={value => {
+                    setSearchQuery(value)
+                    reset()
+                }}
+                searchPlaceholder={t('searchPlaceholder')}
+            />
+
+            {customers.error ? (
+                <QueryError error={customers.error} onRetry={customers.reload} />
+            ) : !customers.data ? (
+                <PageSpinner />
+            ) : (
+                <>
+                    <ResponsiveList
+                        items={customers.data.data}
+                        keyOf={customer => customer.id}
+                        table={
+                            <Card className="rounded-2xl p-6">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>{t('colName')}</TableHead>
+                                            <TableHead>{t('colEmail')}</TableHead>
+                                            <TableHead>{t('colPhone')}</TableHead>
+                                            <TableHead>{t('colLoyalty')}</TableHead>
+                                            <TableHead>{t('colTotalSpent')}</TableHead>
+                                            <TableHead>{t('colStatus')}</TableHead>
+                                            <TableHead className="text-right">{tc('actions')}</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {customers.data.data.map(customer => (
+                                            <TableRow
+                                                key={customer.id}
+                                                className="cursor-pointer hover:bg-muted/50"
+                                                onClick={() => router.push(`/customers/${customer.id}`)}
+                                            >
+                                                <TableCell className="font-medium">{customer.name}</TableCell>
+                                                <TableCell>{customer.email || '-'}</TableCell>
+                                                <TableCell>{customer.phone || '-'}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant="secondary">
+                                                        {t('points', { count: customer.loyalty_points })}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="font-semibold text-emerald-600">
+                                                    {money(customer.total_spent)}
+                                                </TableCell>
+                                                <TableCell>
+                                                    <Badge variant={customer.is_active ? 'default' : 'secondary'}>
+                                                        {customer.is_active ? tc('active') : tc('inactive')}
+                                                    </Badge>
+                                                </TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            aria-label={t('editAria', { name: customer.name })}
+                                                            onClick={e => {
+                                                                e.stopPropagation()
+                                                                setEditing(customer)
+                                                            }}
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                        {canDelete && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="text-red-600 hover:text-red-700"
+                                                                aria-label={t('deleteAria', { name: customer.name })}
+                                                                onClick={e => {
+                                                                    e.stopPropagation()
+                                                                    setToDelete(customer)
+                                                                }}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </Card>
+                        }
+                        renderCard={customer => (
+                            <ListCardRow
+                                href={`/customers/${customer.id}`}
+                                title={customer.name}
+                                subtitle={customer.email || customer.phone || undefined}
+                                value={
+                                    <div className="flex flex-col items-end gap-1">
+                                        <span className="font-semibold text-emerald-600">
+                                            {money(customer.total_spent)}
+                                        </span>
+                                        <Badge variant="secondary">
+                                            {t('points', { count: customer.loyalty_points })}
+                                        </Badge>
+                                    </div>
+                                }
+                            />
+                        )}
+                    />
+                    {customers.data.data.length === 0 && (
+                        <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
+                    )}
+                    <Pagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={customers.data.total}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                    />
+                </>
+            )}
 
             {editing !== undefined && (
                 <CustomerDialog

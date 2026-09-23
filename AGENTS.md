@@ -140,6 +140,9 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 | PWA / offline | Solo **lectura** offline (vistas ya visitadas); no hay cola de escrituras sin red (D16 parcial). El service worker solo se registra en `NODE_ENV=production` (`next dev` lo rompería con Turbopack). `clients.claim()` dispara `controllerchange` también en la primera instalación, no solo en una actualización real: `sw-register.tsx` solo recarga si YA había un controlador previo | [pwa-offline](docs/01-arquitectura/09-pwa-offline.md), [plan de cola](docs/06-roadmap/offline-y-sincronizacion.md) |
 | Tests de integración | Escriben datos: **solo contra Supabase local** (se niegan a ejecutarse contra otro host). `bun run db:reset` limpia | [testing](docs/05-guias/testing.md) |
 | supabase-js y `select` | El tipo del resultado se infiere del **literal** del `select`; concatenar strings lo degrada a `string` | [capa de datos](docs/01-arquitectura/05-capa-de-datos.md) |
+| Scroll horizontal | Un contenedor `flex` sin `min-w-0` no deja encoger a sus hijos por debajo de su contenido: basta un solo `flex` de la cadena (p. ej. `SidebarInset`) sin `min-w-0` para que una tabla ancha empuje todo el layout más allá del viewport, aunque la tabla tenga su propio `overflow-x-auto` | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
+| Breakpoint del shell | Es `lg` (1024 px), no el `md` (768 px) de shadcn por defecto: `hooks/use-mobile.ts` (`MOBILE_BREAKPOINT`) es el único valor a cambiar; `components/ui/sidebar.tsx` está editado para usar `lg:` en vez de `md:` | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
+| `Sidebar` en móvil | Por debajo de `lg`, el `Sidebar` (con `data-mobile="true"`) **solo se monta mientras está abierto** (es un `Sheet`): un selector e2e que lo busque sin haber abierto "Más" no lo encuentra | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
 
 ## 9. Antes de tocar X, lee Y
 

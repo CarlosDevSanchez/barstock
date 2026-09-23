@@ -6,9 +6,8 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Search, Edit, Trash2, Package, RefreshCcw } from 'lucide-react'
+import { Plus, Edit, Trash2, Package, RefreshCcw } from 'lucide-react'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import {
@@ -27,6 +26,10 @@ import { Pagination } from '@/components/pagination'
 import { ProductImageField } from '@/components/product-image-field'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
+import { PageHeader } from '@/components/page-header'
+import { FilterBar } from '@/components/filter-bar'
+import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useMoney, useSession } from '@/components/session-provider'
 import { moneyStep } from '@/lib/money'
 import { categoriesApi } from '@/lib/api/categories'
@@ -159,7 +162,7 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                 </DialogHeader>
                 <Form {...form}>
                     <form onSubmit={onSubmit} noValidate className="flex flex-col flex-1 overflow-hidden">
-                        <div className="grid grid-cols-2 gap-4 py-4 overflow-y-auto px-1">
+                        <div className="grid grid-cols-1 gap-4 py-4 overflow-y-auto px-1 sm:grid-cols-2">
                             {settings.storage_configured && (
                                 <ProductImageField
                                     label={t('image')}
@@ -187,17 +190,17 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                             {product ? (
                                 <TextField name="sku" label={t('sku')} />
                             ) : (
-                                <div className="flex flex-col relative gap-2">
-                                    <TextField name="sku" label={t('sku')} className="text-xs" />
-                                    <span
-                                        className="text-xs text-green cursor-pointer w-10 absolute top-8 -right-2"
+                                <div className="flex items-end gap-2">
+                                    <TextField name="sku" label={t('sku')} className="flex-1" />
+                                    <Button
+                                        type="button"
+                                        variant="outline"
+                                        size="icon"
+                                        aria-label={t('regenerateSku')}
                                         onClick={regenerateSku}
                                     >
-                                        <RefreshCcw className="mr-2 h-4 w-4" />
-                                    </span>
-                                    {/* <Button type="button" variant="outline" size="sm" onClick={regenerateSku}>
-                                        {t('regenerateSku')}
-                                    </Button> */}
+                                        <RefreshCcw className="h-4 w-4" />
+                                    </Button>
                                 </div>
                             )}
                             <TextField name="barcode" label={t('barcode')} />
@@ -302,120 +305,148 @@ export default function ProductsPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold">{t('title')}</h1>
-                    <p className="text-muted-foreground">{canManage ? t('subtitleManage') : t('subtitleBrowse')}</p>
-                </div>
-                {canManage && (
-                    <Button onClick={() => setEditing(null)}>
-                        <Plus className="mr-2 h-4 w-4" />
-                        {t('addProduct')}
-                    </Button>
-                )}
-            </div>
+            <PageHeader
+                title={t('title')}
+                description={canManage ? t('subtitleManage') : t('subtitleBrowse')}
+                primaryAction={
+                    canManage ? { label: t('addProduct'), icon: Plus, onClick: () => setEditing(null) } : undefined
+                }
+            />
 
-            <Card className="rounded-2xl p-6">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder={t('searchPlaceholder')}
-                            value={searchQuery}
-                            onChange={e => {
-                                setSearchQuery(e.target.value)
-                                reset()
-                            }}
-                            className="pl-10"
-                        />
-                    </div>
-                </div>
+            <FilterBar
+                search={searchQuery}
+                onSearchChange={value => {
+                    setSearchQuery(value)
+                    reset()
+                }}
+                searchPlaceholder={t('searchPlaceholder')}
+            />
 
-                {products.error ? (
-                    <QueryError error={products.error} onRetry={products.reload} />
-                ) : !products.data ? (
-                    <PageSpinner />
-                ) : (
-                    <>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>{t('colProduct')}</TableHead>
-                                    <TableHead>{t('colSku')}</TableHead>
-                                    <TableHead>{t('colCategory')}</TableHead>
-                                    {canManage && <TableHead>{t('colCost')}</TableHead>}
-                                    <TableHead>{t('colPrice')}</TableHead>
-                                    <TableHead>{t('colStock')}</TableHead>
-                                    <TableHead>{tc('status')}</TableHead>
-                                    {canManage && <TableHead className="text-right">{tc('actions')}</TableHead>}
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {products.data.data.map(product => (
-                                    <TableRow key={product.id}>
-                                        <TableCell>
-                                            <div className="flex items-center gap-3">
-                                                <ProductThumbnail product={product} />
-                                                <div>
-                                                    <p className="font-medium">{product.name}</p>
-                                                    <p className="text-sm text-muted-foreground">
-                                                        {product.description}
-                                                    </p>
-                                                </div>
-                                            </div>
-                                        </TableCell>
-                                        <TableCell className="font-mono text-sm">{product.sku}</TableCell>
-                                        <TableCell>{product.category?.name || '-'}</TableCell>
-                                        {canManage && <TableCell>{money(product.cost_price)}</TableCell>}
-                                        <TableCell className="font-semibold text-emerald-600">
+            {products.error ? (
+                <QueryError error={products.error} onRetry={products.reload} />
+            ) : !products.data ? (
+                <PageSpinner />
+            ) : (
+                <>
+                    <ResponsiveList
+                        items={products.data.data}
+                        keyOf={product => product.id}
+                        table={
+                            <Card className="rounded-2xl p-6">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>{t('colProduct')}</TableHead>
+                                            <TableHead>{t('colSku')}</TableHead>
+                                            <TableHead>{t('colCategory')}</TableHead>
+                                            {canManage && <TableHead>{t('colCost')}</TableHead>}
+                                            <TableHead>{t('colPrice')}</TableHead>
+                                            <TableHead>{t('colStock')}</TableHead>
+                                            <TableHead>{tc('status')}</TableHead>
+                                            {canManage && <TableHead className="text-right">{tc('actions')}</TableHead>}
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {products.data.data.map(product => (
+                                            <TableRow key={product.id}>
+                                                <TableCell>
+                                                    <div className="flex items-center gap-3">
+                                                        <ProductThumbnail product={product} />
+                                                        <div>
+                                                            <p className="font-medium">{product.name}</p>
+                                                            <p className="text-sm text-muted-foreground">
+                                                                {product.description}
+                                                            </p>
+                                                        </div>
+                                                    </div>
+                                                </TableCell>
+                                                <TableCell className="font-mono text-sm">{product.sku}</TableCell>
+                                                <TableCell>{product.category?.name || '-'}</TableCell>
+                                                {canManage && <TableCell>{money(product.cost_price)}</TableCell>}
+                                                <TableCell className="font-semibold text-emerald-600">
+                                                    {money(product.selling_price)}
+                                                </TableCell>
+                                                <TableCell>{product.stock ?? '-'}</TableCell>
+                                                <TableCell>
+                                                    <Badge variant={product.is_active ? 'default' : 'secondary'}>
+                                                        {product.is_active ? tc('active') : tc('inactive')}
+                                                    </Badge>
+                                                </TableCell>
+                                                {canManage && (
+                                                    <TableCell className="text-right">
+                                                        <div className="flex justify-end gap-2">
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                aria-label={t('editAria', { name: product.name })}
+                                                                onClick={() => setEditing(product)}
+                                                            >
+                                                                <Edit className="h-4 w-4" />
+                                                            </Button>
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="text-red-600 hover:text-red-700"
+                                                                aria-label={t('deleteAria', { name: product.name })}
+                                                                onClick={() => setToDelete(product)}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        </div>
+                                                    </TableCell>
+                                                )}
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </Card>
+                        }
+                        renderCard={product => (
+                            <ListCardRow
+                                title={product.name}
+                                subtitle={product.sku}
+                                value={
+                                    <div className="flex flex-col items-end gap-1">
+                                        <span className="font-semibold text-emerald-600">
                                             {money(product.selling_price)}
-                                        </TableCell>
-                                        <TableCell>{product.stock ?? '-'}</TableCell>
-                                        <TableCell>
-                                            <Badge variant={product.is_active ? 'default' : 'secondary'}>
-                                                {product.is_active ? tc('active') : tc('inactive')}
-                                            </Badge>
-                                        </TableCell>
-                                        {canManage && (
-                                            <TableCell className="text-right">
-                                                <div className="flex justify-end gap-2">
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        aria-label={t('editAria', { name: product.name })}
-                                                        onClick={() => setEditing(product)}
-                                                    >
-                                                        <Edit className="h-4 w-4" />
-                                                    </Button>
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-red-600 hover:text-red-700"
-                                                        aria-label={t('deleteAria', { name: product.name })}
-                                                        onClick={() => setToDelete(product)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                </div>
-                                            </TableCell>
-                                        )}
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        {products.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">{t('noProducts')}</p>
+                                        </span>
+                                        <span className="text-xs text-muted-foreground">
+                                            {t('colStock')}: {product.stock ?? '-'}
+                                        </span>
+                                    </div>
+                                }
+                                menu={
+                                    canManage && (
+                                        <>
+                                            <DropdownMenuItem onClick={() => setEditing(product)}>
+                                                <Edit className="mr-2 h-4 w-4" />
+                                                {tc('edit')}
+                                            </DropdownMenuItem>
+                                            <DropdownMenuItem
+                                                className="text-red-600"
+                                                onClick={() => setToDelete(product)}
+                                            >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                {tc('delete')}
+                                            </DropdownMenuItem>
+                                        </>
+                                    )
+                                }
+                            />
                         )}
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={products.data.total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                        />
-                    </>
-                )}
-            </Card>
+                    />
+                    {products.data.data.length === 0 && (
+                        <p className="py-8 text-center text-muted-foreground">{t('noProducts')}</p>
+                    )}
+                    <Pagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={products.data.total}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                    />
+                </>
+            )}
 
             {editing !== undefined && (
                 <ProductDialog

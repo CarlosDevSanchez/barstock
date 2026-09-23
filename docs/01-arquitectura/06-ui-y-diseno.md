@@ -39,20 +39,46 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 ## Layout del dashboard
 
 `app/(dashboard)/layout.tsx` es un **Server Component** (sesión + ajustes) que monta `AppShell`, construido sobre el
-`Sidebar` de shadcn (`components/ui/sidebar.tsx`, etapa 2):
+`Sidebar` de shadcn (`components/ui/sidebar.tsx`, editado: breakpoint `lg` en vez de `md`, `SidebarInset` es un
+`<div min-w-0>` en vez de un `<main>` sin acotar). Breakpoint único: **`lg` (1024 px)**, fijado en `hooks/use-mobile.ts`
+(`MOBILE_BREAKPOINT`), único consumidor de `Sidebar`.
 
+**Escritorio (≥ 1024 px):**
 - **4 grupos colapsables** (`SidebarGroup` + `Collapsible`, abiertos por defecto): Ventas (Panel, Caja, Órdenes,
   Clientes), Catálogo (Productos, Categorías, Promociones, Inventario, Proveedores), Análisis (Reportes) y
   Administración (Ajustes, Usuarios, Auditoría). Un grupo sin ítems visibles para el rol actual se oculta entero.
-- **Un único `<nav aria-label>`** para escritorio y móvil: por debajo de 768 px el propio `Sidebar` de shadcn lo
-  muestra dentro de un `Sheet` (ya no hay un `<Sheet>` propio duplicando el markup).
-- `SidebarHeader` (nombre de la tienda), `SidebarFooter` (menú de usuario: inicial, nombre o email, rol) y
-  `SidebarInset` con un header que trae el `SidebarTrigger` y el indicador de conexión
-  ([PWA y offline](09-pwa-offline.md)).
+- `SidebarHeader` (nombre de la tienda, `<span data-testid="store-name">`), `SidebarFooter` (`AccountMenu` variante
+  `full`: avatar, nombre o email, rol) y `SidebarInset` con `TopBar` (`SidebarTrigger`, indicador de conexión,
+  avatar) ([PWA y offline](09-pwa-offline.md)).
 - Resalte de ruta activa por **prefijo** (`pathname === href || pathname.startsWith(href + '/')`): `/orders/[id]` sí
   resalta "Órdenes".
 - El estado abierto/colapsado se guarda en la cookie `sidebar_state` (shadcn) y el layout la lee para fijar
   `defaultOpen` en el primer render, evitando el parpadeo al recargar.
+
+**Móvil (< 1024 px), experiencia tipo app nativa** (`components/shell/`):
+- **`TopBar`**: en las raíces muestra el nombre/inicial de la tienda; en rutas de detalle (`/orders/[id]`,
+  `/customers/[id]`) un botón volver (`ChevronLeft`); siempre el título de la sección actual, el indicador de
+  conexión y el avatar (`AccountMenu` variante `icon`).
+- **`BottomNav`** (`nav[aria-label="Mobile navigation"]`, oculta en `lg+` y al imprimir): 5 destinos — Panel,
+  Órdenes, **Caja** (centro, botón circular destacado), Inventario y **Más**. "Más" abre el `Sidebar` completo
+  (mismo componente que en escritorio, como `Sheet`) con `setOpenMobile(true)`; navegar desde ahí lo cierra. El
+  `Sidebar`, en móvil, **solo se monta mientras está abierto** (`data-mobile="true"` en el DOM solo entonces) — ojo
+  con los selectores e2e.
+- Safe areas: `env(safe-area-inset-top/bottom)` en `TopBar`, `BottomNav`, el FAB y las hojas inferiores; `app/layout.tsx`
+  fija `viewportFit: 'cover'` (detalle en [PWA y offline](09-pwa-offline.md)).
+
+## Patrones móviles (`< lg`)
+
+| Componente | Comportamiento |
+|---|---|
+| `PageHeader` (`components/page-header.tsx`) | Título + descripción + `primaryAction`. En escritorio: `h1` grande y botón. En móvil: `h1` compacto (el título ya lo da `TopBar`) y `primaryAction` como **FAB** |
+| `Fab` (`components/fab.tsx`) | Botón circular flotante sobre la `BottomNav` (`bottom-[calc(4rem+safe-area+1rem)]`), un único por pantalla, `lg:hidden` |
+| `FilterBar` (`components/filter-bar.tsx`) | Buscador a ancho completo. En escritorio los filtros adicionales van en línea; en móvil se ocultan tras un botón **Filtros** (con contador) que abre un `Sheet side="bottom"` |
+| `ResponsiveList` + `ListCardRow` (`components/responsive-list.tsx`) | Muestra la tabla existente en `md+` y una lista de tarjetas (`ListCardRow`: título, subtítulo, valor, `›` o `…`) por debajo; la tabla no se reescribe |
+| `Dialog` (`components/ui/dialog.tsx`) | Por debajo de `sm`, se ancla como **hoja inferior** (`rounded-t-2xl`, `max-h-[90dvh]`); en `sm+` sigue centrado. Todos los formularios de alta/edición heredan esto sin tocarlos uno a uno |
+
+Reglas táctiles: objetivos de al menos 44 px, `text-base` en inputs (evita el zoom de iOS, ya lo hace shadcn) y
+`touch-manipulation` en la burbuja del carrito, la `BottomNav` y el FAB.
 
 ## Patrones de pantalla
 
@@ -72,10 +98,10 @@ ocultan con `print:hidden` y `app/globals.css` fija `@page { size: 80mm auto; ma
 [decisiones pendientes](../06-roadmap/decisiones-pendientes.md). El POS no llama a `window.print()`.
 
 ## Accesibilidad y responsive
-- Etiquetas y errores de formulario asociados a su control por `FormControl`; los botones de solo icono llevan `aria-label` (cantidad +/−, quitar, editar, borrar, volver, página anterior/siguiente).
+- Etiquetas y errores de formulario asociados a su control por `FormControl`; los botones de solo icono llevan `aria-label` (cantidad +/−, quitar, editar, borrar, volver, página anterior/siguiente, alternar sidebar, menú de la cuenta).
 - El catálogo del POS es navegable con teclado (`role="button"`, `Enter`/`Espacio`) y marca `aria-disabled` los productos sin stock.
-- **[Inferido]** Diseño responsive con `grid`/`flex` y breakpoints `sm/md/lg`; el POS colapsa a una columna. No se ha probado en dispositivos ni con lectores de pantalla.
-- Sin auditoría automatizada de accesibilidad ni pruebas visuales.
+- **[Verificado]** `e2e/responsive.e2e.ts` (proyecto `mobile` de Playwright, 375×812 con `hasTouch`/`isMobile`) comprueba que ninguna ruta principal tenga scroll horizontal, para los roles admin y cashier, a 375, 768 y 1280 px, además de la barra inferior, "Más", el FAB como hoja inferior, el avatar y una venta completa desde el POS en móvil. `bun run test:e2e` pasa (28/28, proyectos `chromium` y `mobile`) contra Supabase local.
+- **[Por verificar]** No se ha probado con lectores de pantalla ni en dispositivos reales (solo Chromium headless); sin auditoría automatizada de accesibilidad (axe, Lighthouse).
 
 ## Reglas para UI nueva
 - Reutilizar `components/ui/*` y los compartidos de arriba; no crear estilos ad hoc para tarjetas o botones.

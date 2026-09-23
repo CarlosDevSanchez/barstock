@@ -21,11 +21,17 @@ export const metadata: Metadata = {
     title: 'POS Inventory System - Modern Point of Sale',
     description: 'Full-stack POS and Inventory Management System',
     manifest: '/manifest.webmanifest',
-    appleWebApp: { capable: true, statusBarStyle: 'default', title: 'Barstock' }
+    appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Barstock' }
 }
 
 export const viewport: Viewport = {
-    themeColor: '#059669'
+    width: 'device-width',
+    initialScale: 1,
+    viewportFit: 'cover',
+    themeColor: [
+        { media: '(prefers-color-scheme: light)', color: '#059669' },
+        { media: '(prefers-color-scheme: dark)', color: '#0f172a' }
+    ]
 }
 
 export default async function RootLayout({

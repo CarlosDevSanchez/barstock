@@ -118,13 +118,17 @@ export function CartSheet({
         <>
             <Sheet open={open} onOpenChange={onOpenChange}>
                 <SheetContent side="right" className="w-full sm:max-w-md p-0">
-                    <SheetHeader>
+                    <SheetHeader style={{ paddingTop: 'env(safe-area-inset-top)' }}>
                         <SheetTitle className="flex items-center gap-2">
                             <ShoppingCart className="h-5 w-5 text-emerald-600" />
                             {t('cart', { count: lines.length })}
                         </SheetTitle>
                     </SheetHeader>
-                    <Tabs defaultValue="cart" className="flex-1 flex flex-col overflow-y-auto px-4 pb-4 gap-4">
+                    <Tabs
+                        defaultValue="cart"
+                        className="flex-1 flex flex-col overflow-y-auto px-4 gap-4"
+                        style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+                    >
                         <TabsList className="w-full">
                             <TabsTrigger value="cart">{t('cartTab')}</TabsTrigger>
                             <TabsTrigger value="tabs">

@@ -5,10 +5,9 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Edit, Plus, Search, Trash2, Truck } from 'lucide-react'
+import { Edit, Plus, Trash2, Truck } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Input } from '@/components/ui/input'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Form } from '@/components/ui/form'
@@ -17,6 +16,10 @@ import { SwitchField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
+import { PageHeader } from '@/components/page-header'
+import { FilterBar } from '@/components/filter-bar'
+import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
+import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useSession } from '@/components/session-provider'
 import { errorMessage } from '@/lib/api/client'
 import { suppliersApi } from '@/lib/api/suppliers'
@@ -132,114 +135,130 @@ export default function SuppliersPage() {
 
     return (
         <div className="space-y-6">
-            <div className="flex items-center justify-between">
-                <div>
-                    <h1 className="text-3xl font-bold">{t('title')}</h1>
-                    <p className="text-muted-foreground">{t('subtitle')}</p>
-                </div>
-                <Button onClick={() => setEditing(null)}>
-                    <Plus className="mr-2 h-4 w-4" />
-                    {t('addSupplier')}
-                </Button>
-            </div>
-
-            <div className="grid gap-4 md:grid-cols-3">
-                <Card className="rounded-2xl p-6">
-                    <div className="flex items-center gap-4">
-                        <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
-                            <Truck className="h-6 w-6 text-emerald-600" />
-                        </div>
-                        <div>
-                            <p className="text-sm text-muted-foreground">
-                                {search ? t('matchingSuppliers') : t('totalSuppliers')}
-                            </p>
-                            <p className="text-2xl font-bold">{suppliers.data?.total ?? '-'}</p>
-                        </div>
-                    </div>
-                </Card>
-            </div>
+            <PageHeader
+                title={t('title')}
+                description={t('subtitle')}
+                primaryAction={{ label: t('addSupplier'), icon: Plus, onClick: () => setEditing(null) }}
+            />
 
             <Card className="rounded-2xl p-6">
-                <div className="flex items-center gap-4 mb-6">
-                    <div className="relative flex-1">
-                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                        <Input
-                            placeholder={t('searchPlaceholder')}
-                            value={searchQuery}
-                            onChange={e => {
-                                setSearchQuery(e.target.value)
-                                reset()
-                            }}
-                            className="pl-10"
-                        />
+                <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-emerald-100 dark:bg-emerald-900/30">
+                        <Truck className="h-6 w-6 text-emerald-600" />
+                    </div>
+                    <div>
+                        <p className="text-sm text-muted-foreground">
+                            {search ? t('matchingSuppliers') : t('totalSuppliers')}
+                        </p>
+                        <p className="text-2xl font-bold">{suppliers.data?.total ?? '-'}</p>
                     </div>
                 </div>
-
-                {suppliers.error ? (
-                    <QueryError error={suppliers.error} onRetry={suppliers.reload} />
-                ) : !suppliers.data ? (
-                    <PageSpinner />
-                ) : (
-                    <>
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>{t('colName')}</TableHead>
-                                    <TableHead>{t('colContact')}</TableHead>
-                                    <TableHead>{t('colEmail')}</TableHead>
-                                    <TableHead>{t('colPhone')}</TableHead>
-                                    <TableHead>{t('colAddress')}</TableHead>
-                                    <TableHead className="text-right">{tc('actions')}</TableHead>
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {suppliers.data.data.map(supplier => (
-                                    <TableRow key={supplier.id}>
-                                        <TableCell className="font-medium">{supplier.name}</TableCell>
-                                        <TableCell>{supplier.contact_person || '-'}</TableCell>
-                                        <TableCell>{supplier.email || '-'}</TableCell>
-                                        <TableCell>{supplier.phone || '-'}</TableCell>
-                                        <TableCell>{supplier.address || '-'}</TableCell>
-                                        <TableCell className="text-right">
-                                            <div className="flex justify-end gap-2">
-                                                <Button
-                                                    size="sm"
-                                                    variant="ghost"
-                                                    aria-label={t('editAria', { name: supplier.name })}
-                                                    onClick={() => setEditing(supplier)}
-                                                >
-                                                    <Edit className="h-4 w-4" />
-                                                </Button>
-                                                {canDelete && (
-                                                    <Button
-                                                        size="sm"
-                                                        variant="ghost"
-                                                        className="text-red-600 hover:text-red-700"
-                                                        aria-label={t('deleteAria', { name: supplier.name })}
-                                                        onClick={() => setToDelete(supplier)}
-                                                    >
-                                                        <Trash2 className="h-4 w-4" />
-                                                    </Button>
-                                                )}
-                                            </div>
-                                        </TableCell>
-                                    </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
-                        {suppliers.data.data.length === 0 && (
-                            <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
-                        )}
-                        <Pagination
-                            page={page}
-                            pageSize={pageSize}
-                            total={suppliers.data.total}
-                            onPageChange={setPage}
-                            onPageSizeChange={setPageSize}
-                        />
-                    </>
-                )}
             </Card>
+
+            <FilterBar
+                search={searchQuery}
+                onSearchChange={value => {
+                    setSearchQuery(value)
+                    reset()
+                }}
+                searchPlaceholder={t('searchPlaceholder')}
+            />
+
+            {suppliers.error ? (
+                <QueryError error={suppliers.error} onRetry={suppliers.reload} />
+            ) : !suppliers.data ? (
+                <PageSpinner />
+            ) : (
+                <>
+                    <ResponsiveList
+                        items={suppliers.data.data}
+                        keyOf={supplier => supplier.id}
+                        table={
+                            <Card className="rounded-2xl p-6">
+                                <Table>
+                                    <TableHeader>
+                                        <TableRow>
+                                            <TableHead>{t('colName')}</TableHead>
+                                            <TableHead>{t('colContact')}</TableHead>
+                                            <TableHead>{t('colEmail')}</TableHead>
+                                            <TableHead>{t('colPhone')}</TableHead>
+                                            <TableHead>{t('colAddress')}</TableHead>
+                                            <TableHead className="text-right">{tc('actions')}</TableHead>
+                                        </TableRow>
+                                    </TableHeader>
+                                    <TableBody>
+                                        {suppliers.data.data.map(supplier => (
+                                            <TableRow key={supplier.id}>
+                                                <TableCell className="font-medium">{supplier.name}</TableCell>
+                                                <TableCell>{supplier.contact_person || '-'}</TableCell>
+                                                <TableCell>{supplier.email || '-'}</TableCell>
+                                                <TableCell>{supplier.phone || '-'}</TableCell>
+                                                <TableCell>{supplier.address || '-'}</TableCell>
+                                                <TableCell className="text-right">
+                                                    <div className="flex justify-end gap-2">
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
+                                                            aria-label={t('editAria', { name: supplier.name })}
+                                                            onClick={() => setEditing(supplier)}
+                                                        >
+                                                            <Edit className="h-4 w-4" />
+                                                        </Button>
+                                                        {canDelete && (
+                                                            <Button
+                                                                size="sm"
+                                                                variant="ghost"
+                                                                className="text-red-600 hover:text-red-700"
+                                                                aria-label={t('deleteAria', { name: supplier.name })}
+                                                                onClick={() => setToDelete(supplier)}
+                                                            >
+                                                                <Trash2 className="h-4 w-4" />
+                                                            </Button>
+                                                        )}
+                                                    </div>
+                                                </TableCell>
+                                            </TableRow>
+                                        ))}
+                                    </TableBody>
+                                </Table>
+                            </Card>
+                        }
+                        renderCard={supplier => (
+                            <ListCardRow
+                                title={supplier.name}
+                                subtitle={supplier.contact_person || supplier.email || supplier.phone || undefined}
+                                menu={
+                                    <>
+                                        <DropdownMenuItem onClick={() => setEditing(supplier)}>
+                                            <Edit className="mr-2 h-4 w-4" />
+                                            {tc('edit')}
+                                        </DropdownMenuItem>
+                                        {canDelete && (
+                                            <DropdownMenuItem
+                                                className="text-red-600"
+                                                onClick={() => setToDelete(supplier)}
+                                            >
+                                                <Trash2 className="mr-2 h-4 w-4" />
+                                                {tc('delete')}
+                                            </DropdownMenuItem>
+                                        )}
+                                    </>
+                                }
+                            />
+                        )}
+                    />
+                    {suppliers.data.data.length === 0 && (
+                        <p className="py-8 text-center text-muted-foreground">{t('empty')}</p>
+                    )}
+                    <Pagination
+                        page={page}
+                        pageSize={pageSize}
+                        total={suppliers.data.total}
+                        onPageChange={setPage}
+                        onPageSizeChange={setPageSize}
+                    />
+                </>
+            )}
 
             {editing !== undefined && (
                 <SupplierDialog

@@ -38,7 +38,7 @@ export function TopProducts({
     return (
         <div>
             <h2 className="text-sm font-semibold text-muted-foreground mb-2">{t('topProducts')}</h2>
-            <div className="flex gap-2 overflow-x-auto pb-2">
+            <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 max-sm:mx-0 max-sm:px-0">
                 {top.data.map(product => {
                     const soldOut = product.stock === null || product.stock <= 0
                     const maxQty = maxAddable(product.stock, qtyInCart(product.product_id))
@@ -62,7 +62,7 @@ export function TopProducts({
                                 }
                             }}
                             aria-label={t('addToCart', { name: product.name })}
-                            className={`relative shrink-0 w-36 rounded-xl border p-2.5 text-left transition ${
+                            className={`relative shrink-0 w-36 snap-start rounded-xl border p-2.5 text-left transition ${
                                 canAdd || pending ? 'cursor-pointer hover:shadow-md' : 'opacity-50 cursor-not-allowed'
                             } ${pending ? 'ring-2 ring-emerald-500 shadow-md' : ''}`}
                         >
