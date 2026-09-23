@@ -19,7 +19,7 @@ test('login and dashboard default to Spanish without an EN cookie', async ({ pag
     await page.getByLabel('Contraseña').fill(TEST_PASSWORD)
     await page.getByRole('button', { name: 'Iniciar sesión' }).click()
     await page.waitForURL('**/dashboard')
-    await expect(page.locator('aside nav a').first()).toHaveText('Panel')
+    await expect(page.locator('[data-slot="sidebar"] nav a').first()).toHaveText('Panel')
 })
 
 test('switching language in the menu persists on the next login', async ({ page }) => {
@@ -32,11 +32,11 @@ test('switching language in the menu persists on the next login', async ({ page 
     await page.getByRole('button', { name: 'Iniciar sesión' }).click()
     await page.waitForURL('**/dashboard')
 
-    await page.locator('aside').getByRole('button').last().click()
+    await page.locator('[data-slot="sidebar"]').getByRole('button').last().click()
     await page.getByRole('menuitem', { name: 'English' }).click()
-    await expect(page.locator('aside nav a').first()).toHaveText('Dashboard')
+    await expect(page.locator('[data-slot="sidebar"] nav a').first()).toHaveText('Dashboard')
 
-    await page.locator('aside').getByRole('button').last().click()
+    await page.locator('[data-slot="sidebar"]').getByRole('button').last().click()
     await page.getByRole('menuitem', { name: 'Sign out' }).click()
     await page.waitForURL('**/login')
 
@@ -47,7 +47,7 @@ test('switching language in the menu persists on the next login', async ({ page 
     // After clearing cookies the login form is Spanish again, but the profile is EN.
     await page.getByRole('button', { name: 'Iniciar sesión' }).click()
     await page.waitForURL('**/dashboard')
-    await expect(page.locator('aside nav a').first()).toHaveText('Dashboard')
+    await expect(page.locator('[data-slot="sidebar"] nav a').first()).toHaveText('Dashboard')
 })
 
 test('English cookie on the login page keeps e2e helpers on EN labels', async ({ page }) => {

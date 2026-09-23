@@ -20,6 +20,8 @@ export type Query = Record<string, QueryValue>
 
 interface RequestOptions {
     body?: unknown
+    /** Multipart body (image uploads): sent as-is, letting the browser set the multipart boundary Content-Type. */
+    formData?: FormData
     query?: Query
     signal?: AbortSignal
 }
@@ -63,26 +65,52 @@ function handleUnauthorized(path: string) {
     window.location.assign(`/login?next=${encodeURIComponent(next)}`)
 }
 
-async function request(method: string, path: string, { body, query, signal }: RequestOptions = {}): Promise<unknown> {
-    const response = await fetch(buildUrl(path, query), {
-        method,
-        headers: body === undefined ? undefined : { 'Content-Type': 'application/json' },
-        body: body === undefined ? undefined : JSON.stringify(body),
-        credentials: 'same-origin',
-        signal
-    })
-    if (response.status === 204) return undefined
+/** Objects (or arrays) returned from a GET the service worker served out of its cache (`X-From-Cache`, see public/sw.js). */
+const staleResponses = new WeakSet<object>()
+
+/** True when `value` (whatever a `useApiQuery` fetcher resolved to) came from the offline cache, not a live request. */
+export function isStale(value: unknown): boolean {
+    return typeof value === 'object' && value !== null && staleResponses.has(value)
+}
+
+async function request(
+    method: string,
+    path: string,
+    { body, formData, query, signal }: RequestOptions = {}
+): Promise<{ payload: unknown; fromCache: boolean }> {
+    let response: Response
+    try {
+        response = await fetch(buildUrl(path, query), {
+            method,
+            headers: formData || body === undefined ? undefined : { 'Content-Type': 'application/json' },
+            body: formData ?? (body === undefined ? undefined : JSON.stringify(body)),
+            credentials: 'same-origin',
+            signal
+        })
+    } catch (error) {
+        if (error instanceof DOMException && error.name === 'AbortError') throw error
+        // The message is a translation key (see `errorMessage` below), matched the same way `validation.*` messages are.
+        throw new ApiError(0, 'network_offline', 'errors.network_offline')
+    }
+    const fromCache = response.headers.get('X-From-Cache') === '1'
+    if (response.status === 204) return { payload: undefined, fromCache }
     const payload = await readJson(response)
     if (!response.ok) {
         if (response.status === 401) handleUnauthorized(path)
         throw toApiError(response.status, payload)
     }
-    return payload
+    return { payload, fromCache }
+}
+
+function markIfStale<T>(value: T, fromCache: boolean): T {
+    if (fromCache && typeof value === 'object' && value !== null) staleResponses.add(value)
+    return value
 }
 
 /** GET a single resource: returns `data` from the `{ data }` envelope. */
 export async function apiGet<T>(path: string, query?: Query, signal?: AbortSignal): Promise<T> {
-    return ((await request('GET', path, { query, signal })) as Single<T>).data
+    const { payload, fromCache } = await request('GET', path, { query, signal })
+    return markIfStale((payload as Single<T>).data, fromCache)
 }
 
 /** GET a list: returns the whole paginated envelope. */
@@ -91,20 +119,30 @@ export async function apiList<T, S = undefined>(
     query?: Query,
     signal?: AbortSignal
 ): Promise<Paginated<T, S>> {
-    return (await request('GET', path, { query, signal })) as Paginated<T, S>
+    const { payload, fromCache } = await request('GET', path, { query, signal })
+    return markIfStale(payload as Paginated<T, S>, fromCache)
 }
 
 export async function apiPost<T = void>(path: string, body?: unknown): Promise<T> {
-    return ((await request('POST', path, { body })) as Single<T> | undefined)?.data as T
+    const { payload } = await request('POST', path, { body })
+    return (payload as Single<T> | undefined)?.data as T
+}
+
+/** POST a multipart body (image uploads): see `readUploadedFile` on the server. */
+export async function apiPostForm<T = void>(path: string, formData: FormData): Promise<T> {
+    const { payload } = await request('POST', path, { formData })
+    return (payload as Single<T> | undefined)?.data as T
 }
 
 export async function apiPatch<T = void>(path: string, body: unknown): Promise<T> {
-    return ((await request('PATCH', path, { body })) as Single<T> | undefined)?.data as T
+    const { payload } = await request('PATCH', path, { body })
+    return (payload as Single<T> | undefined)?.data as T
 }
 
 /** Most DELETEs carry no body and return 204; a few (e.g. removing a tab line) need a reason and return the updated resource. */
 export async function apiDelete<T = void>(path: string, body?: unknown): Promise<T> {
-    return ((await request('DELETE', path, { body })) as Single<T> | undefined)?.data as T
+    const { payload } = await request('DELETE', path, { body })
+    return (payload as Single<T> | undefined)?.data as T
 }
 
 function currentLocale(): AppLocale {

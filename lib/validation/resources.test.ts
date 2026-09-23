@@ -1,13 +1,17 @@
 import { describe, expect, test } from 'bun:test'
 import { Constants } from '@/types/database'
 import {
+    AUDIT_ACTIONS,
     PAYMENT_METHODS,
+    auditQuerySchema,
     customerCreateSchema,
     inventoryAdjustSchema,
     inviteUserSchema,
     loginSchema,
     productCreateSchema,
     productUpdateSchema,
+    promotionCreateSchema,
+    promotionUpdateSchema,
     refundSchema,
     resetPasswordSchema,
     saleSchema,
@@ -20,12 +24,12 @@ const id = '11111111-1111-4111-8111-111111111111'
 describe('products', () => {
     const base = { name: 'Beer', sku: 'BEER-1', selling_price: '3.50' }
 
-    test("normalizes '' to null for barcode, category and image", () => {
+    test("normalizes '' to null for barcode and category; image_url is not a client-writable field", () => {
         const parsed = productCreateSchema.parse({ ...base, barcode: '', category_id: '', image_url: '' })
         expect(parsed.barcode).toBeNull()
         expect(parsed.category_id).toBeNull()
-        expect(parsed.image_url).toBeNull()
         expect(parsed.selling_price).toBe(3.5)
+        expect('image_url' in parsed).toBe(false) // stripped like any other unknown key (see setProductImage)
     })
     test('does not invent defaults for columns the DB defaults', () => {
         const parsed = productCreateSchema.parse(base)
@@ -42,6 +46,40 @@ describe('products', () => {
     test('PATCH only carries the fields that were sent', () => {
         expect(productUpdateSchema.parse({ name: 'New' })).toEqual({ name: 'New' })
         expect(productUpdateSchema.parse({})).toEqual({})
+    })
+})
+
+describe('promotions', () => {
+    const item = { product_id: id, quantity: '2' }
+    const base = { name: 'Bucket', package_price: '35000', items: [item] }
+
+    test('parses package price and item quantities from form strings', () => {
+        const parsed = promotionCreateSchema.parse(base)
+        expect(parsed).toEqual({
+            name: 'Bucket',
+            package_price: 35000,
+            items: [{ product_id: id, quantity: 2 }]
+        })
+    })
+    test('requires at least one item and rejects duplicate products', () => {
+        expect(promotionCreateSchema.safeParse({ ...base, items: [] }).success).toBe(false)
+        expect(
+            promotionCreateSchema.safeParse({
+                ...base,
+                items: [item, { product_id: id, quantity: 1 }]
+            }).success
+        ).toBe(false)
+    })
+    test('strips server-owned keys; PATCH can omit items', () => {
+        const parsed = promotionCreateSchema.parse({
+            ...base,
+            id,
+            deleted_at: 'x',
+            created_at: 'x'
+        })
+        expect(Object.keys(parsed).sort()).toEqual(['items', 'name', 'package_price'])
+        expect(promotionUpdateSchema.parse({ name: 'Renamed' })).toEqual({ name: 'Renamed' })
+        expect(promotionUpdateSchema.parse({})).toEqual({})
     })
 })
 
@@ -70,6 +108,21 @@ describe('sales', () => {
         })
         expect(parsed.items[0]).toEqual({ product_id: id, quantity: 2 })
         expect('total' in parsed).toBe(false)
+    })
+    test('accepts promotion lines without product_id', () => {
+        const parsed = saleSchema.parse({
+            items: [{ promotion_id: id, quantity: 2 }],
+            payment_method: 'cash'
+        })
+        expect(parsed.items[0]).toEqual({ promotion_id: id, quantity: 2 })
+    })
+    test('rejects a line that mixes product_id and promotion_id', () => {
+        expect(
+            saleSchema.safeParse({
+                items: [{ product_id: id, promotion_id: id, quantity: 1 }],
+                payment_method: 'cash'
+            }).success
+        ).toBe(false)
     })
     test('rejects empty carts, bad quantities, bad ids and unknown payment methods', () => {
         expect(saleSchema.safeParse({ items: [], payment_method: 'cash' }).success).toBe(false)
@@ -147,5 +200,31 @@ describe('settings', () => {
 describe('enums stay in sync with the database', () => {
     test('payment_method', () => {
         expect([...PAYMENT_METHODS]).toEqual([...Constants.public.Enums.payment_method])
+    })
+})
+
+describe('audit', () => {
+    test('accepts a blank query and defaults pagination', () => {
+        const result = auditQuerySchema.parse({})
+        expect(result).toMatchObject({ page: 1, pageSize: 25 })
+        expect(result.actor_id).toBeUndefined()
+        expect(result.action).toBeUndefined()
+    })
+
+    test('accepts every documented action and rejects anything else', () => {
+        for (const action of AUDIT_ACTIONS) {
+            expect(auditQuerySchema.parse({ action }).action).toBe(action)
+        }
+        expect(auditQuerySchema.safeParse({ action: 'grant' }).success).toBe(false)
+    })
+
+    test('blank filters are treated as "not provided", not as empty strings', () => {
+        const result = auditQuerySchema.parse({ actor_id: '', action: '', entity: '', from: '', to: '' })
+        expect(result).toMatchObject({ actor_id: undefined, action: undefined, entity: undefined })
+    })
+
+    test('rejects a malformed actor_id or date', () => {
+        expect(auditQuerySchema.safeParse({ actor_id: 'not-a-uuid' }).success).toBe(false)
+        expect(auditQuerySchema.safeParse({ from: '09/26/2026' }).success).toBe(false)
     })
 })

@@ -1,6 +1,6 @@
 # Puesta en marcha local (verificada)
 
-> ¿Solo quieres **verlo funcionando**? `bun run local:up` levanta todo en Docker con usuarios de prueba: [docker-local](docker-local.md). Esta guía es para **desarrollar** con recarga en caliente.
+> ¿Solo quieres **verlo funcionando**? `bun run local:up` levanta todo en Docker con usuarios de prueba: [docker-local](docker-local.md). Esta guía es para **desarrollar** con recarga en caliente directamente en el host (más rápido si ya tienes Bun). Si prefieres programar dentro de Docker (p. ej. sin Bun instalado), `bun run local:dev` da recarga en caliente en un contenedor: mismo documento [docker-local](docker-local.md).
 
 > Sustituye a la sección "Installation" del README, que está desactualizada ([readme-vs-realidad](../04-auditoria/readme-vs-realidad.md)).
 > Herramientas migradas a Bun. El flujo de base de datos y usuarios (secciones 2, 4, 6 y 7) describe el estado **anterior** a la
@@ -41,6 +41,11 @@ SUPABASE_SERVICE_ROLE_KEY=<service role key>   # solo servidor
 APP_URL=http://localhost:3000
 ```
 
+**Imágenes de producto / logo** (opcional): sin las 4 `R2_*` los endpoints de imagen responden 503 y la UI oculta el selector.
+Para probarlas en el host sin Cloudflare, deja MinIO corriendo (`bun run local:up`/`local:dev` o solo el servicio `r2` del
+compose) y descomenta el bloque MinIO de `.env.example` (`R2_ENDPOINT_OVERRIDE=http://localhost:9000`). Detalle:
+[variables-de-entorno](variables-de-entorno.md#r2-en-local-minio-sin-credenciales-reales), [docker-local](docker-local.md).
+
 ### 4. Autenticación en desarrollo
 Local ya viene configurado (`supabase/config.toml`): registro público **cerrado**, confirmación de email activa y correos en Mailpit
 (<http://127.0.0.1:54324>). No hay que tocar nada.
@@ -53,7 +58,7 @@ bun run dev          # http://localhost:3000
 ### 6. Crear usuarios para entrar
 No hay registro público: los usuarios se crean por invitación de un admin, y el primero hay que crearlo aparte.
 
-**Lo fácil:** `bun run local:seed` crea `admin@`, `manager@` y `cashier@barstock.local` (contraseña `barstock-local-2026`, **solo local**) y unas ventas de demostración; es idempotente y se niega a ejecutarse contra un host que no sea local ([docker-local](docker-local.md)).
+**Lo fácil:** `bun run local:seed` crea `admin@`, `manager@` y `cashier@barstock.local` (contraseña `barstock-local-2026`, **solo local**); nada más (sin ventas ni pedidos). Es idempotente y se niega a ejecutarse contra un host que no sea local ([docker-local](docker-local.md)).
 
 **A mano** (con la API de administración de Auth; el trigger asigna el rol y activa el perfil cuando `app_metadata.role` cambia):
 ```bash
@@ -87,3 +92,4 @@ bun run build                        # requiere las variables de entorno
 | El stock no baja tras una venta | El POS actual no usa `create_sale` aún | Llega con el refactor del POS (Paso 5); el RPC ya descuenta stock ([verificado](../02-base-de-datos/04-triggers-y-funciones.md)) |
 | No se puede crear el segundo producto/cliente sin código/email | Cadena vacía contra columna `UNIQUE` ([M14](../04-auditoria/hallazgos/medios-y-bajos.md)) | Rellenar el campo o corregir el formulario |
 | Error por categoría al crear producto | `category_id: ''` inválido para `uuid` | Elegir una categoría |
+| Sube la imagen (200) pero no se ve en POS/productos | CSP bloqueaba `localhost:9000`, o URL firmada con host `r2` (solo resuelve dentro de Docker) | `img-src` ya incluye MinIO local; en Docker hace falta `R2_PUBLIC_ENDPOINT_OVERRIDE` ([docker-local](docker-local.md)). Soft-refresh tras reiniciar `next` |

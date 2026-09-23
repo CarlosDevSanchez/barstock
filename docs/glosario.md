@@ -18,7 +18,11 @@
 | **Cliente de mostrador (walk-in)** | Venta sin `customer_id`. |
 | **Usuario activo / desactivado** | `profiles.is_active`. Un usuario desactivado no pasa ninguna política ni puede iniciar sesión. Se desactiva en lugar de borrar. |
 | **Invitación** | Única forma de crear usuarios: un admin invita por correo y el rol se asigna en el servidor. Ver [autenticación](01-arquitectura/03-autenticacion-y-sesion.md). |
-| **Borrado lógico** | `products.deleted_at`: el producto desaparece del catálogo pero el historial de ventas lo conserva. |
+| **Borrado lógico** | `products.deleted_at` / `promotions.deleted_at`: desaparece del catálogo pero el historial de ventas lo conserva. |
+| **Promoción / paquete** | Catálogo `promotions` + `promotion_items`: varios productos a `package_price` fijo. Admin en `/promotions`; venta vía expansión en `create_sale` / `tab_add_items` (precio asignado). |
+| **Precio asignado** | `unit_price` escrito en `order_items` al vender un combo: reparto de `package_price`, **no** el `selling_price` de lista. Es la fuente de verdad del ingreso cobrado. |
+| **Markdown de promo** | Diferencia lista − base asignada en líneas con `promotion_id` (`promo_markdown` en `sales_report`). No es el descuento global de la orden. |
+| **COGS / utilidad bruta** | Costo de lo vendido ≈ `qty × cost_price` actual; utilidad bruta = bases cobradas − COGS (en `/reports`, gerente+). Sin foto de costo en la venta (v1). |
 
 ## Técnico
 

@@ -18,18 +18,23 @@ import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { useMoney, useSession } from '@/components/session-provider'
+import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { moneyStep } from '@/lib/money'
+import type { PromotionListItem } from '@/lib/api/promotions'
 import type { ProductListItem } from '@/lib/api/products'
 import type { TabListItem } from '@/lib/api/tabs'
 import type { PreviewTotals } from '@/lib/cart-preview'
-import type { CartLine } from '@/stores/cart'
+import { cartLineKey, type CartLine } from '@/stores/cart'
 import type { PaymentMethod } from '@/types'
 import { TabsPanel } from './tabs-panel'
 
-export interface CartLineView {
-    item: CartLine
-    product: ProductListItem | undefined
-}
+export type CartLineView =
+    | { kind: 'product'; item: Extract<CartLine, { kind: 'product' }>; product: ProductListItem | undefined }
+    | {
+          kind: 'promotion'
+          item: Extract<CartLine, { kind: 'promotion' }>
+          promotion: PromotionListItem | undefined
+      }
 
 interface CustomerOption {
     id: string
@@ -52,8 +57,8 @@ interface CartSheetProps {
     totals: PreviewTotals
     discount: number
     onDiscountChange: (value: number) => void
-    onUpdateQuantity: (productId: string, quantity: number) => void
-    onRemove: (productId: string) => void
+    onUpdateQuantity: (key: string, quantity: number) => void
+    onRemove: (key: string) => void
     customers: CustomerOption[]
     selectedCustomer: string
     onSelectCustomer: (customerId: string) => void
@@ -113,13 +118,17 @@ export function CartSheet({
         <>
             <Sheet open={open} onOpenChange={onOpenChange}>
                 <SheetContent side="right" className="w-full sm:max-w-md p-0">
-                    <SheetHeader>
+                    <SheetHeader style={{ paddingTop: 'env(safe-area-inset-top)' }}>
                         <SheetTitle className="flex items-center gap-2">
                             <ShoppingCart className="h-5 w-5 text-emerald-600" />
                             {t('cart', { count: lines.length })}
                         </SheetTitle>
                     </SheetHeader>
-                    <Tabs defaultValue="cart" className="flex-1 flex flex-col overflow-y-auto px-4 pb-4 gap-4">
+                    <Tabs
+                        defaultValue="cart"
+                        className="flex-1 flex flex-col overflow-y-auto px-4 gap-4"
+                        style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+                    >
                         <TabsList className="w-full">
                             <TabsTrigger value="cart">{t('cartTab')}</TabsTrigger>
                             <TabsTrigger value="tabs">
@@ -168,22 +177,56 @@ export function CartSheet({
                                 ) : (
                                     <div className="space-y-3">
                                         {lines.map(line => {
-                                            const { item, product } = line
+                                            const key = cartLineKey(line.item)
                                             const problem = problemWith(line)
+                                            const maxStock =
+                                                line.kind === 'product'
+                                                    ? line.product?.stock
+                                                    : line.promotion?.available
+                                            const title =
+                                                line.kind === 'product'
+                                                    ? (line.product?.name ??
+                                                      (lookupSettled ? t('unknownProduct') : tc('loading')))
+                                                    : (line.promotion?.name ??
+                                                      (lookupSettled ? t('unknownPromo') : tc('loading')))
+                                            const unitPrice =
+                                                line.kind === 'product'
+                                                    ? line.product?.selling_price
+                                                    : line.promotion?.package_price
                                             return (
                                                 <div
-                                                    key={item.productId}
+                                                    key={key}
                                                     className="flex items-center gap-3 p-3 rounded-xl bg-muted"
                                                 >
                                                     <div className="flex-1 min-w-0">
                                                         <p className="font-medium text-sm truncate">
-                                                            {product?.name ??
-                                                                (lookupSettled ? t('unknownProduct') : tc('loading'))}
+                                                            {line.kind === 'promotion' ? (
+                                                                <span className="text-amber-700 dark:text-amber-400">
+                                                                    {t('promoLine', { name: title })}
+                                                                </span>
+                                                            ) : (
+                                                                title
+                                                            )}
                                                         </p>
-                                                        {product && (
+                                                        {unitPrice !== undefined && (
                                                             <p className="text-sm font-bold text-emerald-600">
-                                                                {money(product.selling_price)}
+                                                                {money(unitPrice)}
                                                             </p>
+                                                        )}
+                                                        {line.kind === 'promotion' && line.promotion && (
+                                                            <div className="mt-1 text-xs text-muted-foreground space-y-0.5">
+                                                                <p className="font-medium text-muted-foreground/80">
+                                                                    {t('promoContains')}
+                                                                </p>
+                                                                <ul className="space-y-0.5">
+                                                                    {line.promotion.items.map(comp => (
+                                                                        <li key={comp.id}>
+                                                                            {comp.quantity * line.item.quantity}×{' '}
+                                                                            {comp.product?.name ?? '—'}
+                                                                        </li>
+                                                                    ))}
+                                                                </ul>
+                                                            </div>
                                                         )}
                                                         {problem && <p className="text-xs text-red-600">{problem}</p>}
                                                     </div>
@@ -194,13 +237,13 @@ export function CartSheet({
                                                             className="h-7 w-7"
                                                             aria-label={t('decreaseQty')}
                                                             onClick={() =>
-                                                                onUpdateQuantity(item.productId, item.quantity - 1)
+                                                                onUpdateQuantity(key, line.item.quantity - 1)
                                                             }
                                                         >
                                                             <Minus className="h-3 w-3" />
                                                         </Button>
                                                         <span className="w-8 text-center font-medium">
-                                                            {item.quantity}
+                                                            {line.item.quantity}
                                                         </span>
                                                         <Button
                                                             size="icon"
@@ -208,12 +251,12 @@ export function CartSheet({
                                                             className="h-7 w-7"
                                                             aria-label={t('increaseQty')}
                                                             disabled={
-                                                                !!product &&
-                                                                product.stock !== null &&
-                                                                item.quantity >= product.stock
+                                                                maxStock !== null &&
+                                                                maxStock !== undefined &&
+                                                                line.item.quantity >= maxStock
                                                             }
                                                             onClick={() =>
-                                                                onUpdateQuantity(item.productId, item.quantity + 1)
+                                                                onUpdateQuantity(key, line.item.quantity + 1)
                                                             }
                                                         >
                                                             <Plus className="h-3 w-3" />
@@ -223,7 +266,7 @@ export function CartSheet({
                                                             variant="ghost"
                                                             className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
                                                             aria-label={t('removeFromCart')}
-                                                            onClick={() => onRemove(item.productId)}
+                                                            onClick={() => onRemove(key)}
                                                         >
                                                             <Trash2 className="h-3 w-3" />
                                                         </Button>
@@ -266,7 +309,7 @@ export function CartSheet({
                                         </div>
                                         <p className="text-xs text-muted-foreground">{t('estimateHint')}</p>
 
-                                        <Button
+                                        <OfflineDisabledButton
                                             className="w-full"
                                             size="lg"
                                             onClick={() => onShowPaymentDialog(true)}
@@ -274,15 +317,15 @@ export function CartSheet({
                                         >
                                             <CreditCard className="mr-2 h-5 w-5" />
                                             {t('checkout')}
-                                        </Button>
-                                        <Button
+                                        </OfflineDisabledButton>
+                                        <OfflineDisabledButton
                                             className="w-full"
                                             variant="outline"
                                             onClick={onAddToTab}
                                             disabled={!canAddToTab}
                                         >
                                             {tTabs('addToTab')}
-                                        </Button>
+                                        </OfflineDisabledButton>
                                     </div>
                                 </>
                             )}
@@ -323,9 +366,9 @@ export function CartSheet({
                         <Button variant="outline" disabled={processing} onClick={() => onShowPaymentDialog(false)}>
                             {tc('cancel')}
                         </Button>
-                        <Button onClick={onCheckout} disabled={processing}>
+                        <OfflineDisabledButton onClick={onCheckout} disabled={processing}>
                             {processing ? t('processing') : t('completeOrder')}
-                        </Button>
+                        </OfflineDisabledButton>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

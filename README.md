@@ -44,7 +44,7 @@ bun run local:up        # Supabase + usuarios de prueba + la app en un contenedo
 ```
 
 Abre <http://localhost:3000> e inicia sesión con `admin@barstock.local`, `manager@barstock.local` o `cashier@barstock.local` (contraseña `barstock-local-2026`; **solo local**).
-Trae ventas de demostración. Para parar: `bun run local:down` (o `local:reset` para borrar también los datos). Detalle en [docker-local](docs/05-guias/docker-local.md).
+Trae el catálogo de ejemplo de `supabase/seed.sql` (productos, categorías, clientes, proveedores), sin ventas ni pedidos. Para parar: `bun run local:down` (o `local:reset` para borrar también los datos). Detalle en [docker-local](docs/05-guias/docker-local.md).
 
 ### Para desarrollar (recarga en caliente)
 
@@ -95,7 +95,7 @@ components/  hooks/           UI compartida; shadcn en components/ui
 lib/server                    Servicios, autenticación, errores (SOLO servidor)
 lib/validation  lib/api       Esquemas zod compartidos · cliente fetch del navegador
 supabase/migrations           Baseline, integridad, roles/RLS, RPC, reportes  (+ seed.sql, templates/, legacy/)
-Dockerfile  docker-compose.yml  La app como imagen de producción (uso local) · scripts/local-*.sh, seed-local.ts
+Dockerfile  docker-compose.yml  docker-compose.local.yml  docker-compose.dev.yml  Imagen de producción y modo hot-reload · scripts/local-*.sh, seed-local.ts
 test/  e2e/  scripts/         Pruebas y umbral de cobertura
 docs/                         Documentación interna (índice en docs/README.md)
 ```

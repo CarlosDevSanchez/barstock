@@ -34,6 +34,45 @@ export type Database = {
   }
   public: {
     Tables: {
+      audit_log: {
+        Row: {
+          action: string
+          actor_email: string | null
+          actor_id: string | null
+          actor_role: Database["public"]["Enums"]["user_role"] | null
+          changes: Json | null
+          entity: string
+          entity_id: string | null
+          id: number
+          occurred_at: string
+          source: string
+        }
+        Insert: {
+          action: string
+          actor_email?: string | null
+          actor_id?: string | null
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          changes?: Json | null
+          entity: string
+          entity_id?: string | null
+          id?: never
+          occurred_at?: string
+          source: string
+        }
+        Update: {
+          action?: string
+          actor_email?: string | null
+          actor_id?: string | null
+          actor_role?: Database["public"]["Enums"]["user_role"] | null
+          changes?: Json | null
+          entity?: string
+          entity_id?: string | null
+          id?: never
+          occurred_at?: string
+          source?: string
+        }
+        Relationships: []
+      }
       categories: {
         Row: {
           created_at: string
@@ -73,6 +112,7 @@ export type Database = {
         Row: {
           address: string | null
           created_at: string
+          deleted_at: string | null
           email: string | null
           id: string
           is_active: boolean
@@ -85,6 +125,7 @@ export type Database = {
         Insert: {
           address?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -97,6 +138,7 @@ export type Database = {
         Update: {
           address?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -240,8 +282,10 @@ export type Database = {
           id: string
           order_id: string
           product_id: string
+          promotion_id: string | null
           quantity: number
           tax: number
+          tax_rate: number | null
           total: number
           unit_price: number
           variant_id: string | null
@@ -252,8 +296,10 @@ export type Database = {
           id?: string
           order_id: string
           product_id: string
+          promotion_id?: string | null
           quantity: number
           tax?: number
+          tax_rate?: number | null
           total: number
           unit_price: number
           variant_id?: string | null
@@ -264,8 +310,10 @@ export type Database = {
           id?: string
           order_id?: string
           product_id?: string
+          promotion_id?: string | null
           quantity?: number
           tax?: number
+          tax_rate?: number | null
           total?: number
           unit_price?: number
           variant_id?: string | null
@@ -283,6 +331,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "order_items_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
             referencedColumns: ["id"]
           },
           {
@@ -457,6 +512,7 @@ export type Database = {
           deleted_at: string | null
           description: string | null
           id: string
+          image_key: string | null
           image_url: string | null
           is_active: boolean
           name: string
@@ -473,6 +529,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          image_key?: string | null
           image_url?: string | null
           is_active?: boolean
           name: string
@@ -489,6 +546,7 @@ export type Database = {
           deleted_at?: string | null
           description?: string | null
           id?: string
+          image_key?: string | null
           image_url?: string | null
           is_active?: boolean
           name?: string
@@ -542,6 +600,75 @@ export type Database = {
           locale?: string
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      promotion_items: {
+        Row: {
+          created_at: string
+          id: string
+          product_id: string
+          promotion_id: string
+          quantity: number
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          product_id: string
+          promotion_id: string
+          quantity: number
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          product_id?: string
+          promotion_id?: string
+          quantity?: number
+        }
+        Relationships: [
+          {
+            foreignKeyName: "promotion_items_product_id_fkey"
+            columns: ["product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "promotion_items_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      promotions: {
+        Row: {
+          created_at: string
+          deleted_at: string | null
+          id: string
+          is_active: boolean
+          name: string
+          package_price: number
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name: string
+          package_price: number
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          deleted_at?: string | null
+          id?: string
+          is_active?: boolean
+          name?: string
+          package_price?: number
           updated_at?: string
         }
         Relationships: []
@@ -683,6 +810,7 @@ export type Database = {
           address: string | null
           contact_person: string | null
           created_at: string
+          deleted_at: string | null
           email: string | null
           id: string
           is_active: boolean
@@ -695,6 +823,7 @@ export type Database = {
           address?: string | null
           contact_person?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -707,6 +836,7 @@ export type Database = {
           address?: string | null
           contact_person?: string | null
           created_at?: string
+          deleted_at?: string | null
           email?: string | null
           id?: string
           is_active?: boolean
@@ -721,8 +851,10 @@ export type Database = {
         Row: {
           added_by: string | null
           created_at: string
+          discount: number
           id: string
           product_id: string
+          promotion_id: string | null
           quantity: number
           tab_id: string
           tax_rate: number
@@ -733,8 +865,10 @@ export type Database = {
         Insert: {
           added_by?: string | null
           created_at?: string
+          discount?: number
           id?: string
           product_id: string
+          promotion_id?: string | null
           quantity: number
           tab_id: string
           tax_rate: number
@@ -745,8 +879,10 @@ export type Database = {
         Update: {
           added_by?: string | null
           created_at?: string
+          discount?: number
           id?: string
           product_id?: string
+          promotion_id?: string | null
           quantity?: number
           tab_id?: string
           tax_rate?: number
@@ -760,6 +896,13 @@ export type Database = {
             columns: ["product_id"]
             isOneToOne: false
             referencedRelation: "products"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "tab_items_promotion_id_fkey"
+            columns: ["promotion_id"]
+            isOneToOne: false
+            referencedRelation: "promotions"
             referencedColumns: ["id"]
           },
           {
@@ -970,6 +1113,10 @@ export type Database = {
       has_min_role: {
         Args: { p_minimum: Database["public"]["Enums"]["user_role"] }
         Returns: boolean
+      }
+      log_auth_event: {
+        Args: { p_action: string; p_metadata?: Json }
+        Returns: undefined
       }
       money_scale: { Args: never; Returns: number }
       open_tab: {

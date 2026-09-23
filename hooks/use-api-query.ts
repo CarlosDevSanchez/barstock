@@ -1,4 +1,5 @@
 import { useEffect, useEffectEvent, useState } from 'react'
+import { isStale } from '@/lib/api/client'
 
 interface Result<T> {
     key: string
@@ -13,6 +14,8 @@ export interface ApiQuery<T> {
     loading: boolean
     /** Error of the current request (cleared when the key changes). */
     error: Error | undefined
+    /** True when `data` came from the offline cache (`X-From-Cache`), not a live request: show a "saved data" hint. */
+    stale: boolean
     reload: () => void
 }
 
@@ -39,11 +42,19 @@ export function useApiQuery<T>(fetcher: (signal: AbortSignal) => Promise<T>, key
         return () => controller.abort()
     }, [requestKey])
 
+    const reload = useEffectEvent(() => setReloads(count => count + 1))
+    // Coming back online is exactly when a cached (possibly stale) result is most likely wrong: refetch.
+    useEffect(() => {
+        window.addEventListener('online', reload)
+        return () => window.removeEventListener('online', reload)
+    }, [])
+
     const settled = result?.key === requestKey
     return {
         data: result?.data,
         loading: !settled,
         error: settled ? result.error : undefined,
+        stale: settled && !result.error ? isStale(result.data) : false,
         reload: () => setReloads(count => count + 1)
     }
 }

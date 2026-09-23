@@ -9,7 +9,7 @@ const localStorage = {
 }
 Object.defineProperty(globalThis, 'window', { configurable: true, value: { localStorage } })
 Object.defineProperty(globalThis, 'localStorage', { configurable: true, value: localStorage })
-const { useCartStore } = await import('./cart')
+const { useCartStore, cartLineKey } = await import('./cart')
 
 const cart = () => useCartStore.getState()
 
@@ -30,50 +30,66 @@ describe('cart store', () => {
         cart().addItem('p1', 2)
         cart().addItem('p2')
         expect(cart().items).toEqual([
-            { productId: 'p1', quantity: 3, discount: 0 },
-            { productId: 'p2', quantity: 1, discount: 0 }
+            { kind: 'product', productId: 'p1', quantity: 3, discount: 0 },
+            { kind: 'product', productId: 'p2', quantity: 1, discount: 0 }
         ])
     })
-    test('stores ids and quantities only: no prices, tax rates or product objects', () => {
+    test('stores product ids and quantities only: no prices, tax rates or product objects', () => {
         cart().addItem('p1')
-        expect(Object.keys(cart().items[0] ?? {}).sort()).toEqual(['discount', 'productId', 'quantity'])
+        expect(Object.keys(cart().items[0] ?? {}).sort()).toEqual(['discount', 'kind', 'productId', 'quantity'])
     })
-    test('updates quantity; zero or less removes the line', () => {
+    test('adds promotions separately from products with the same uuid shape', () => {
+        cart().addItem('same-id')
+        cart().addPromotion('same-id', 2)
+        expect(cart().items).toEqual([
+            { kind: 'product', productId: 'same-id', quantity: 1, discount: 0 },
+            { kind: 'promotion', promotionId: 'same-id', quantity: 2 }
+        ])
+        expect(cart().hasPromotions()).toBe(true)
+        expect(cartLineKey(cart().items[1]!)).toBe('promo:same-id')
+    })
+    test('updates quantity by line key; zero or less removes the line', () => {
         cart().addItem('p1')
-        cart().updateQuantity('p1', 5)
+        cart().updateQuantity('p:p1', 5)
         expect(cart().items[0]?.quantity).toBe(5)
-        cart().updateQuantity('p1', 0)
+        cart().updateQuantity('p:p1', 0)
         expect(cart().items).toEqual([])
     })
     test('removes a line without touching the others', () => {
         cart().addItem('p1')
-        cart().addItem('p2')
-        cart().removeItem('p1')
-        expect(cart().items.map(item => item.productId)).toEqual(['p2'])
+        cart().addPromotion('promo-1')
+        cart().removeItem('p:p1')
+        expect(cart().items).toEqual([{ kind: 'promotion', promotionId: 'promo-1', quantity: 1 }])
     })
     test('caps the quantity at the API limit', () => {
         cart().addItem('p1', 99_999)
         cart().addItem('p1', 99_999)
         expect(cart().items[0]?.quantity).toBe(100_000)
+        cart().addPromotion('pr1', 99_999)
+        cart().addPromotion('pr1', 99_999)
+        expect(cart().items[1]?.quantity).toBe(100_000)
     })
     test('discounts cannot be negative', () => {
         cart().addItem('p1')
         cart().updateItemDiscount('p1', -3)
         cart().setGlobalDiscount(-1)
-        expect(cart().items[0]?.discount).toBe(0)
+        expect(cart().items[0]).toMatchObject({ discount: 0 })
         expect(cart().discount).toBe(0)
     })
     test('clearCart empties the lines and the order discount (used on logout)', () => {
         cart().addItem('p1')
+        cart().addPromotion('pr1')
         cart().setGlobalDiscount(5)
         cart().clearCart()
         expect(cart().items).toEqual([])
         expect(cart().discount).toBe(0)
+        expect(cart().hasPromotions()).toBe(false)
     })
-    test('persists only the data, not the actions', () => {
+    test('persists only the data, not the actions (version 3)', () => {
         cart().addItem('p1', 2)
+        cart().addPromotion('pr1')
         const saved = JSON.parse(memory.get('pos-cart') ?? '{}') as { state: Record<string, unknown>; version: number }
-        expect(saved.version).toBe(2)
+        expect(saved.version).toBe(3)
         expect(Object.keys(saved.state).sort()).toEqual(['discount', 'items'])
     })
 })

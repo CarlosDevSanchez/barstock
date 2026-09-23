@@ -32,11 +32,12 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [06-ui-y-diseno.md](01-arquitectura/06-ui-y-diseno.md) | shadcn/ui, Tailwind 4, tema, componentes compartidos, patrones de pantalla |
 | [07-configuracion-y-tooling.md](01-arquitectura/07-configuracion-y-tooling.md) | tsconfig, ESLint, Next config, scripts, CI y Dependabot |
 | [08-api.md](01-arquitectura/08-api.md) | API `/api/v1`: endpoints, contrato, errores, cómo añadir un recurso |
+| [09-pwa-offline.md](01-arquitectura/09-pwa-offline.md) | PWA instalable, service worker, lectura offline, avisos de conexión |
 
 ### 02 · Base de datos — [`02-base-de-datos/`](02-base-de-datos/)
 | Archivo | Contenido |
 |---|---|
-| [01-esquema-tablas.md](02-base-de-datos/01-esquema-tablas.md) | Las 15 tablas y 4 enums (esquema efectivo tras las migraciones) |
+| [01-esquema-tablas.md](02-base-de-datos/01-esquema-tablas.md) | Las 16 tablas y 4 enums (esquema efectivo tras las migraciones) |
 | [02-relaciones-y-diagrama.md](02-base-de-datos/02-relaciones-y-diagrama.md) | Diagrama ER (Mermaid) y reglas de borrado |
 | [03-rls-y-politicas.md](02-base-de-datos/03-rls-y-politicas.md) | Roles, matriz de políticas, protección de perfiles, alta cerrada |
 | [04-triggers-y-funciones.md](02-base-de-datos/04-triggers-y-funciones.md) | RPC de negocio, reportes, triggers |
@@ -51,6 +52,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [ordenes-y-reembolsos.md](03-modulos/ordenes-y-reembolsos.md) | Listado, detalle, reembolso idempotente |
 | [productos.md](03-modulos/productos.md) | CRUD de productos |
 | [categorias.md](03-modulos/categorias.md) | CRUD de categorías |
+| [promociones.md](03-modulos/promociones.md) | Paquetes multi-producto (admin); venta POS pendiente |
 | [inventario.md](03-modulos/inventario.md) | Stock, ajustes con motivo, movimientos |
 | [clientes.md](03-modulos/clientes.md) | Listado y detalle de clientes |
 | [proveedores-y-compras.md](03-modulos/proveedores-y-compras.md) | Proveedores; órdenes de compra (sin UI) |
@@ -58,6 +60,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [reportes.md](03-modulos/reportes.md) | Reportes por rango de fechas |
 | [ajustes.md](03-modulos/ajustes.md) | Ajustes de la tienda (persisten) |
 | [usuarios.md](03-modulos/usuarios.md) | Invitar, cambiar rol, desactivar |
+| [auditoria.md](03-modulos/auditoria.md) | Registro de escrituras y eventos de sesión, solo admin, append-only |
 
 ### 04 · Auditoría técnica — [`04-auditoria/`](04-auditoria/)
 | Archivo | Contenido |
@@ -87,6 +90,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [plan-de-remediacion.md](06-roadmap/plan-de-remediacion.md) | Fases, tareas, criterios de aceptación |
 | [diseno-objetivo-seguridad.md](06-roadmap/diseno-objetivo-seguridad.md) | Borrador de origen de RLS y RPC (**implementado**; manda la migración) |
 | [decisiones-pendientes.md](06-roadmap/decisiones-pendientes.md) | Preguntas de producto y supuestos aplicados sin validar |
+| [offline-y-sincronizacion.md](06-roadmap/offline-y-sincronizacion.md) | Plan (sin implementar) de cola offline y sincronización para ventas, cuentas y ajustes |
 
 ### Otros
 - [glosario.md](glosario.md) — términos de dominio y técnicos.

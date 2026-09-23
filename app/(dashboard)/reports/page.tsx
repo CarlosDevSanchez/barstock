@@ -4,14 +4,17 @@ import { useState } from 'react'
 import { format } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { useLocale, useTranslations } from 'next-intl'
-import { BarChart3, TrendingUp, Package, Users, DollarSign } from 'lucide-react'
+import { BarChart3, TrendingUp, Package, Users, DollarSign, Percent, Wallet, SlidersHorizontal } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
+import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
+import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
 import { useMoney, useSession } from '@/components/session-provider'
 import { reportsApi } from '@/lib/api/reports'
 import { calendarDate, dateInZone } from '@/lib/dates'
@@ -28,7 +31,12 @@ export default function ReportsPage() {
         from: dateInZone(settings.timezone, -6),
         to: dateInZone(settings.timezone)
     }))
+    const [filtersOpen, setFiltersOpen] = useState(false)
     const validRange = range.from !== '' && range.to !== '' && range.from <= range.to
+    const rangeSummary =
+        range.from && range.to
+            ? `${format(calendarDate(range.from), 'MMM dd', { locale: dateLocale })} – ${format(calendarDate(range.to), 'MMM dd', { locale: dateLocale })}`
+            : t('invalidRange')
 
     // Aggregated by the database: refunded orders are excluded, days are bucketed in the store time zone.
     const report = useApiQuery(
@@ -70,11 +78,23 @@ export default function ReportsPage() {
 
     const header = (
         <div className="flex flex-wrap items-end justify-between gap-4">
-            <div>
-                <h1 className="text-3xl font-bold">{t('title')}</h1>
+            <div className="min-w-0">
+                <h1 className="text-xl font-bold truncate lg:text-3xl">{t('title')}</h1>
                 <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>
-            {dateInputs}
+            <div className="hidden lg:block">{dateInputs}</div>
+            <Button variant="outline" className="lg:hidden" onClick={() => setFiltersOpen(true)}>
+                <SlidersHorizontal className="mr-2 size-4" />
+                {rangeSummary}
+            </Button>
+            <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
+                <SheetContent side="bottom" className="rounded-t-2xl">
+                    <SheetHeader>
+                        <SheetTitle>{tc('filters')}</SheetTitle>
+                    </SheetHeader>
+                    <div className="px-4 pb-6">{dateInputs}</div>
+                </SheetContent>
+            </Sheet>
         </div>
     )
 
@@ -109,7 +129,7 @@ export default function ReportsPage() {
         <div className="space-y-6">
             {header}
 
-            <div className="grid gap-4 md:grid-cols-4">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
                 <Card className="rounded-2xl">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t('revenue')}</CardTitle>
@@ -155,8 +175,43 @@ export default function ReportsPage() {
                 </Card>
             </div>
 
-            <div className="grid gap-4 md:grid-cols-2">
+            <div className="grid grid-cols-2 gap-4 lg:grid-cols-3">
                 <Card className="rounded-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('promoMarkdown')}</CardTitle>
+                        <Percent className="h-4 w-4 text-amber-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{money(data.promo_markdown)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t('promoMarkdownHint')}</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('totalCogs')}</CardTitle>
+                        <Wallet className="h-4 w-4 text-slate-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{money(data.total_cogs)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t('totalCogsHint')}</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('grossProfit')}</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-emerald-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold text-emerald-600">{money(data.gross_profit)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t('grossProfitHint')}</p>
+                    </CardContent>
+                </Card>
+            </div>
+
+            <div className="grid gap-4 xl:grid-cols-2">
+                <Card className="min-w-0 rounded-2xl">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <BarChart3 className="h-5 w-5 text-emerald-600" />
@@ -169,9 +224,9 @@ export default function ReportsPage() {
                             {data.daily.map(day => (
                                 <div
                                     key={day.date}
-                                    className="flex items-center justify-between p-3 rounded-lg bg-muted"
+                                    className="flex items-center justify-between gap-3 p-3 rounded-lg bg-muted"
                                 >
-                                    <div>
+                                    <div className="min-w-0">
                                         <p className="font-medium">
                                             {format(calendarDate(day.date), 'MMM dd', { locale: dateLocale })}
                                         </p>
@@ -179,14 +234,14 @@ export default function ReportsPage() {
                                             {t('ordersCount', { count: day.orders })}
                                         </p>
                                     </div>
-                                    <p className="text-lg font-bold text-emerald-600">{money(day.revenue)}</p>
+                                    <p className="shrink-0 text-lg font-bold text-emerald-600">{money(day.revenue)}</p>
                                 </div>
                             ))}
                         </div>
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl">
+                <Card className="min-w-0 rounded-2xl">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Package className="h-5 w-5 text-purple-600" />
@@ -198,33 +253,115 @@ export default function ReportsPage() {
                         {data.top_products.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-8">{t('noSalesData')}</p>
                         ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>{t('colProduct')}</TableHead>
-                                        <TableHead className="text-right">{t('colSold')}</TableHead>
-                                        <TableHead className="text-right">{t('colRevenue')}</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {data.top_products.map(product => (
-                                        <TableRow key={product.product_id}>
-                                            <TableCell className="font-medium">{product.name}</TableCell>
-                                            <TableCell className="text-right">
-                                                <Badge variant="secondary">{product.quantity}</Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right font-semibold text-emerald-600">
+                            <ResponsiveList
+                                items={data.top_products}
+                                keyOf={product => product.product_id}
+                                table={
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>{t('colProduct')}</TableHead>
+                                                <TableHead className="text-right">{t('colSold')}</TableHead>
+                                                <TableHead className="text-right">{t('colRevenue')}</TableHead>
+                                                <TableHead className="text-right">{t('colCogs')}</TableHead>
+                                                <TableHead className="text-right">{t('colGrossProfit')}</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {data.top_products.map(product => (
+                                                <TableRow key={product.product_id}>
+                                                    <TableCell className="font-medium">{product.name}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Badge variant="secondary">{product.quantity}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-semibold text-emerald-600">
+                                                        {money(product.revenue)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right text-muted-foreground">
+                                                        {money(product.cogs)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-semibold">
+                                                        {money(product.gross_profit)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                }
+                                renderCard={product => (
+                                    <ListCardRow
+                                        title={product.name}
+                                        subtitle={t('colSold') + `: ${product.quantity}`}
+                                        value={
+                                            <span className="font-semibold text-emerald-600">
                                                 {money(product.revenue)}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                            </span>
+                                        }
+                                    />
+                                )}
+                            />
                         )}
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl">
+                <Card className="min-w-0 rounded-2xl">
+                    <CardHeader>
+                        <CardTitle className="flex items-center gap-2">
+                            <Percent className="h-5 w-5 text-amber-600" />
+                            {t('topPromotions')}
+                        </CardTitle>
+                        <CardDescription>{t('topPromotionsDesc')}</CardDescription>
+                    </CardHeader>
+                    <CardContent>
+                        {data.top_promotions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground text-center py-8">{t('noPromoData')}</p>
+                        ) : (
+                            <ResponsiveList
+                                items={data.top_promotions}
+                                keyOf={promo => promo.promotion_id}
+                                table={
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>{t('colPromotion')}</TableHead>
+                                                <TableHead className="text-right">{t('colOrders')}</TableHead>
+                                                <TableHead className="text-right">{t('colPackages')}</TableHead>
+                                                <TableHead className="text-right">{t('colRevenue')}</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {data.top_promotions.map(promo => (
+                                                <TableRow key={promo.promotion_id}>
+                                                    <TableCell className="font-medium">{promo.name}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Badge variant="secondary">{promo.orders}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right">{promo.packages}</TableCell>
+                                                    <TableCell className="text-right font-semibold text-emerald-600">
+                                                        {money(promo.revenue)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                }
+                                renderCard={promo => (
+                                    <ListCardRow
+                                        title={promo.name}
+                                        subtitle={t('colPackages') + `: ${promo.packages}`}
+                                        value={
+                                            <span className="font-semibold text-emerald-600">
+                                                {money(promo.revenue)}
+                                            </span>
+                                        }
+                                    />
+                                )}
+                            />
+                        )}
+                    </CardContent>
+                </Card>
+
+                <Card className="min-w-0 rounded-2xl">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <Users className="h-5 w-5 text-orange-600" />
@@ -236,33 +373,50 @@ export default function ReportsPage() {
                         {data.top_customers.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-8">{t('noCustomerData')}</p>
                         ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>{t('colCustomer')}</TableHead>
-                                        <TableHead className="text-right">{t('colOrders')}</TableHead>
-                                        <TableHead className="text-right">{t('colSpent')}</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {data.top_customers.map(customer => (
-                                        <TableRow key={customer.customer_id}>
-                                            <TableCell className="font-medium">{customer.name}</TableCell>
-                                            <TableCell className="text-right">
-                                                <Badge variant="secondary">{customer.orders}</Badge>
-                                            </TableCell>
-                                            <TableCell className="text-right font-semibold text-emerald-600">
+                            <ResponsiveList
+                                items={data.top_customers}
+                                keyOf={customer => customer.customer_id}
+                                table={
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>{t('colCustomer')}</TableHead>
+                                                <TableHead className="text-right">{t('colOrders')}</TableHead>
+                                                <TableHead className="text-right">{t('colSpent')}</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {data.top_customers.map(customer => (
+                                                <TableRow key={customer.customer_id}>
+                                                    <TableCell className="font-medium">{customer.name}</TableCell>
+                                                    <TableCell className="text-right">
+                                                        <Badge variant="secondary">{customer.orders}</Badge>
+                                                    </TableCell>
+                                                    <TableCell className="text-right font-semibold text-emerald-600">
+                                                        {money(customer.spent)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                }
+                                renderCard={customer => (
+                                    <ListCardRow
+                                        title={customer.name}
+                                        subtitle={t('colOrders') + `: ${customer.orders}`}
+                                        value={
+                                            <span className="font-semibold text-emerald-600">
                                                 {money(customer.spent)}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                            </span>
+                                        }
+                                    />
+                                )}
+                            />
                         )}
                     </CardContent>
                 </Card>
 
-                <Card className="rounded-2xl">
+                <Card className="min-w-0 rounded-2xl xl:col-span-2">
                     <CardHeader>
                         <CardTitle className="flex items-center gap-2">
                             <DollarSign className="h-5 w-5 text-emerald-600" />
@@ -274,28 +428,45 @@ export default function ReportsPage() {
                         {data.by_payment_method.length === 0 ? (
                             <p className="text-sm text-muted-foreground text-center py-8">{t('noPayments')}</p>
                         ) : (
-                            <Table>
-                                <TableHeader>
-                                    <TableRow>
-                                        <TableHead>{t('colMethod')}</TableHead>
-                                        <TableHead className="text-right">{t('colOrders')}</TableHead>
-                                        <TableHead className="text-right">{t('colAmount')}</TableHead>
-                                    </TableRow>
-                                </TableHeader>
-                                <TableBody>
-                                    {data.by_payment_method.map(payment => (
-                                        <TableRow key={payment.method}>
-                                            <TableCell className="font-medium">
-                                                {paymentLabel(payment.method)}
-                                            </TableCell>
-                                            <TableCell className="text-right">{payment.orders}</TableCell>
-                                            <TableCell className="text-right font-semibold text-emerald-600">
+                            <ResponsiveList
+                                items={data.by_payment_method}
+                                keyOf={payment => payment.method}
+                                table={
+                                    <Table>
+                                        <TableHeader>
+                                            <TableRow>
+                                                <TableHead>{t('colMethod')}</TableHead>
+                                                <TableHead className="text-right">{t('colOrders')}</TableHead>
+                                                <TableHead className="text-right">{t('colAmount')}</TableHead>
+                                            </TableRow>
+                                        </TableHeader>
+                                        <TableBody>
+                                            {data.by_payment_method.map(payment => (
+                                                <TableRow key={payment.method}>
+                                                    <TableCell className="font-medium">
+                                                        {paymentLabel(payment.method)}
+                                                    </TableCell>
+                                                    <TableCell className="text-right">{payment.orders}</TableCell>
+                                                    <TableCell className="text-right font-semibold text-emerald-600">
+                                                        {money(payment.amount)}
+                                                    </TableCell>
+                                                </TableRow>
+                                            ))}
+                                        </TableBody>
+                                    </Table>
+                                }
+                                renderCard={payment => (
+                                    <ListCardRow
+                                        title={paymentLabel(payment.method)}
+                                        subtitle={t('colOrders') + `: ${payment.orders}`}
+                                        value={
+                                            <span className="font-semibold text-emerald-600">
                                                 {money(payment.amount)}
-                                            </TableCell>
-                                        </TableRow>
-                                    ))}
-                                </TableBody>
-                            </Table>
+                                            </span>
+                                        }
+                                    />
+                                )}
+                            />
                         )}
                     </CardContent>
                 </Card>

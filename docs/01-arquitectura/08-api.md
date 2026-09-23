@@ -6,7 +6,9 @@
 
 ## Principio
 
-El navegador **no habla con Supabase**: solo con `/api/v1`. La autorización tiene dos capas independientes: el rol se comprueba en `route()`
+El navegador **no habla con Supabase**: solo con `/api/v1`. Excepción acotada: las **imágenes** de producto y el logo se descargan
+directamente de Cloudflare R2 con **URL firmadas** (bucket privado) que emite el servidor; la subida y el borrado sí pasan por `/api/v1`.
+La autorización tiene dos capas independientes: el rol se comprueba en `route()`
 y **RLS** decide los datos con el JWT del usuario. El lint lo impone: `no-restricted-imports` prohíbe `@supabase/*`, `@/lib/supabase` y
 `@/lib/server/**` en `app/(auth)`, `app/(dashboard)` y `components/`. Única excepción: `app/(dashboard)/layout.tsx`, que es un Server Component
 (lee sesión y ajustes en el servidor y los pasa a `AppShell`).
@@ -24,13 +26,13 @@ navegador ── lib/api/* (fetch) ──▶ proxy.ts ──▶ app/api/v1/**/ro
 
 | Archivo | Función |
 |---|---|
-| `proxy.ts` | Refresca la sesión (cookies) y valida el JWT; sin sesión: páginas → `307 /login?next=…`, `/api/*` → `401` JSON. Guarda por rol en `/settings`, `/users` (admin) y `/reports`, `/suppliers` (gerente). **Guarda de UX**, no la frontera de seguridad. Públicas: `/login`, `/forgot-password`, `/reset-password`, `/auth/confirm`, `/api/v1/auth/*` |
+| `proxy.ts` | Refresca la sesión (cookies) y valida el JWT; sin sesión: páginas → `307 /login?next=…`, `/api/*` → `401` JSON. Guarda por rol en `/settings`, `/users`, `/audit` (admin) y `/reports`, `/suppliers`, `/promotions` (gerente). **Guarda de UX**, no la frontera de seguridad. Públicas: `/login`, `/forgot-password`, `/reset-password`, `/auth/confirm`, `/api/v1/auth/*` |
 | `lib/server/http.ts` | `route()` (autenticada) y `publicRoute()`. Orden: comprobación de origen → sesión y rol → validación zod → handler → envoltorio JSON |
 | `lib/server/auth.ts` | `loadSession()`, `getSession()`, `requireUser()`, `requireRole(min)`. Usa `auth.getUser()` (valida el JWT) y lee el rol de `profiles` **en cada petición**; un usuario inactivo cuenta como no autenticado |
 | `lib/server/errors.ts` | `AppError`, mapeo de códigos de Postgres, `assertNoError()` |
 | `lib/server/supabase.ts` | Cliente tipado (`SupabaseClient<Database>`) con las cookies del request: aplica RLS. Es el único que reciben los servicios |
 | `lib/server/supabase-admin.ts` | Cliente `service_role`. **Solo** lo usa `services/users.ts` para invitar |
-| `lib/server/services/*` | `products` (incluye `listTopProducts`), `categories`, `customers`, `suppliers`, `inventory`, `orders`, `sales`, `tabs`, `reports`, `settings`, `users`, `auth` |
+| `lib/server/services/*` | `products` (incluye `listTopProducts`), `categories`, `promotions`, `customers`, `suppliers`, `inventory`, `orders`, `sales`, `tabs`, `reports`, `settings`, `users`, `auth`, `audit` |
 | `lib/validation/*` | Esquemas zod compartidos cliente/servidor (`common`, `resources`, `tabs`, `reports`) |
 | `lib/api/*` | Cliente `fetch` tipado (`client.ts`, `ApiError`, `errorMessage`) y un módulo por recurso |
 | `app/auth/confirm/route.ts` | Destino de los correos de invitación y recuperación: `verifyOtp(token_hash)` en el servidor → cookie de sesión → `/reset-password` |
@@ -48,13 +50,15 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | `auth/password/reset` | POST | cajero | Requiere la sesión creada por `/auth/confirm` |
 | `me` | GET · PATCH | cajero | GET: sesión actual. PATCH `{ locale: 'es' \| 'en' }` → `profiles.locale` + cookie `NEXT_LOCALE` |
 | `products`, `products/[id]` | GET · POST/PATCH/DELETE | cajero · gerente | `?category_id&active&ids`; DELETE = borrado lógico. Lista con `stock` |
+| `products/[id]/image` | POST/DELETE | gerente | `multipart/form-data` (`file`); ≤ 2 MB, JPEG/PNG/WebP por *magic bytes*. La clave R2 la genera el servidor; devuelve `image_url` firmada (12 h). 503 si R2 no está configurado |
 | `products/top` | GET | cajero | RPC `top_selling_products` (`SECURITY DEFINER`, toda la tienda); `?days&limit` (máx. 366 / 20) |
 | `categories`, `categories/[id]` | GET · POST/PATCH/DELETE | cajero · gerente | Lista con `product_count`; DELETE falla con 409 si tiene productos |
-| `customers`, `customers/[id]` | GET/POST/PATCH | cajero | `total_spent`/`loyalty_points` no son escribibles |
-| `suppliers`, `suppliers/[id]` | GET/POST/PATCH | gerente | |
+| `promotions`, `promotions/[id]` | GET · POST/PATCH/DELETE | cajero · gerente | Paquetes fijos; `?active&ids`; DELETE = borrado lógico; cuerpo con `items[]` (producto+cantidad). Venta vía `create_sale` (expansión) |
+| `customers`, `customers/[id]` | GET/POST/PATCH · DELETE | cajero · admin | `total_spent`/`loyalty_points` no son escribibles; DELETE = borrado lógico (`deleted_at`) |
+| `suppliers`, `suppliers/[id]` | GET/POST/PATCH · DELETE | gerente · admin | DELETE = borrado lógico (`deleted_at`) |
 | `inventory` | GET | cajero | `?low` y `summary` (`total_units`, `item_count`, `low_stock_count`, `stock_value`) sobre todo el conjunto filtrado |
 | `inventory/[id]/adjust` | POST | gerente | RPC `adjust_inventory`; `{ delta, reason }` |
-| `sales` | POST | cajero | RPC `create_sale`; solo ids y cantidades; devuelve la orden con totales calculados por la BD |
+| `sales` | POST | cajero | RPC `create_sale`; ítems producto **o** promo; precios/totales de la BD (promo → precio asignado) |
 | `orders`, `orders/[id]` | GET | cajero | Cajero: solo las suyas (RLS). `?status&customer_id&from&to&q` (q = número de orden) |
 | `orders/[id]/refund` | POST | gerente | RPC `refund_order`; `{ reason }`; idempotente |
 | `tabs`, `tabs/[id]` | GET/POST · GET | cajero | Cuentas abiertas ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)); `?status`; el detalle incluye ítems, personas, pagos y totales (`tab_summary`) |
@@ -66,10 +70,12 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | `tabs/[id]/void` | POST | gerente | RPC `void_tab`; `{ reason }`; solo sin pagos |
 | `dashboard` | GET | cajero | RPC `dashboard_summary`; el cajero ve solo sus ventas |
 | `reports` | GET | gerente | RPC `sales_report`; `?from&to` (≤ 366 días) |
-| `settings` | GET · PATCH | cajero · admin | Una fila JSONB por clave; valores inválidos caen al valor por defecto |
+| `settings` | GET · PATCH | cajero · admin | Una fila JSONB por clave; valores inválidos caen al valor por defecto. GET añade `store_logo_url` (firmada) y `storage_configured` |
+| `settings/logo` | POST/DELETE | admin | Igual que `products/[id]/image`, para `store_logo_key` (logo del ticket) |
 | `users` | GET | admin | |
 | `users/invite` | POST | admin | `inviteUserByEmail` + rol en `app_metadata` (un trigger lo copia al perfil y lo activa); si falla la asignación de rol se borra el usuario |
 | `users/[id]` | PATCH | admin | `{ role?, is_active? }`; no se puede uno desactivar ni quitarse el rol de admin; el trigger protege al último admin |
+| `audit` | GET | admin | Solo lectura: sin POST/PATCH/DELETE. `?actor_id&action&entity&from&to`, ver [Auditoría](../03-modulos/auditoria.md) |
 
 ## Contrato
 
@@ -82,11 +88,14 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | 401 | `unauthorized` | Sin sesión, sesión inválida, perfil ausente/inválido o usuario inactivo |
 | 403 | `forbidden` | Rol insuficiente; RLS (`42501`); escritura desde otro origen; cuenta desactivada en el login |
 | 404 | `not_found` | Recurso inexistente o invisible para el rol (`PGRST116`, `P0002`, 0 filas) |
-| 409 | `conflict` | `UNIQUE` (`23505`) o clave foránea (`23503`); email de usuario ya existente |
+| 409 | `conflict` | `UNIQUE` (`23505`) o clave foránea (`23503`); email de usuario ya existente. En `products`, un `23505` sobre `sku` o `barcode` lleva `details: { field }` (nunca el nombre de la restricción ni el valor) |
+| 413 | `payload_too_large` | Imagen de más de 2 MB |
+| 415 | `unsupported_media_type` | El archivo no es JPEG/PNG/WebP (se comprueban los *magic bytes*, no el nombre ni el `Content-Type`) |
 | 422 | `validation_failed` | Falla zod; `details` = `[{ path, message }]` |
 | 422 | `unprocessable` | `CHECK`/`NOT NULL` (`23514`, `23502`) o `RAISE EXCEPTION` de un RPC (`P0001`, p. ej. `Insufficient stock for "Wireless Mouse"`) |
 | 429 | `too_many_requests` | Límite de intentos de Supabase Auth |
 | 500 | `internal_error` | Cualquier otra cosa; el detalle solo va al log del servidor |
+| 503 | `storage_not_configured` | Endpoint de imágenes sin las 4 variables `R2_*` |
 
 **Los mensajes crudos de Postgres nunca llegan al cliente**, con una excepción deliberada: `P0001`/`P0002`, escritos por nosotros en los RPC.
 

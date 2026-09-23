@@ -32,6 +32,9 @@ const createSale = mock(async (_body: unknown) => ({ id: 'order-1', order_number
 const push = mock(() => {})
 
 void mock.module('@/lib/api/products', () => ({ productsApi: { list, top: async () => [] } }))
+void mock.module('@/lib/api/promotions', () => ({
+    promotionsApi: { list: async () => page([]) }
+}))
 void mock.module('@/lib/api/categories', () => ({ categoriesApi: { list: async () => page([]) } }))
 void mock.module('@/lib/api/customers', () => ({ customersApi: { list: async () => page([]) } }))
 void mock.module('@/lib/api/orders', () => ({ salesApi: { create: createSale } }))
@@ -60,7 +63,13 @@ const renderPos = () =>
         </IntlProvider>
     )
 
-const addToCart = (name: string) => fireEvent.click(screen.getByRole('button', { name: `Add ${name} to cart` }))
+const addToCart = (name: string, qty = 1) => {
+    fireEvent.click(screen.getByRole('button', { name: `Add ${name} to cart` }))
+    for (let i = 1; i < qty; i++) {
+        fireEvent.click(screen.getByRole('button', { name: 'Increase quantity' }))
+    }
+    fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+}
 const openCart = () => fireEvent.click(screen.getByRole('button', { name: /^Cart:/ }))
 // Scoped to the cart dialog: the bubble's own hover preview repeats "Total", so an unscoped query is ambiguous.
 const cartDialog = () => screen.getByRole('dialog', { name: /^Cart/ })
@@ -81,10 +90,11 @@ describe('POS cart', () => {
         expect(screen.getByText('3 left')).toBeTruthy()
         expect(screen.getByText('Out of stock')).toBeTruthy()
 
-        addToCart('Sold Out Thing')
+        fireEvent.click(screen.getByRole('button', { name: 'Add Sold Out Thing to cart' }))
+        expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
         expect(useCartStore.getState().items).toEqual([])
-        // Nothing was added: the cart bubble stays hidden (it only shows once there is something to check out).
-        expect(screen.queryByRole('button', { name: /^Cart:/ })).toBeNull()
+        // Nothing was added: the cart bubble stays visible but still reports an empty cart.
+        expect(screen.getByRole('button', { name: 'Cart: 0 items, total $0.00' })).toBeTruthy()
     })
 
     test('adds products, merges repeats into one line and shows a preview of the totals', async () => {
@@ -98,14 +108,62 @@ describe('POS cart', () => {
         openCart()
         expect(await screen.findByText('Cart (2)')).toBeTruthy()
         expect(useCartStore.getState().items).toEqual([
-            { productId: 'p-mouse', quantity: 2, discount: 0 },
-            { productId: 'p-cable', quantity: 1, discount: 0 }
+            { kind: 'product', productId: 'p-mouse', quantity: 2, discount: 0 },
+            { kind: 'product', productId: 'p-cable', quantity: 1, discount: 0 }
         ])
         // 2 x 29.99 + 12.99 = 72.97; 10 % tax per line = 6.00 + 1.30
         await waitFor(() => expect(cartSummary('Subtotal')).toContain('$72.97'))
         expect(cartSummary('Tax')).toContain('$7.30')
         expect(cartSummary('Total')).toContain('$80.27')
         expect(screen.getByText(/Estimate\./)).toBeTruthy()
+    })
+
+    test('confirming a quantity N adds that many units in one step', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        addToCart('Wireless Mouse', 3)
+        await waitFor(() =>
+            expect(useCartStore.getState().items).toEqual([
+                { kind: 'product', productId: 'p-mouse', quantity: 3, discount: 0 }
+            ])
+        )
+    })
+
+    test('decreasing pending qty to 0 dismisses the stepper without adding to the cart', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        fireEvent.click(screen.getByRole('button', { name: 'Add Wireless Mouse to cart' }))
+        expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Decrease quantity' }))
+        expect(screen.queryByRole('button', { name: 'Confirm' })).toBeNull()
+        expect(useCartStore.getState().items).toEqual([])
+    })
+
+    test('opening another product discards the previous pending quantity without confirming', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        fireEvent.click(screen.getByRole('button', { name: 'Add Wireless Mouse to cart' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Increase quantity' }))
+        fireEvent.click(screen.getByRole('button', { name: 'Add USB-C Cable to cart' }))
+        // Only the cable stepper is open; mouse draft was discarded.
+        expect(screen.getByRole('button', { name: 'Confirm' })).toBeTruthy()
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+        await waitFor(() =>
+            expect(useCartStore.getState().items).toEqual([
+                { kind: 'product', productId: 'p-cable', quantity: 1, discount: 0 }
+            ])
+        )
+    })
+
+    test('+ is capped at stock minus units already in the cart', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        addToCart('Wireless Mouse', 2) // stock 3 → 1 left addable
+        fireEvent.click(screen.getByRole('button', { name: 'Add Wireless Mouse to cart' }))
+        const increase = () => screen.getByRole('button', { name: 'Increase quantity' }) as HTMLButtonElement
+        expect(increase().disabled).toBe(true) // pending qty starts at 1 = maxAddable
+        fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
+        await waitFor(() => expect(useCartStore.getState().items[0]?.quantity).toBe(3))
     })
 
     test('changes quantity with the buttons, never beyond the stock, and removes a line', async () => {
@@ -153,9 +211,9 @@ describe('POS cart', () => {
     test('a cart restored from a previous visit is priced from live data; lines that cannot be sold block checkout', async () => {
         useCartStore.setState({
             items: [
-                { productId: 'p-gone', quantity: 1, discount: 0 }, // sold out since
-                { productId: 'p-deleted', quantity: 1, discount: 0 }, // deleted since: the lookup does not return it
-                { productId: 'p-cable', quantity: 1, discount: 0 }
+                { kind: 'product', productId: 'p-gone', quantity: 1, discount: 0 }, // sold out since
+                { kind: 'product', productId: 'p-deleted', quantity: 1, discount: 0 }, // deleted since
+                { kind: 'product', productId: 'p-cable', quantity: 1, discount: 0 }
             ]
         })
         renderPos()
@@ -171,7 +229,11 @@ describe('POS cart', () => {
         const removeButtons = screen.getAllByRole('button', { name: 'Remove from cart' })
         fireEvent.click(removeButtons[0] as HTMLElement)
         fireEvent.click(screen.getAllByRole('button', { name: 'Remove from cart' })[0] as HTMLElement)
-        await waitFor(() => expect(useCartStore.getState().items.map(item => item.productId)).toEqual(['p-cable']))
+        await waitFor(() =>
+            expect(
+                useCartStore.getState().items.map(item => (item.kind === 'product' ? item.productId : item.promotionId))
+            ).toEqual(['p-cable'])
+        )
         await waitFor(() => expect(checkout().disabled).toBe(false))
     })
 

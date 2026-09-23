@@ -28,24 +28,51 @@ const linksFor = (role: 'cashier' | 'manager' | 'admin') => {
             </AppShell>
         </IntlProvider>
     )
-    // Desktop sidebar (the mobile sheet renders its own copy only when opened).
-    const nav = screen.getByRole('navigation')
+    // Two <nav>s: the sidebar's full nav (also reused by the mobile "More" sheet) and the mobile bottom nav.
+    expect(screen.getAllByRole('navigation')).toHaveLength(2)
+    const nav = screen.getByRole('navigation', { name: 'Main navigation' })
     return Array.from(nav.querySelectorAll('a')).map(link => link.textContent)
 }
 
 describe('navigation follows the role', () => {
-    const CASHIER = ['Dashboard', 'POS', 'Products', 'Categories', 'Inventory', 'Orders', 'Customers']
+    const CASHIER = ['Dashboard', 'POS', 'Orders', 'Customers', 'Products', 'Categories', 'Inventory']
+    const MANAGER = [
+        'Dashboard',
+        'POS',
+        'Orders',
+        'Customers',
+        'Products',
+        'Categories',
+        'Promotions',
+        'Inventory',
+        'Suppliers',
+        'Reports'
+    ]
 
     test('a cashier sees the till and the catalog, but not suppliers, reports, settings or users', () => {
         expect(linksFor('cashier')).toEqual(CASHIER)
     })
 
     test('a manager also sees suppliers and reports', () => {
-        expect(linksFor('manager')).toEqual([...CASHIER, 'Suppliers', 'Reports'])
+        expect(linksFor('manager')).toEqual(MANAGER)
     })
 
-    test('an admin sees everything, including settings and users', () => {
-        expect(linksFor('admin')).toEqual([...CASHIER, 'Suppliers', 'Reports', 'Settings', 'Users'])
+    test('an admin sees everything, including settings, users and the audit log', () => {
+        expect(linksFor('admin')).toEqual([...MANAGER, 'Settings', 'Users', 'Audit log'])
+    })
+
+    test('group labels are not links', () => {
+        render(
+            <IntlProvider>
+                <AppShell user={userWithRole('admin')} settings={settings}>
+                    <p>page</p>
+                </AppShell>
+            </IntlProvider>
+        )
+        for (const label of ['Sales', 'Catalog', 'Analytics', 'Administration']) {
+            const el = screen.getByText(label)
+            expect(el.closest('a')).toBeNull()
+        }
     })
 })
 

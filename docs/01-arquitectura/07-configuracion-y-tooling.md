@@ -36,9 +36,12 @@ Sin Prettier, sin `lint-staged`, sin hooks de git.
 
 ## Next.js — `next.config.ts`
 
-Vacío (`{}`). Sin `headers()`, `images`, `redirects`, `poweredByHeader`, `output`, ni
-`reactStrictMode` explícito. Ver [medios y bajos](../04-auditoria/hallazgos/medios-y-bajos.md) para los
-headers de seguridad recomendados.
+`agentRules: false` (evita que `next dev` escriba en `AGENTS.md`/`CLAUDE.md`), `poweredByHeader: false`,
+`images: { unoptimized: true }` (no se usa `next/image`). `headers()` añade cabeceras de seguridad (CSP, `X-Frame-Options`,
+HSTS…) a todas las rutas y, aparte, `Cache-Control: no-cache` + `Service-Worker-Allowed: /` solo a `/sw.js` (ver
+[PWA y offline](09-pwa-offline.md)): el service worker no puede quedar cacheado por el navegador o una versión nueva
+nunca se descargaría. La CSP incluye `worker-src`/`manifest-src` para el service worker y el manifest, y los hosts de
+R2/MinIO en `connect-src` (los `fetch` del propio service worker se rigen por esa directiva, igual que los del navegador).
 
 ## Otros archivos
 

@@ -10,8 +10,34 @@
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Pública** | Clave `anon` (JWT). No es secreta por diseño: la seguridad depende de RLS |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Solo servidor** | Clave `service_role`. **Salta RLS.** Se usa únicamente para invitar usuarios (`auth.admin`) |
 | `APP_URL` | Solo servidor | URL pública de la app; base de los enlaces de invitación y de restablecer contraseña |
+| `R2_ACCOUNT_ID` | Solo servidor | Cuenta de Cloudflare R2 (imágenes de producto y logo del ticket, Fase 6). **Opcional como grupo** |
+| `R2_ACCESS_KEY_ID` | Solo servidor | Token de API de R2 (Object Read & Write, limitado a `R2_BUCKET`). **Opcional como grupo** |
+| `R2_SECRET_ACCESS_KEY` | Solo servidor | Secreto del token anterior. **Opcional como grupo** |
+| `R2_BUCKET` | Solo servidor | Bucket privado (nunca público) donde se guardan las imágenes. **Opcional como grupo** |
+| `R2_ENDPOINT_OVERRIDE` | Solo servidor | **Solo desarrollo local, opcional e independiente del grupo anterior.** Sustituye el host real de R2 por un endpoint S3 compatible (el contenedor MinIO de `docker-compose.r2.yml`), usado por el servidor para subir/borrar. Nunca se define en producción |
+| `R2_PUBLIC_ENDPOINT_OVERRIDE` | Solo servidor | **Solo desarrollo local, opcional.** Host que usa el *navegador* para las URLs firmadas (p. ej. `http://localhost:9000`); distinto de `R2_ENDPOINT_OVERRIDE` cuando la app corre dentro de Docker y MinIO se referencia por nombre de contenedor (`http://r2:9000`) para ese tráfico servidor-a-servidor. Si no se define, usa el mismo valor que `R2_ENDPOINT_OVERRIDE` |
 
 Plantilla versionada: [`.env.example`](../../.env.example). Copiarla a `.env.local`.
+
+### R2 (imágenes), opcional como grupo
+
+Las cuatro variables `R2_*` se validan juntas con `superRefine` en `lib/env/schema.ts`: **las cuatro o ninguna**. Sin ellas, `next
+dev`/`next build` funcionan igual (a diferencia de las otras variables, que son obligatorias), y `lib/server/storage.ts` responde
+`503 storage_not_configured` en los endpoints de imagen (`app/api/v1/products/[id]/image`, `app/api/v1/settings/logo`); la UI oculta el
+selector de imagen en ese caso. El bucket es **privado**: las imágenes se sirven con URL firmada (12 h), nunca públicas. El token de R2
+debe estar limitado a ese único bucket con permiso "Object Read & Write" (no se crea el token real en este repositorio, solo se
+documenta el requisito).
+
+### R2 en local (MinIO), sin credenciales reales
+
+`bun run local:up` y `bun run local:dev` levantan también un contenedor [MinIO](https://min.io) (`docker-compose.r2.yml`) que emula la
+API S3 de R2, con un bucket ya creado y credenciales locales fijas. `R2_ENDPOINT_OVERRIDE=http://r2:9000` (dentro de la red Docker) hace
+que `lib/server/storage.ts` firme y suba objetos contra ese contenedor en vez del R2 real — así se puede probar la subida de imágenes de
+producto y del logo del ticket de principio a fin sin credenciales de Cloudflare. `R2_PUBLIC_ENDPOINT_OVERRIDE=http://localhost:9000`
+hace que las URLs firmadas que recibe el navegador usen un host que sí puede resolver (el navegador corre en el host, fuera de la red de
+Docker; `r2` como nombre de host solo existe dentro de esa red). Consola web: `http://localhost:9001` (usuario/clave `barstock-local` /
+`barstock-local-2026`). Ninguna de las dos variables debe definirse fuera de este flujo local; en Vercel/CI se dejan sin definir para
+hablar con el R2 real.
 
 ## Validación
 
@@ -49,7 +75,11 @@ Plantilla versionada: [`.env.example`](../../.env.example). Copiarla a `.env.loc
 `next.config.ts` añade CSP, `frame-ancestors 'none'`, `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy`, HSTS y
 `Permissions-Policy`. `connect-src` incluye el origen de `NEXT_PUBLIC_SUPABASE_URL` **mientras el navegador siga llamando a Supabase
 directamente**; se retira cuando la UI solo hable con `/api/v1` (Paso 5). `script-src` conserva `'unsafe-inline'`: una CSP con nonce
-obligaría a renderizar dinámicamente todas las páginas.
+obligaría a renderizar dinámicamente todas las páginas. `img-src` permite siempre `https://*.r2.cloudflarestorage.com` (patrón fijo de
+R2, no un secreto) **y** `http://localhost:9000` / `http://127.0.0.1:9000` (MinIO local de `docker-compose.r2.yml`). **No** se deriva de
+`R2_ACCOUNT_ID`: `next.config.ts` se evalúa en el *build* y la imagen Docker se construye sin las variables `R2_*` (llegan al arrancar el
+contenedor), así que un origen derivado quedaba fuera de la CSP y el navegador bloqueaba las imágenes en silencio — lo mismo pasaba con
+MinIO cuando la CSP solo listaba el host de Cloudflare.
 
 ## Rotación y compromiso de claves
 

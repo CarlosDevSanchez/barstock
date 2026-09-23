@@ -11,6 +11,7 @@ import {
     createCustomer,
     createProduct,
     ensureTestUsers,
+    signedInClient,
     uniq,
     type TestUsers
 } from '../helpers/integration'
@@ -113,8 +114,25 @@ interface Report {
     total_tax: number
     total_discount: number
     average_order: number
+    promo_markdown: number
+    total_cogs: number
+    gross_profit: number
     daily: Array<{ date: string; revenue: number; orders: number }>
-    top_products: Array<{ product_id: string; name: string; quantity: number; revenue: number }>
+    top_products: Array<{
+        product_id: string
+        name: string
+        quantity: number
+        revenue: number
+        cogs: number
+        gross_profit: number
+    }>
+    top_promotions: Array<{
+        promotion_id: string
+        name: string
+        orders: number
+        packages: number
+        revenue: number
+    }>
     top_customers: Array<{ customer_id: string; name: string; orders: number; spent: number }>
     by_payment_method: Array<{ method: string; orders: number; amount: number }>
 }
@@ -194,13 +212,19 @@ describe('reports', () => {
             total_revenue: 135,
             total_tax: 10,
             total_discount: 5,
-            average_order: 67.5
+            average_order: 67.5,
+            promo_markdown: 0,
+            // createProduct defaults cost_price=4: 2×4 + 1×4
+            total_cogs: 12,
+            // bases 100 + 30 − cogs 12
+            gross_profit: 118
         })
         expect(data.daily).toEqual([{ date: day, revenue: 135, orders: 2 }])
         expect(data.top_products).toEqual([
-            { product_id: p1.id, name: p1.name, quantity: 2, revenue: 110 },
-            { product_id: p2.id, name: p2.name, quantity: 1, revenue: 30 }
+            { product_id: p1.id, name: p1.name, quantity: 2, revenue: 110, cogs: 8, gross_profit: 92 },
+            { product_id: p2.id, name: p2.name, quantity: 1, revenue: 30, cogs: 4, gross_profit: 26 }
         ])
+        expect(data.top_promotions).toEqual([])
         expect(data.top_customers).toEqual([{ customer_id: customer.id, name: customer.name, orders: 2, spent: 135 }])
         expect(data.by_payment_method).toEqual([
             { method: 'card', orders: 1, amount: 105 },
@@ -209,8 +233,87 @@ describe('reports', () => {
 
         // A day with no sales is empty (and still zero-filled in the daily series).
         const empty = dataOf<Report>(await manager.get(report, 'reports?from=1999-12-31&to=1999-12-31'))
-        expect(empty).toMatchObject({ total_orders: 0, total_revenue: 0, average_order: 0 })
+        expect(empty).toMatchObject({
+            total_orders: 0,
+            total_revenue: 0,
+            average_order: 0,
+            promo_markdown: 0,
+            total_cogs: 0,
+            gross_profit: 0
+        })
         expect(empty.daily).toEqual([{ date: '1999-12-31', revenue: 0, orders: 0 }])
+        expect(empty.top_promotions).toEqual([])
+    })
+
+    test('promo sale reports charged package price, not list price (markdown + margin)', async () => {
+        const db = adminClient()
+        const day = new Date(Date.UTC(2001, 5, 1) + Math.floor(Math.random() * 500) * 86_400_000)
+            .toISOString()
+            .slice(0, 10)
+        const beer = await createProduct({
+            name: uniq('Beer4'),
+            selling_price: 5000,
+            cost_price: 2000,
+            tax_rate: 0,
+            stock: 20
+        })
+        const { data: promo, error: promoError } = await db
+            .from('promotions')
+            .insert({ name: uniq('Bucket17'), package_price: 17000, is_active: true })
+            .select()
+            .single()
+        if (promoError) throw promoError
+        const { error: itemsError } = await db
+            .from('promotion_items')
+            .insert({ promotion_id: promo.id, product_id: beer.id, quantity: 4 })
+        if (itemsError) throw itemsError
+
+        const cashierDb = await signedInClient('cashier')
+        const { data: orderId, error: saleError } = await cashierDb.rpc('create_sale', {
+            p_customer_id: null as unknown as string,
+            p_items: [{ promotion_id: promo.id, quantity: 1 }],
+            p_payment_method: 'cash',
+            p_discount: 0
+        })
+        expect(saleError).toBeNull()
+        expect(orderId).toBeTruthy()
+
+        const { data: orderRow } = await db.from('orders').select('subtotal, total').eq('id', orderId!).single()
+        expect(Number(orderRow?.subtotal)).toBeCloseTo(17000, 2)
+        // Must not look like list 4×5000
+        expect(Number(orderRow?.subtotal)).not.toBe(20000)
+
+        await db
+            .from('orders')
+            .update({ created_at: `${day}T15:00:00Z` })
+            .eq('id', orderId!)
+
+        const data = dataOf<Report>(await manager.get(report, `reports?from=${day}&to=${day}`))
+        expect(data.total_revenue).toBeCloseTo(17000, 2)
+        expect(data.total_revenue).not.toBe(20000)
+        expect(data.promo_markdown).toBeCloseTo(3000, 2) // 20000 list − 17000 assigned
+        expect(data.total_cogs).toBeCloseTo(8000, 2) // 4 × 2000
+        expect(data.gross_profit).toBeCloseTo(9000, 2) // 17000 − 8000
+        expect(data.total_discount).toBe(0) // combo markdown is not global discount
+        expect(data.top_promotions).toEqual([
+            {
+                promotion_id: promo.id,
+                name: promo.name,
+                orders: 1,
+                packages: 1,
+                revenue: 17000
+            }
+        ])
+        expect(data.top_products).toEqual([
+            {
+                product_id: beer.id,
+                name: beer.name,
+                quantity: 4,
+                revenue: 17000,
+                cogs: 8000,
+                gross_profit: 9000
+            }
+        ])
     })
 })
 

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -20,8 +20,10 @@ import {
     DialogTitle
 } from '@/components/ui/dialog'
 import { useMoney, useSession } from '@/components/session-provider'
+import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { errorMessage } from '@/lib/api/client'
 import { tabsApi, type TabDetail } from '@/lib/api/tabs'
+import { groupOrderItemsByPromotion, type GroupableOrderItem } from '@/lib/order-item-groups'
 import { splitEqual, validateCustom } from '@/lib/tab-split'
 import { currencyDecimals } from '@/lib/money'
 import { roleAtLeast } from '@/lib/auth/roles'
@@ -156,6 +158,7 @@ function VoidTabDialog({ onClose, onVoid }: { onClose: () => void; onVoid: (reas
 /** Full detail of one tab: items, members, totals, payments and the split/pay/void actions. */
 export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProps) {
     const t = useTranslations('tabs')
+    const tPos = useTranslations('pos')
     const tc = useTranslations('common')
     const router = useRouter()
     const money = useMoney()
@@ -174,6 +177,29 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
     const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
     const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
     const [payingKey, setPayingKey] = useState<string | null>(null)
+
+    const tab = tabQuery.data
+    const itemGroups = useMemo(() => {
+        if (!tab) return []
+        const groupable: GroupableOrderItem[] = tab.items.map(item => {
+            const lineDiscount = item.discount ?? 0
+            const base = item.unit_price * item.quantity - lineDiscount
+            return {
+                id: item.id,
+                promotion_id: item.promotion_id,
+                quantity: item.quantity,
+                unit_price: item.unit_price,
+                discount: lineDiscount,
+                tax: 0,
+                total: base,
+                tax_rate: item.tax_rate,
+                product: item.product,
+                variant: item.variant,
+                promotion: item.promotion
+            }
+        })
+        return groupOrderItemsByPromotion(groupable)
+    }, [tab])
 
     const applyChange = (tab: TabDetail) => {
         tabQuery.reload()
@@ -254,7 +280,10 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                         </SheetTitle>
                                     </SheetHeader>
 
-                                    <div className="px-4 pb-4 space-y-4 flex-1">
+                                    <div
+                                        className="px-4 space-y-4 flex-1"
+                                        style={{ paddingBottom: 'calc(1rem + env(safe-area-inset-bottom))' }}
+                                    >
                                         {/* Items */}
                                         <div>
                                             <h3 className="text-sm font-semibold mb-2">{t('items')}</h3>
@@ -262,37 +291,74 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                                 <p className="text-sm text-muted-foreground">{t('noItems')}</p>
                                             ) : (
                                                 <ul className="space-y-2">
-                                                    {tab.items.map(item => (
-                                                        <li
-                                                            key={item.id}
-                                                            className="flex items-center gap-2 rounded-lg bg-muted p-2"
-                                                        >
-                                                            <div className="flex-1 min-w-0">
-                                                                <p className="text-sm font-medium truncate">
-                                                                    {item.product.name}
-                                                                </p>
-                                                                <p className="text-xs text-muted-foreground">
-                                                                    {item.quantity} × {money(item.unit_price)}
-                                                                </p>
-                                                            </div>
-                                                            <span className="text-sm font-semibold">
-                                                                {money(item.unit_price * item.quantity)}
-                                                            </span>
-                                                            {isManager && isOpen && (
-                                                                <Button
-                                                                    size="icon"
-                                                                    variant="ghost"
-                                                                    className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
-                                                                    aria-label={t('removeItem', {
-                                                                        name: item.product.name
-                                                                    })}
-                                                                    onClick={() => setRemovingItem(item)}
+                                                    {itemGroups.map(group => {
+                                                        if (group.kind === 'product') {
+                                                            const item = tab.items.find(i => i.id === group.item.id)
+                                                            if (!item) return null
+                                                            const lineTotal =
+                                                                item.unit_price * item.quantity - (item.discount ?? 0)
+                                                            return (
+                                                                <li
+                                                                    key={item.id}
+                                                                    className="flex items-center gap-2 rounded-lg bg-muted p-2"
                                                                 >
-                                                                    <Trash2 className="h-3 w-3" />
-                                                                </Button>
-                                                            )}
-                                                        </li>
-                                                    ))}
+                                                                    <div className="flex-1 min-w-0">
+                                                                        <p className="text-sm font-medium truncate">
+                                                                            {item.product.name}
+                                                                        </p>
+                                                                        <p className="text-xs text-muted-foreground">
+                                                                            {item.quantity} × {money(item.unit_price)}
+                                                                        </p>
+                                                                    </div>
+                                                                    <span className="text-sm font-semibold">
+                                                                        {money(lineTotal)}
+                                                                    </span>
+                                                                    {isManager && isOpen && (
+                                                                        <Button
+                                                                            size="icon"
+                                                                            variant="ghost"
+                                                                            className="h-7 w-7 text-red-600 hover:text-red-700 hover:bg-red-50"
+                                                                            aria-label={t('removeItem', {
+                                                                                name: item.product.name
+                                                                            })}
+                                                                            onClick={() => setRemovingItem(item)}
+                                                                        >
+                                                                            <Trash2 className="h-3 w-3" />
+                                                                        </Button>
+                                                                    )}
+                                                                </li>
+                                                            )
+                                                        }
+
+                                                        return (
+                                                            <li
+                                                                key={group.promotionId}
+                                                                className="flex items-start gap-2 rounded-lg bg-muted p-2"
+                                                            >
+                                                                <div className="flex-1 min-w-0">
+                                                                    <p className="text-sm font-medium text-amber-700 dark:text-amber-400 truncate">
+                                                                        {tPos('promoLine', { name: group.name })}
+                                                                    </p>
+                                                                    <p className="text-xs text-muted-foreground mt-0.5">
+                                                                        {t('promoPackages', {
+                                                                            count: group.packageQty
+                                                                        })}
+                                                                    </p>
+                                                                    <p className="text-[10px] text-muted-foreground mt-1 line-clamp-2">
+                                                                        {group.items
+                                                                            .map(
+                                                                                line =>
+                                                                                    `${line.quantity}× ${line.product.name}`
+                                                                            )
+                                                                            .join(' · ')}
+                                                                    </p>
+                                                                </div>
+                                                                <span className="text-sm font-semibold shrink-0">
+                                                                    {money(group.total)}
+                                                                </span>
+                                                            </li>
+                                                        )
+                                                    })}
                                                 </ul>
                                             )}
                                         </div>
@@ -382,7 +448,7 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                                     ))}
                                                 </div>
 
-                                                <Button
+                                                <OfflineDisabledButton
                                                     className="w-full"
                                                     disabled={payingKey !== null}
                                                     onClick={() => pay(null, tab.totals.balance, 'full')}
@@ -390,10 +456,10 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                                     {payingKey === 'full'
                                                         ? t('paying')
                                                         : t('payFullBalance', { amount: money(tab.totals.balance) })}
-                                                </Button>
+                                                </OfflineDisabledButton>
 
                                                 {tab.members.length > 1 && (
-                                                    <div className="flex gap-2 text-xs">
+                                                    <div className="flex flex-wrap gap-2 text-xs">
                                                         <Button
                                                             type="button"
                                                             size="sm"

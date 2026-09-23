@@ -53,6 +53,7 @@ en zsh, entrecomillar los globs. Más en [`docs/05-guias/comandos.md`](docs/05-g
 - **El navegador solo habla con `/api/v1`** (Route Handlers + `lib/server/services`); las páginas son Client Components que usan `lib/api/*` y
   `useApiQuery`, y el layout del dashboard es un Server Component. Detalle: [`docs/01-arquitectura/08-api.md`](docs/01-arquitectura/08-api.md).
   El lint prohíbe importar `@supabase/*` y `lib/server` desde `app/` y `components/`.
+  **Excepción:** las imágenes de producto y el logo se descargan directamente de Cloudflare R2 con URL firmadas (bucket privado) que emite el servidor; subirlas y borrarlas sí pasa por `/api/v1`.
 - **Base de datos: RLS por rol** (`admin ≥ manager ≥ cashier`), usuario inactivo sin acceso, alta solo por invitación,
   ventas/reembolsos/stock **solo vía RPC transaccionales** (`create_sale`, `refund_order`, `adjust_inventory`)
   ([`docs/02-base-de-datos/`](docs/02-base-de-datos/03-rls-y-politicas.md)).
@@ -64,9 +65,9 @@ en zsh, entrecomillar los globs. Más en [`docs/05-guias/comandos.md`](docs/05-g
 
 ```
 app/(auth)/            login, forgot-password, reset-password
-app/(dashboard)/       layout (Server Component) y 13 páginas: dashboard, pos, products, categories, inventory,
+app/(dashboard)/       layout (Server Component) y páginas: dashboard, pos, products, categories, promotions (gerente+), inventory,
                        orders(+[id]), customers(+[id]), suppliers, reports, settings, users
-app/api/v1/            25 Route Handlers (route()/publicRoute()) · app/auth/confirm: canjea el enlace del correo
+app/api/v1/            Route Handlers (route()/publicRoute()) · app/auth/confirm: canjea el enlace del correo
 components/  hooks/    UI compartida (AppShell, ConfirmDialog, form-fields…) y hooks · components/ui = shadcn
 lib/server/            SOLO servidor: http (route), auth, errores, clientes Supabase, services/<recurso>
 lib/validation/        esquemas zod compartidos · lib/api/ cliente fetch del navegador · lib/env/ validación del entorno
@@ -126,16 +127,22 @@ Reglas completas: [`docs/05-guias/convenciones-de-codigo.md`](docs/05-guias/conv
 | Recuperar contraseña | Funciona: `/forgot-password` → correo → `/auth/confirm` → `/reset-password` | [H4](docs/04-auditoria/hallazgos/H4-flujos-incompletos.md) |
 | Dashboard/Reportes | Corregido: agregan en SQL, sin reembolsos, umbral por fila y zona horaria de `settings`. "Loyalty Points" = `floor(total_spent)` derivado (D7, sin validar) | [dashboard](docs/03-modulos/dashboard.md), [reportes](docs/03-modulos/reportes.md) |
 | Órdenes de compra, gastos, variantes | Solo esquema: sin API, UI ni reposición de stock al recibir | [proveedores](docs/03-modulos/proveedores-y-compras.md) |
-| Carrito | Persiste solo ids y cantidades y se vacía en el logout; el total mostrado es una vista previa | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
+| Carrito | Persiste solo ids y cantidades y se vacía en el logout; el total mostrado es una vista previa. La burbuja del carrito está **siempre visible** (con «0» si está vacío) | [estado cliente](docs/01-arquitectura/04-estado-cliente.md) |
 | Cuentas abiertas (`tabs`) | El stock baja **al añadir** el producto a la cuenta, no al cerrarla; quitar un ítem (gerente+) o anular la repone. Anular solo funciona **sin pagos** | [cuentas-abiertas](docs/03-modulos/cuentas-abiertas.md) |
 | `next build` / `next dev` | Fallan si falta alguna de las 4 variables (el error nombra cuál). `next dev` no debe escribir en `AGENTS.md` (`agentRules: false`) | [H5](docs/04-auditoria/hallazgos/H5-build-sin-env.md) |
-| Impresión | Solo `window.print()` en el detalle de orden; no hay recibo | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
+| Impresión | `window.print()` en el detalle de orden imprime un ticket térmico de 80 mm **no fiscal** (D21: sin CUFE/QR/DIAN) | [UI](docs/01-arquitectura/06-ui-y-diseno.md), [órdenes](docs/03-modulos/ordenes-y-reembolsos.md) |
+| Imágenes R2 | URL firmadas de 12 h (hora de firma redondeada a la hora para que el navegador las cachee). La CSP (`img-src`) permite `https://*.r2.cloudflarestorage.com` **y** `http://localhost:9000` / `127.0.0.1:9000` (MinIO local) de forma fija: `next.config.ts` se evalúa en el *build* y la imagen Docker se construye sin `R2_*`; derivar el origen de `R2_ACCOUNT_ID` hacía que el navegador bloqueara las imágenes en silencio. En Docker, `R2_PUBLIC_ENDPOINT_OVERRIDE` hace que las URLs firmadas usen `localhost` (el navegador no resuelve el hostname `r2`). Sin las 4 variables, los endpoints de imagen responden 503 | [API](docs/01-arquitectura/08-api.md), [productos](docs/03-modulos/productos.md) |
 | Cookies de sesión | `@supabase/ssr` las crea `httpOnly: false`; `lib/auth/cookie-options.ts` las fuerza a `HttpOnly` (y `Secure` cuando `APP_URL` es https). Mantenerlo | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
 | Formularios de auth | Enviados antes de hidratar hacen un `GET` nativo y **ponen la contraseña en la URL**: `method="post"` + botón deshabilitado hasta `useHydrated()` | [autenticación](docs/01-arquitectura/03-autenticacion-y-sesion.md) |
 | Alta de usuarios | Solo por invitación. Un perfil nace **activo únicamente si el servidor le asignó rol** (`app_metadata`); `user_metadata` no se usa. Un usuario desactivado no puede entrar aunque su sesión siga válida | [usuarios](docs/03-modulos/usuarios.md) |
 | `mock.module` (Bun) | Es **global al proceso** y se filtra entre archivos de test: por eso unitarias, componentes (un proceso por archivo) e integración corren separadas | [testing](docs/05-guias/testing.md) |
+| Auditoría (`/audit`) | Registra escrituras (13 tablas) y eventos de sesión; solo admin; append-only en tres capas (RLS, privilegios, triggers) incluso para `service_role` y el editor SQL. Sin retención/archivado todavía (crece sin límite) | [auditoría](docs/03-modulos/auditoria.md) |
+| PWA / offline | Solo **lectura** offline (vistas ya visitadas); no hay cola de escrituras sin red (D16 parcial). El service worker solo se registra en `NODE_ENV=production` (`next dev` lo rompería con Turbopack). `clients.claim()` dispara `controllerchange` también en la primera instalación, no solo en una actualización real: `sw-register.tsx` solo recarga si YA había un controlador previo | [pwa-offline](docs/01-arquitectura/09-pwa-offline.md), [plan de cola](docs/06-roadmap/offline-y-sincronizacion.md) |
 | Tests de integración | Escriben datos: **solo contra Supabase local** (se niegan a ejecutarse contra otro host). `bun run db:reset` limpia | [testing](docs/05-guias/testing.md) |
 | supabase-js y `select` | El tipo del resultado se infiere del **literal** del `select`; concatenar strings lo degrada a `string` | [capa de datos](docs/01-arquitectura/05-capa-de-datos.md) |
+| Scroll horizontal | Un contenedor `flex` sin `min-w-0` no deja encoger a sus hijos por debajo de su contenido: basta un solo `flex` de la cadena (p. ej. `SidebarInset`) sin `min-w-0` para que una tabla ancha empuje todo el layout más allá del viewport, aunque la tabla tenga su propio `overflow-x-auto` | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
+| Breakpoint del shell | Es `lg` (1024 px), no el `md` (768 px) de shadcn por defecto: `hooks/use-mobile.ts` (`MOBILE_BREAKPOINT`) es el único valor a cambiar; `components/ui/sidebar.tsx` está editado para usar `lg:` en vez de `md:` | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
+| `Sidebar` en móvil | Por debajo de `lg`, el `Sidebar` (con `data-mobile="true"`) **solo se monta mientras está abierto** (es un `Sheet`): un selector e2e que lo busque sin haber abierto "Más" no lo encuentra | [UI](docs/01-arquitectura/06-ui-y-diseno.md) |
 
 ## 9. Antes de tocar X, lee Y
 

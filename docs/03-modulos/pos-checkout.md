@@ -1,58 +1,48 @@
 # Módulo: POS y cobro
 
-> Actualizado tras la etapa 2 (UI compacta, scroll infinito, Top 5, cuentas abiertas) · `app/(dashboard)/pos/page.tsx` + `components/pos/*` · API `POST /sales` · RPC `create_sale` · Servicio `services/sales.ts` · Confianza: **[Verificado]** (`sales.test.ts`, `rpc.test.ts` con concurrencia, `pos.test.tsx`, `top-products.test.tsx`, e2e `sale-and-refund`).
+> Actualizado tras promociones (paquetes) · `app/(dashboard)/pos/page.tsx` + `components/pos/*` · API `POST /sales` · RPC `create_sale` · Servicio `services/sales.ts` · Confianza: **[Verificado]** (`sales` / `rpc` / `create-sale-promotions`, `pos.test.tsx`, `promotion-allocate.test.ts`).
 
 > Sustituye al análisis anterior, donde el cobro eran 5 llamadas sueltas desde el navegador, sin transacción, con totales calculados en el cliente y un descuento de stock que probablemente no funcionaba
 > ([C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md), ahora **Verificado**). El estado previo queda en el historial de git (commit `54962b9`).
 
-## Pantalla (tras la etapa 2)
-La página quedó como orquestadora (estado, queries, `handleCheckout`) sobre componentes en `components/pos/`:
-- **`product-grid.tsx` + `product-card.tsx`:** rejilla compacta (`grid-cols-2` a `grid-cols-6` según el ancho) con scroll infinito (`hooks/use-infinite-api-list.ts`, páginas de 30, centinela `IntersectionObserver`). El scroll ocurre en `<main>` (`app-shell.tsx`), no en un `ScrollArea` propio.
-- **`top-products.tsx`:** franja "Más vendidos (30 días)" sobre la rejilla, con los 5 productos de `GET /products/top` (ver [dashboard](dashboard.md) para el RPC `top_selling_products`). Un toque añade al carrito; se refresca tras cada cobro o cierre de cuenta.
-- **`cart-bubble.tsx` + `cart-sheet.tsx`:** el carrito ya no es una columna fija: es una burbuja flotante (`fixed bottom-6 right-6`) con el total de vista previa, que al pulsarla abre un `Sheet` (`components/ui/sheet.tsx`) con dos pestañas, **Carrito** y **Cuentas** (ver [cuentas-abiertas](cuentas-abiertas.md)).
+## Pantalla
+La página orquesta estado, queries y `handleCheckout` sobre componentes en `components/pos/`:
+- **`promotions-strip.tsx` + `promotion-card.tsx` + `promotions-browser-dialog.tsx`:** franja horizontal con scroll; «Ver todas» abre un modal con la misma confirmación de cantidad (−/+/Confirmar) que los productos.
+- **`product-grid.tsx` + `product-card.tsx`:** rejilla compacta con scroll infinito. Un toque abre el stepper; confirmar añade N unidades.
+- **`top-products.tsx`:** franja "Más vendidos (30 días)". Cuenta **componentes** de combo como unidades del SKU (no el nombre del paquete).
+- **`cart-bubble.tsx` + `cart-sheet.tsx`:** burbuja flotante + Sheet (Carrito / Cuentas). Las líneas promo se muestran agrupadas con sublíneas de componentes.
 
 ## Flujo (venta directa)
-1. El cajero busca (nombre, SKU o código de barras) o filtra por categoría y pulsa un producto: se añade **solo el id** al carrito. Los sin stock (o sin fila de inventario) no se pueden añadir.
-2. El POS pide `GET /products?ids=…` con los productos del carrito para tener su **precio, tasa y stock actuales** y muestra una **vista previa** (subtotal, impuesto, descuento, total) en la burbuja y en el `Sheet`.
-3. *Checkout* → método de pago (efectivo, tarjeta, e-wallet) → *Complete Order* → `POST /api/v1/sales`.
-4. El servidor ejecuta `create_sale` en **una transacción** y devuelve la orden con **los totales que calculó la base de datos**. El `toast` muestra ese total con un enlace a la orden; el carrito se vacía y la burbuja se oculta.
-5. Si falla (p. ej. stock insuficiente) el carrito **se conserva**, se recargan catálogo y stock y el `toast` explica el motivo.
+1. El cajero busca o filtra y pulsa un producto **o una promo**: estado pendiente en la página (una tarjeta a la vez); confirma cantidad.
+2. El carrito guarda líneas discriminadas (`kind: 'product' | 'promotion'`); `GET /products?ids=…` y `GET /promotions?ids=…` alimentan la vista previa (reparto de precio vía `allocatePackagePrice`, espejo de la RPC).
+3. *Checkout* → método de pago → `POST /api/v1/sales` con ítems `{ product_id, quantity, discount? }` **o** `{ promotion_id, quantity }`.
+4. `create_sale` expande paquetes, fija `unit_price` asignado (no el de catálogo), baja stock por componente y devuelve la orden. El toast muestra ese total.
+5. Si falla, el carrito se conserva y se refresca el stock.
 
-En vez de cobrar de inmediato, el botón **"Añadir a cuenta"** (junto a *Checkout*) envía el carrito a una cuenta abierta (o crea una nueva): ver [cuentas-abiertas](cuentas-abiertas.md) para el flujo completo de pagos parciales.
+**Cuentas abiertas:** el carrito (productos y/o promociones) se puede enviar a una cuenta vía `tab_add_items` (misma expansión de paquetes que `create_sale`). Ver [cuentas-abiertas](cuentas-abiertas.md) y [promociones](promociones.md).
 
 ## Lo que el cliente envía y lo que decide la BD
 ```json
 POST /api/v1/sales
 { "customer_id": null, "payment_method": "card", "discount": 0,
-  "items": [{ "product_id": "…", "quantity": 2, "discount": 0 }] }
+  "items": [
+    { "product_id": "…", "quantity": 2, "discount": 0 },
+    { "promotion_id": "…", "quantity": 1 }
+  ] }
 ```
-**Solo ids, cantidades y descuentos.** Precio, tasa de impuesto y totales **se leen de la BD**; cualquier `unit_price`/`total` que se envíe se ignora (probado). La variante, si se indica, debe pertenecer al producto.
+**Solo ids, cantidades y descuentos de línea de producto.** Precio/tasa/totales salen de la BD; un `unit_price` enviado en una promo se ignora.
 
-## Reglas de cálculo (D3, supuesto aplicado, **sin validar** con el negocio)
-- Impuesto **por producto** (`products.tax_rate`, fracción); precios **sin** impuesto.
-- Por línea: `base = precio × cantidad − descuento de línea`; `impuesto = round(base × tasa, money_scale)` (**redondeo por línea**, mitad hacia arriba; escala 0 en COP, 2 en USD).
-- `total = Σ base + Σ impuesto − descuento global` (el descuento global se aplica **después** del impuesto).
-- Ejemplo verificado: 2 × 29,99 + 1 × 12,99 al 10 % → subtotal 72,97; impuesto 6,00 + 1,30 = 7,30; **total 80,27**.
-- Se crea la orden `completed`, sus líneas, **un pago por el total** y un movimiento `sale` por línea. `orders_total_matches` y `order_items_total_matches` vigilan la aritmética.
+## Reglas de cálculo (D3 + D-promos)
+- Producto suelto: igual que antes (`selling_price` + `tax_rate` del catálogo).
+- Promo: base total = `package_price × paquetes`, repartida proporcionalmente a `selling_price × qty` del componente; última línea absorbe el redondeo a `money_scale`. Impuesto **por producto** sobre la base asignada.
+- `total = Σ base + Σ impuesto − descuento global`.
 
 ## Validaciones y rechazos
-Carrito vacío o > 200 líneas, cantidad ≤ 0, descuentos negativos o con más de 2 decimales, cliente inactivo o inexistente, producto inactivo/borrado/inexistente, descuento mayor que la línea o el total,
-**stock insuficiente** (mensaje: `Insufficient stock for "<producto>"`). Un error en cualquier línea **no deja nada escrito** (ni orden ni movimientos).
-
-## Concurrencia (verificado)
-El `UPDATE inventory … WHERE quantity >= n` bloquea la fila: dos ventas de la última unidad → **una** pasa y la otra recibe "Insufficient stock"; 25 ventas de 1 unidad con 7 en stock venden **exactamente 7**;
-las líneas se procesan **ordenadas** por producto, por lo que ventas cruzadas no producen deadlocks. Cada protección se probó **rompiéndola a propósito**.
+Carrito vacío, > 100 entradas o > 200 líneas tras expansión, cantidad ≤ 0, promo inactiva/borrada o con componente inactivo, stock insuficiente en cualquier componente (atómico), etc.
 
 ## Pantalla: comportamiento
-- Carrito persistido en `localStorage` (**solo ids y cantidades**, ver [estado](../01-arquitectura/04-estado-cliente.md)); se vacía al cerrar sesión.
-- "+" deshabilitado al llegar al stock. Si al reabrir el carrito un producto se agotó, se borró o se desactivó, la línea lo dice ("Only 0 in stock" / "No longer available") y el **checkout queda bloqueado** hasta quitarla.
-- El descuento global es un campo numérico (≥ 0). Un cliente opcional (los activos; "Walk-in Customer" por defecto).
-- Catálogo: scroll infinito de a 30 productos (`pageSize` fijo en el cliente; el máximo del API sigue siendo 100 por página); accesible con teclado.
+- Carrito persistido (`pos-cart` v3: líneas discriminadas; versiones anteriores se descartan).
+- Tope de `+` = stock (o paquetes disponibles) − ya en carrito.
+- Ticket e detalle de orden **agrupan** por `promotion_id` en UI; la BD sigue descompuesta.
 
-## Límites conocidos
-- **Sin recibo:** el toast enlaza a la orden; no se imprime nada desde el POS (D15).
-- Venta directa: un solo pago por el total, sin vuelto ni propinas (D5). Los **pagos parciales/divididos** solo existen en una cuenta abierta ([cuentas-abiertas](cuentas-abiertas.md)). Sin descuento por línea en la UI (la API lo admite) y sin topes ni motivo de descuento (D6).
-- Sin variantes en el POS (D10), sin escáner dedicado (el lector actúa como teclado sobre el buscador), sin modo offline (D16).
-- La vista previa puede diferir del total final si el precio cambia entre tanto; el total final manda.
-
-Relacionados: [Órdenes y reembolsos](ordenes-y-reembolsos.md), [Cuentas abiertas](cuentas-abiertas.md), [Inventario](inventario.md), [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md), [decisiones pendientes](../06-roadmap/decisiones-pendientes.md).
+Relacionados: [Promociones](promociones.md), [Órdenes y reembolsos](ordenes-y-reembolsos.md), [Cuentas abiertas](cuentas-abiertas.md), [decisiones pendientes](../06-roadmap/decisiones-pendientes.md).

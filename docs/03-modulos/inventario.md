@@ -22,6 +22,7 @@ Reglas: nunca negativo (`CHECK` + `UPDATE … WHERE quantity + delta >= 0`); un 
 
 ## Pantalla
 - Tarjetas (calculadas por el servidor sobre **todo** el conjunto filtrado, no solo la página): **unidades totales**, **stock bajo** y **valor del stock a costo**.
+- Sección **Paquetes vendibles** (solo lectura): promociones activas con `available = floor(min(stock_i / qty_i))` y receta+stock por componente. Tabla con **altura máxima + scroll** (no alarga toda la página si hay muchas promos). No se ajusta stock de paquetes aquí — se ajusta el de cada producto. Ver [Promociones](promociones.md).
 - Lista paginada con búsqueda por nombre/SKU y filtro "Low stock only". **Stock bajo = `quantity <= low_stock_threshold`** de **cada fila** (antes: `< 10` fijo y topado en 5).
 - Gerente/admin: botón de ajuste → diálogo con **cambio (unidades, + o −)** y **motivo**; el `toast` confirma la nueva cantidad o explica el rechazo ("would make the stock negative").
 

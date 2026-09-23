@@ -20,7 +20,8 @@ test('a sale takes stock, a manager refunds it, the stock comes back', async ({ 
     await till.getByPlaceholder('Search by name, SKU, or barcode...').fill(product.name)
     const card = till.getByRole('button', { name: `Add ${product.name} to cart` })
     await card.click()
-    await card.click()
+    await till.getByRole('button', { name: 'Increase quantity' }).click()
+    await till.getByRole('button', { name: 'Confirm' }).click()
     // The cart is a floating bubble now: open it to see the sheet.
     await till.getByRole('button', { name: /^Cart:/ }).click()
     const cartSheet = till.getByRole('dialog', { name: /^Cart/ })
@@ -34,16 +35,25 @@ test('a sale takes stock, a manager refunds it, the stock comes back', async ({ 
     const toast = till.locator('[data-sonner-toast]').first()
     await expect(toast).toContainText(/Order ORD-\d{6}-\d{6} completed/)
     await expect(toast).toContainText('44.00') // the total the SERVER computed
-    // The bubble hides itself once the cart (and every open tab) is empty.
-    await expect(till.getByRole('button', { name: /^Cart:/ })).toHaveCount(0)
+    // The bubble stays visible but drops back to an empty cart once checkout clears it.
+    await expect(till.getByRole('button', { name: 'Cart: 0 items, total $0.00' })).toBeVisible()
     expect(await stockOf(product.id)).toBe(8)
 
     // ---- the cashier sees the order but cannot refund it
     await toast.getByRole('button', { name: 'View order' }).click()
     await expect(till.getByRole('heading', { name: 'Order Details' })).toBeVisible()
-    await expect(till.getByText(product.name)).toBeVisible()
+    // Scoped: the print-only <ReceiptTicket> (always mounted, hidden on screen) repeats the product name too.
+    const detailView = till.getByTestId('order-detail-view')
+    await expect(detailView.getByText(product.name)).toBeVisible()
     await expect(till.getByRole('button', { name: 'Refund' })).toHaveCount(0)
     const orderUrl = till.url()
+
+    // ---- print preview: the 80mm ticket shows up, the normal view and the app shell are hidden
+    await till.emulateMedia({ media: 'print' })
+    await expect(till.locator('[data-testid="receipt-ticket"]')).toBeVisible()
+    await expect(till.getByRole('heading', { name: 'Order Details' })).toBeHidden()
+    await expect(till.locator('[data-slot="sidebar"]')).toBeHidden()
+    await till.emulateMedia({ media: 'screen' })
 
     // ---- a manager refunds it
     const office = await newSession(browser, 'manager')

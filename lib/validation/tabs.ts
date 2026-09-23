@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { PAYMENT_METHODS } from './resources'
+import { PAYMENT_METHODS, saleItemSchema } from './resources'
 import { blankToNull, money, nullableUuid, paginationSchema, positiveInt, requiredText } from './common'
 
 const memberName = z.string().trim().min(1).max(80)
@@ -16,16 +16,7 @@ export const openTabSchema = z.object({
 export const addTabMembersSchema = z.object({ names: z.array(memberName).min(1).max(50) })
 
 export const addTabItemsSchema = z.object({
-    items: z
-        .array(
-            z.object({
-                product_id: z.guid(),
-                variant_id: nullableUuid,
-                quantity: positiveInt(100_000)
-            })
-        )
-        .min(1, 'validation.cartEmpty')
-        .max(200)
+    items: z.array(saleItemSchema).min(1, 'validation.cartEmpty').max(100)
 })
 
 export const removeTabItemSchema = z.object({

@@ -13,8 +13,10 @@ import {
 } from '@/components/ui/dialog'
 import { Button } from '@/components/ui/button'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { errorMessage } from '@/lib/api/client'
 import { tabsApi, type TabDetail, type TabListItem } from '@/lib/api/tabs'
+import type { AddTabItemsInput } from '@/lib/validation/tabs'
 import { OpenTabDialog, type CustomerOption } from './open-tab-dialog'
 
 interface AddToTabDialogProps {
@@ -22,7 +24,7 @@ interface AddToTabDialogProps {
     onOpenChange: (open: boolean) => void
     openTabs: TabListItem[]
     customers: CustomerOption[]
-    items: Array<{ product_id: string; quantity: number }>
+    items: AddTabItemsInput['items']
     onAdded: (tab: TabDetail) => void
 }
 
@@ -82,9 +84,9 @@ export function AddToTabDialog({ open, onOpenChange, openTabs, customers, items,
                         <Button variant="outline" disabled={submitting} onClick={() => onOpenChange(false)}>
                             {tc('cancel')}
                         </Button>
-                        <Button disabled={submitting || !tabId} onClick={() => addTo(tabId)}>
+                        <OfflineDisabledButton disabled={submitting || !tabId} onClick={() => addTo(tabId)}>
                             {submitting ? t('adding') : t('addToTab')}
-                        </Button>
+                        </OfflineDisabledButton>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

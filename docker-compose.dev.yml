@@ -1,0 +1,30 @@
+# LOCAL DEV ONLY overlay, hot-reload: bind-mounts the repo into the container and runs `next dev` (the `dev` target
+# in the Dockerfile) instead of the production build, so code edits show up without rebuilding the image. For
+# testing the production image itself, use docker-compose.local.yml instead. `bun run local:dev` layers this on the
+# base file (`local:up` keeps using docker-compose.local.yml, unchanged):
+#
+#   docker compose -f docker-compose.yml -f docker-compose.dev.yml --env-file .env.docker up --build
+services:
+    app:
+        build:
+            target: dev
+        image: barstock-app:dev
+        container_name: barstock_app_dev
+        environment:
+            NODE_ENV: development
+        volumes:
+            - .:/app
+            - node_modules:/app/node_modules
+            - next_cache:/app/.next
+        networks:
+            - supabase
+
+networks:
+    supabase:
+        external: true
+        # Created by the Supabase CLI; the name comes from `project_id` in supabase/config.toml.
+        name: supabase_network_barstock
+
+volumes:
+    node_modules:
+    next_cache:

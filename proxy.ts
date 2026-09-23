@@ -13,8 +13,10 @@ const PUBLIC_API_PREFIX = '/api/v1/auth/'
 const PAGE_ROLE_GUARDS: Array<{ prefix: string; minimum: UserRole }> = [
     { prefix: '/settings', minimum: 'admin' },
     { prefix: '/users', minimum: 'admin' },
+    { prefix: '/audit', minimum: 'admin' },
     { prefix: '/reports', minimum: 'manager' },
-    { prefix: '/suppliers', minimum: 'manager' }
+    { prefix: '/suppliers', minimum: 'manager' },
+    { prefix: '/promotions', minimum: 'manager' }
 ]
 
 const profileSchema = z.object({ role: z.enum(USER_ROLES), is_active: z.boolean() })
@@ -96,5 +98,9 @@ export async function proxy(request: NextRequest) {
 }
 
 export const config = {
-    matcher: ['/((?!_next/static|_next/image|favicon.ico|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)']
+    // sw.js/manifest.webmanifest/offline.html must never redirect to /login: the browser fetches them (and registers
+    // the service worker) without a session, and a redirect there would silently break offline support.
+    matcher: [
+        '/((?!_next/static|_next/image|favicon.ico|sw\\.js|manifest\\.webmanifest|offline\\.html|.*\\.(?:svg|png|jpg|jpeg|gif|webp|ico)$).*)'
+    ]
 }

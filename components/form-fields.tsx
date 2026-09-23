@@ -35,6 +35,42 @@ export function TextField({ name, label, description, className, ...inputProps }
     )
 }
 
+interface SwitchFieldProps {
+    name: string
+    label: string
+    description?: string
+    className?: string
+}
+
+/** A boolean toggle (e.g. `is_active`) wired to react-hook-form, without pulling in a new Radix dependency. */
+export function SwitchField({ name, label, description, className }: SwitchFieldProps) {
+    return (
+        <FormField
+            name={name}
+            render={({ field }) => (
+                <FormItem
+                    className={`flex flex-row items-center justify-between rounded-lg border p-3 ${className ?? ''}`}
+                >
+                    <div className="space-y-0.5">
+                        <FormLabel className="cursor-pointer">{label}</FormLabel>
+                        {description && <FormDescription>{description}</FormDescription>}
+                    </div>
+                    <FormControl>
+                        <input
+                            type="checkbox"
+                            role="switch"
+                            aria-checked={field.value ?? true}
+                            checked={field.value ?? true}
+                            onChange={e => field.onChange(e.target.checked)}
+                            className="h-4 w-4 cursor-pointer accent-emerald-600"
+                        />
+                    </FormControl>
+                </FormItem>
+            )}
+        />
+    )
+}
+
 interface SelectFieldProps {
     name: string
     label: string
@@ -61,7 +97,7 @@ export function SelectField({ name, label, placeholder, options, noneLabel, clas
                         disabled={disabled}
                     >
                         <FormControl>
-                            <SelectTrigger>
+                            <SelectTrigger className="w-full">
                                 <SelectValue placeholder={placeholder} />
                             </SelectTrigger>
                         </FormControl>

@@ -141,3 +141,21 @@
         @apply bg-background text-foreground;
     }
 }
+
+/* 80mm non-fiscal POS ticket (docs/06-roadmap/decisiones-pendientes.md, D21). AppShell (sidebar/header) and every
+   page's normal view carry `print:hidden`; only `<ReceiptTicket>` (`hidden print:block`) is meant to print. */
+@media print {
+    @page {
+        size: 80mm auto;
+        margin: 0;
+    }
+
+    html,
+    body {
+        background: white;
+    }
+}
+
+.product-image-back {
+    mix-blend-mode: multiply;
+}

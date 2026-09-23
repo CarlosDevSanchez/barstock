@@ -35,8 +35,32 @@ export const salesReportSchema = z.object({
     total_tax: num,
     total_discount: num,
     average_order: num,
+    /** List-price equivalent minus assigned base on promo lines (current catalog selling_price). */
+    promo_markdown: num,
+    /** Σ qty × current products.cost_price. */
+    total_cogs: num,
+    /** Σ line bases (unit_price×qty − discount) − total_cogs. */
+    gross_profit: num,
     daily: z.array(z.object({ date: z.string(), revenue: num, orders: num })),
-    top_products: z.array(z.object({ product_id: z.string(), name: z.string(), quantity: num, revenue: num })),
+    top_products: z.array(
+        z.object({
+            product_id: z.string(),
+            name: z.string(),
+            quantity: num,
+            revenue: num,
+            cogs: num,
+            gross_profit: num
+        })
+    ),
+    top_promotions: z.array(
+        z.object({
+            promotion_id: z.string(),
+            name: z.string(),
+            orders: num,
+            packages: num,
+            revenue: num
+        })
+    ),
     top_customers: z.array(z.object({ customer_id: z.string(), name: z.string(), orders: num, spent: num })),
     by_payment_method: z.array(z.object({ method: z.string(), orders: num, amount: num }))
 })

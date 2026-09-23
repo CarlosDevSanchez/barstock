@@ -24,16 +24,19 @@
 | `profiles` | SELECT propio; UPDATE propio (trigger limita columnas) | SELECT todos | SELECT/UPDATE todos (rol, `is_active`) |
 | `categories` | SELECT | + INSERT, UPDATE, DELETE | ídem |
 | `products` | SELECT (sin `deleted_at`) | + SELECT borrados, INSERT, UPDATE (borrado lógico) | + DELETE físico |
+| `promotions` | SELECT (sin `deleted_at`) | + SELECT borrados, INSERT, UPDATE (borrado lógico); **sin DELETE** (historial en `order_items`) | ídem |
+| `promotion_items` | SELECT | + INSERT, UPDATE, DELETE | ídem |
 | `product_variants` | SELECT | + INSERT, UPDATE | + DELETE |
 | `inventory` | SELECT | SELECT | SELECT (escritura solo vía RPC) |
 | `inventory_transactions` | — | SELECT | SELECT (las escribe el RPC) |
-| `customers` | SELECT, INSERT, UPDATE (solo `name, email, phone, address, is_active`) | ídem | + DELETE |
-| `suppliers`, `purchase_orders`, `purchase_order_items` | — | SELECT, INSERT, UPDATE | + DELETE |
+| `customers` | SELECT, INSERT, UPDATE (solo `name, email, phone, address, is_active, deleted_at`; `deleted_at` solo admin, trigger `guard_soft_delete`) | ídem | + DELETE; borrado lógico (`deleted_at`) |
+| `suppliers`, `purchase_orders`, `purchase_order_items` | — | SELECT, INSERT, UPDATE (en `suppliers`, `deleted_at` solo admin: trigger `guard_soft_delete`) | + DELETE; borrado lógico de `suppliers` (`deleted_at`) |
 | `orders` | SELECT **propias** (`created_by`) | SELECT todas | SELECT todas |
 | `order_items`, `payments` | SELECT de sus órdenes (heredan la visibilidad de `orders`) | todas | todas |
 | `expenses` | — | SELECT, INSERT | + UPDATE, DELETE |
 | `settings` | SELECT | SELECT | SELECT, INSERT, UPDATE, DELETE |
 | `tabs`, `tab_members`, `tab_items`, `tab_payments` | SELECT (compartido: cualquier cajero ve/atiende cualquier cuenta; escritura solo vía RPC) | SELECT | SELECT |
+| `audit_log` | — | — | SELECT (append-only: ver abajo) |
 
 `orders`, `order_items`, `payments`, `inventory` e `inventory_transactions` tienen además `REVOKE INSERT, UPDATE, DELETE` a nivel de tabla
 (defensa en profundidad: aunque alguien añadiera una política por error, el privilegio no existe). `TRUNCATE`, `REFERENCES` y `TRIGGER`
@@ -43,6 +46,12 @@ siguen el mismo patrón: `REVOKE INSERT, UPDATE, DELETE` a `authenticated` (solo
 
 `customers` usa **privilegios por columna**: `total_spent` y `loyalty_points` están derivados de las órdenes y ningún cliente de la API
 puede escribirlos.
+
+**Borrado lógico de personas** (migración `20260923000001`): `customers` y `suppliers` tienen `deleted_at`. Como cualquier cajero puede hacer
+`UPDATE` de un cliente (y cualquier gerente de un proveedor), la regla "solo admin borra o restaura" no cabe en una política: la impone el
+trigger `BEFORE UPDATE` **`guard_soft_delete`** (`42501` si `deleted_at` cambia y el usuario no es admin; `auth.uid()` nulo = migraciones o
+`service_role`, se permite). Las políticas de `SELECT` no filtran `deleted_at`: lo hacen los servicios (`.is('deleted_at', null)`), y
+`create_sale`/`open_tab` rechazan un cliente borrado.
 
 > **Decisión que difiere del plan:** el plan de pruebas decía "cajero no lee `settings`", pero la matriz objetivo y la tabla de endpoints
 > dan `SELECT` a todos (el cajero necesita moneda y nombre de tienda). Se implementó **lectura para todos, escritura solo admin**.
@@ -60,6 +69,20 @@ Sin usuario en el JWT (SQL Editor, migraciones, `service_role`) no bloquea: el s
 **Cuidado con lo silencioso:** las políticas de `UPDATE`/`DELETE` que no cumplen **no lanzan error, afectan 0 filas** (el cajero que "borra"
 un producto recibe éxito con 0 filas). El resultado de rol insuficiente en `profiles` sí es error (`42501`, lo lanza el trigger) cuando el
 usuario ve la fila, y 0 filas cuando no la ve. Los servicios deben comprobar el número de filas afectadas y devolver `404`/`403`.
+
+## `audit_log`: append-only para todos, incluido `service_role`
+
+A diferencia del resto de tablas, aquí la protección **no depende solo de RLS**: `audit_log` solo tiene una política
+`SELECT` (admin), y además:
+
+- `REVOKE INSERT, UPDATE, DELETE, TRUNCATE` a `authenticated`/`anon` (privilegios de tabla).
+- Triggers `BEFORE UPDATE OR DELETE` y `BEFORE TRUNCATE` que lanzan `raise exception` **siempre**, sin excepción para
+  `auth.uid()` nulo. Esta es la capa que de verdad importa: `service_role` y el editor SQL **bypasean RLS** (tienen
+  `BYPASSRLS`/son el propietario), así que sin este trigger podrían editar o borrar el historial libremente. Los
+  triggers no distinguen quién ejecuta la sentencia.
+
+Detalle completo en [Auditoría](../03-modulos/auditoria.md) y en el trigger `audit_row_change` /
+[04-triggers-y-funciones](04-triggers-y-funciones.md).
 
 ## Alta de usuarios: cerrada por defecto
 

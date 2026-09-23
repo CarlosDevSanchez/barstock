@@ -12,14 +12,15 @@ Cuatro tablas nuevas (`supabase/migrations/20260922000002_tabs.sql`), documentad
 |---|---|
 | `tabs` | `tab_number` (`TAB-000123`), `label`, `customer_id` opcional, `status` (`open`\|`closed`\|`voided`), `discount`, `order_id` (al cerrar), quién abrió/cerró/anuló y cuándo |
 | `tab_members` | Las personas entre las que se divide (`display_name`); no requieren cuenta de cliente |
-| `tab_items` | Producto, cantidad y **el precio y la tasa de impuesto del momento en que se añadió por primera vez** (foto, igual que `create_sale`) |
+| `tab_items` | Producto, cantidad, **precio/tasa/descuento** del momento en que se añadió por primera vez (foto), `promotion_id` nullable si la línea viene de un paquete |
 | `tab_payments` | Cada pago parcial: método, monto, y opcionalmente quién (`tab_members`) lo hizo |
 
 `orders.tab_id` enlaza la orden final con la cuenta que la originó. Las cuatro tablas son de **solo lectura** desde la API (`cashier+`); toda escritura pasa por las RPC de abajo (regla dura 1 y 2 de `AGENTS.md`).
 
 ## Reglas de negocio
 - **Stock:** se descuenta **al añadir** el producto a la cuenta (no al cerrarla) y se repone al quitar un ítem o anular. La cuenta es una venta ya en curso: el producto físico ya se separó.
-- **Precio:** foto tomada la primera vez que se añade ese producto/variante; añadir más solo suma cantidad, nunca vuelve a cotizar las unidades ya puestas.
+- **Precio:** foto tomada la primera vez que se añade ese producto/variante/(promo); añadir más solo suma cantidad (y discount de línea en promos), nunca vuelve a cotizar las unidades ya puestas. Un SKU suelto y el mismo SKU dentro de un combo son **líneas distintas** (`promotion_id` en el unique).
+- **Detalle de cuenta:** las líneas de un paquete se muestran **como un solo bloque** (nombre + receta sin precios unitarios + un total). No hay botón de quitar por componente en la UI; quitar ítems sueltos sigue disponible solo en productos no-promo (RPC sin cambios).
 - **Visibilidad:** las cuentas son compartidas entre **todos los cajeros** (cualquiera puede atender cualquier mesa); no hay concepto de "mi cuenta".
 - **Permisos:** el cajero abre cuentas, añade productos, personas y cobra. **Quitar un ítem o anular la cuenta requiere gerente o superior**, con motivo obligatorio.
 - **División:** solo **pagos parciales** (no reservas de porcentaje). Cada persona paga su parte cuando quiera; la cuenta se cierra sola en cuanto lo pagado alcanza el total.
@@ -37,7 +38,7 @@ Todas bloquean la fila de la cuenta (`SELECT … FOR UPDATE`) y exigen `status =
 |---|---|---|
 | `open_tab(label, customer_id, members[])` | cajero | Crea la cuenta y sus personas iniciales |
 | `tab_add_members(tab_id, names[])` | cajero | Añade más personas |
-| `tab_add_items(tab_id, items[])` | cajero | Precio/impuesto desde la BD, descuenta stock atómicamente (igual que `create_sale`), hace *upsert* en `tab_items` |
+| `tab_add_items(tab_id, items[])` | cajero | Producto o promoción; precio/impuesto desde la BD (asignado en combos), descuenta stock atómicamente, *upsert* en `tab_items` |
 | `tab_remove_item(tab_id, item_id, quantity, reason)` | **gerente+** | Reduce o quita la línea, repone stock; falla si el total resultante quedaría por debajo de lo ya pagado |
 | `tab_set_discount(tab_id, discount)` | cajero | Solo si no hay pagos |
 | `tab_pay(tab_id, member_id, method, amount)` | cajero | Rechaza un monto mayor al saldo; **cierra la cuenta sola** cuando el saldo llega a 0 |

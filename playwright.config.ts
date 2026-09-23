@@ -21,7 +21,14 @@ export default defineConfig({
         trace: 'retain-on-failure',
         screenshot: 'only-on-failure'
     },
-    projects: [{ name: 'chromium', use: { browserName: 'chromium' } }],
+    projects: [
+        { name: 'chromium', use: { browserName: 'chromium' }, testIgnore: '**/responsive.e2e.ts' },
+        {
+            name: 'mobile',
+            testMatch: '**/responsive.e2e.ts',
+            use: { browserName: 'chromium', viewport: { width: 375, height: 812 }, hasTouch: true, isMobile: true }
+        }
+    ],
     webServer: {
         // Production build: it is what gets deployed, and it exercises the real CSP and headers.
         // CI builds in its own step (with the build logged and timed); locally build and start in one go.

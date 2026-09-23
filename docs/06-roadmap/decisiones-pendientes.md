@@ -23,11 +23,15 @@
 | D13 | Entornos y despliegue: ¿Vercel + un Supabase por entorno? ¿quién despliega? | CI/CD, variables | dev / staging / prod separados; despliegue por PR | Pendiente |
 | D14 | Datos personales de clientes: retención, borrado, consentimiento, normativa aplicable | Clientes, RLS, backups | Minimizar campos; política de retención; acceso por rol | Pendiente |
 | D15 | Hardware: lector de códigos, impresora térmica, cajón de dinero | POS, recibo | Lector como teclado (auto-agregar con Enter); impresión ESC/POS o recibo HTML | Pendiente |
-| D16 | ¿Se necesita operar **sin conexión**? | Arquitectura del POS | Hoy es imposible (todo va a Supabase). Si sí, requiere cola offline y sincronización — cambio grande | Pendiente |
+| D16 | ¿Se necesita operar **sin conexión**? | Arquitectura del POS | Hoy es imposible (todo va a Supabase). Si sí, requiere cola offline y sincronización — cambio grande | **Parcial: lectura offline implementada** (PWA instalable, vistas visitadas antes se ven sin red, avisos de conexión). La cola de escrituras sin red queda **solo documentada como plan**, ver [offline-y-sincronizacion](offline-y-sincronizacion.md) |
 | D17 | Roles: ¿bastan admin/gerente/cajero? ¿permisos finos? | RLS | Empezar con 3 roles; tabla de permisos si crece | Pendiente |
 | D18 | Backups: RPO/RTO aceptables; quién restaura | [migraciones](../02-base-de-datos/06-seed-y-migraciones.md) | PITR si el negocio no tolera perder ventas | Pendiente |
 | D19 | Política de rotación de claves y accesos | [variables de entorno](../05-guias/variables-de-entorno.md) | Rotación tras salida de personal y ante sospecha | Pendiente |
 | D20 | Licencia del proyecto (el README declara MIT; no hay `LICENSE`) | Legal | Definir con el cliente/propietario; añadir `LICENSE` acorde | Pendiente |
+| D21 | Ticket POS de 80 mm: ¿comprobante interno o factura electrónica (CUFE, QR, resolución DIAN)? | `receipt-ticket.tsx`, ventas al por menor | Comprobante **no fiscal** para esta fase; factura electrónica es un proyecto aparte (DIAN, numeración autorizada, firma) | **Decidido (2026-09-22, propietario)**: no es factura electrónica |
+| D-promos | ¿Paquetes fijos multi-producto? ¿Tabs? ¿Precio en líneas expandidas? | `promotions`, `create_sale`, `tab_add_items`, POS | Paquetes a precio fijo; expansión en RPC con precio **asignado**; tabs **sí** (migración `20260925000001`) | **Decidido (2026-09-22)**: ver abajo |
+| D-margin | ¿Utilidad bruta? ¿Congelar costo/lista en la venta? | `sales_report`, reportes | Base cobrada − `cost_price` actual; markdown de promo vs lista actual; sin snapshot v1 | **Decidido (2026-09-22)**: ver abajo |
+| D-audit | Retención de `audit_log`: crece sin límite y nadie puede borrarla (append-only por diseño). ¿Archivar filas antiguas, particionar por fecha, o dejarla crecer? | `audit_log`, `docs/03-modulos/auditoria.md` | Sin propuesta todavía: depende del volumen real y de si hay una obligación legal de conservación | Pendiente |
 
 ## Supuestos aplicados en la etapa 1 (a validar con el negocio)
 
@@ -62,6 +66,34 @@ Impacto: migración `20260921000006_locale_and_money.sql`, `lib/money.ts`, `crea
 Decisión: UI en **español por defecto** con inglés como alternativa; idioma **por usuario** en `profiles.locale` (`es` \| `en`), sin segmento `[locale]` en la URL (`next-intl`).
 Motivo: el personal puede preferir EN; la tienda es ES.
 Impacto: `next-intl`, `PATCH /api/v1/me`, cookie `NEXT_LOCALE`, diccionarios `messages/{es,en}.json`.
+
+### D21 — Decidido 2026-09-22
+Decisión: el ticket de 80 mm que imprime `orders/[id]` (`components/orders/receipt-ticket.tsx`) es un **comprobante de
+venta no fiscal** («COMPROBANTE DE VENTA — No es factura electrónica»). No incluye CUFE, código QR, resolución de
+numeración DIAN, ni «recibido/cambio» (el efectivo entregado por el cliente no se guarda).
+Motivo: emitir factura electrónica válida ante la DIAN requiere numeración autorizada, firma y un proveedor
+tecnológico homologado — fuera del alcance de esta fase (Fase 5 del plan de UI).
+Alternativas descartadas: integrar un PSE/facturador electrónico ahora mismo (se pospone a una fase futura si el
+negocio lo requiere).
+Impacto en el código/BD: migración `20260923000002_receipt.sql` (`order_items.tax_rate`, snapshot vía trigger;
+`settings.store_tax_id`/`store_logo_key`), `lib/receipt.ts`, `components/orders/receipt-ticket.tsx`,
+`app/(dashboard)/orders/[id]/page.tsx`, `app/globals.css`, `components/app-shell.tsx`.
+
+### D-promos — Decidido 2026-09-22 (tabs 2026-09-22)
+Decisión: promociones v1 = **paquetes fijos** multi-producto a `package_price`. Venta híbrida (carrito/ticket agrupan;
+BD descompone con precio **asignado**, no `selling_price` de lista). Soft-delete; sin hard delete. **Promos en
+cuentas abiertas** vía `tab_add_items` (`tab_items.promotion_id` + `discount`; unique incluye promo). Top 5 / reportes
+por SKU cuentan componentes. Impuesto por producto sobre la base asignada (sigue atado a D3).
+Impacto: migraciones `20260924000001` / `20260924000002` / `20260925000001`, `lib/promotion-allocate.ts`, POS, ticket agrupado.
+
+### D-margin — Decidido 2026-09-22
+Decisión: en `sales_report` (solo gerente+): **ingreso** = lo cobrado (`orders.total` / líneas asignadas);
+**promo_markdown** = lista actual × qty − base asignada (líneas con `promotion_id`); **COGS** = qty ×
+`cost_price` actual; **utilidad bruta** = Σ bases de línea − COGS. Sin snapshot de costo/lista en `order_items` (v1).
+El descuento de combo **no** se mezcla con `orders.discount` (descuento global). Dashboard del cajero sin COGS.
+Motivo: evitar reportar precio de lista (p. ej. 20 000) cuando se cobró el paquete (17 000); utilidad operativa
+aceptable con costo de catálogo actual.
+Impacto: migración `20260924000003_sales_report_promo_margin.sql`, `/reports`, [reportes](../03-modulos/reportes.md).
 
 ## Detalle de las decisiones de mayor impacto
 

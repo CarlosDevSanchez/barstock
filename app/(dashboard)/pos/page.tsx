@@ -12,9 +12,11 @@ import { categoriesApi } from '@/lib/api/categories'
 import { errorMessage } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
+import { promotionsApi, type PromotionListItem } from '@/lib/api/promotions'
 import { salesApi } from '@/lib/api/orders'
 import { tabsApi } from '@/lib/api/tabs'
-import { previewTotals } from '@/lib/cart-preview'
+import { previewTotals, type PreviewLine } from '@/lib/cart-preview'
+import { allocatePackagePrice } from '@/lib/promotion-allocate'
 import { useMoney, useSession } from '@/components/session-provider'
 import type { PaymentMethod } from '@/types'
 import { useCartStore } from '@/stores/cart'
@@ -26,6 +28,7 @@ import { CartBubble } from '@/components/pos/cart-bubble'
 import { CartSheet, type CartLineView } from '@/components/pos/cart-sheet'
 import { OpenTabDialog } from '@/components/pos/open-tab-dialog'
 import { ProductGrid } from '@/components/pos/product-grid'
+import { PromotionsStrip, promoPendingKey } from '@/components/pos/promotions-strip'
 import { TabDetailSheet } from '@/components/pos/tab-detail-sheet'
 import { TopProducts } from '@/components/pos/top-products'
 
@@ -51,11 +54,52 @@ export default function POSPage() {
     const [showOpenTabDialog, setShowOpenTabDialog] = useState(false)
     const [showAddToTabDialog, setShowAddToTabDialog] = useState(false)
     const [selectedTabId, setSelectedTabId] = useState<string | null>(null)
+    // One pending tile at a time (product, Top 5, or promo): qty is local draft until Confirm.
+    const [pendingId, setPendingId] = useState<string | null>(null)
+    const [pendingQty, setPendingQty] = useState(1)
     const search = useDebouncedValue(searchQuery)
 
     const items = useCartStore(state => state.items)
     const discount = useCartStore(state => state.discount)
-    const { addItem, removeItem, updateQuantity, setGlobalDiscount, clearCart } = useCartStore()
+    const { addItem, addPromotion, removeItem, updateQuantity, setGlobalDiscount, clearCart } = useCartStore()
+
+    const qtyInCartProduct = (productId: string) =>
+        items.find(item => item.kind === 'product' && item.productId === productId)?.quantity ?? 0
+    const qtyInCartPromo = (promotionId: string) =>
+        items.find(item => item.kind === 'promotion' && item.promotionId === promotionId)?.quantity ?? 0
+
+    const clearPending = () => {
+        setPendingId(null)
+        setPendingQty(1)
+    }
+
+    const handleSelectProduct = (productId: string) => {
+        setPendingId(productId)
+        setPendingQty(1)
+    }
+
+    const handleSelectPromotion = (promotionId: string) => {
+        setPendingId(promoPendingKey(promotionId))
+        setPendingQty(1)
+    }
+
+    const handleChangePendingQty = (qty: number) => {
+        if (qty <= 0) {
+            clearPending()
+            return
+        }
+        setPendingQty(qty)
+    }
+
+    const handleConfirmPending = () => {
+        if (!pendingId || pendingQty < 1) return
+        if (pendingId.startsWith('promo:')) {
+            addPromotion(pendingId.slice('promo:'.length), pendingQty)
+        } else {
+            addItem(pendingId, pendingQty)
+        }
+        clearPending()
+    }
 
     const catalog = useInfiniteApiList<ProductListItem>(
         (page, pageSize, signal) =>
@@ -75,16 +119,33 @@ export default function POSPage() {
     const categories = useApiQuery(signal => categoriesApi.list({ pageSize: 100 }, signal), 'categories')
     const customers = useApiQuery(signal => customersApi.list({ pageSize: 100 }, signal), 'customers')
     const openTabs = useApiQuery(signal => tabsApi.list({ status: 'open', pageSize: 100 }, signal), 'open-tabs')
+    const activePromos = useApiQuery(
+        signal => promotionsApi.list({ pageSize: 100, active: true }, signal),
+        'pos-promotions'
+    )
 
-    // The cart only holds ids: the lines are priced from live data, so a price or stock change is reflected immediately.
-    const cartIds = items
+    const productIds = items
+        .filter(item => item.kind === 'product')
         .map(item => item.productId)
         .sort()
         .join(',')
+    const promoIds = items
+        .filter(item => item.kind === 'promotion')
+        .map(item => item.promotionId)
+        .sort()
+        .join(',')
     const cartProducts = useApiQuery(
-        signal => (cartIds ? productsApi.list({ ids: cartIds, pageSize: 100 }, signal) : Promise.resolve(null)),
-        `cart:${cartIds}`
+        signal => (productIds ? productsApi.list({ ids: productIds, pageSize: 100 }, signal) : Promise.resolve(null)),
+        `cart-products:${productIds}`
     )
+    const cartPromos = useApiQuery(
+        signal =>
+            promoIds
+                ? promotionsApi.list({ ids: promoIds, pageSize: 100, active: true }, signal)
+                : Promise.resolve(null),
+        `cart-promos:${promoIds}`
+    )
+
     const products = useMemo(() => {
         const map = new Map<string, ProductListItem>()
         for (const product of catalog.items) map.set(product.id, product)
@@ -92,34 +153,81 @@ export default function POSPage() {
         return map
     }, [catalog.items, cartProducts.data])
 
-    const lines: CartLineView[] = items.map(item => ({ item, product: products.get(item.productId) }))
-    // Until the live lookup settles a missing product is just "not loaded yet"; afterwards it means deleted or hidden.
-    const lookupSettled = cartIds === '' || (cartProducts.data !== undefined && !cartProducts.loading)
-    const problemWith = ({ item, product }: CartLineView) => {
-        if (!product) return lookupSettled ? t('noLongerAvailable') : null
-        if (!product.is_active || product.stock === null) return t('noLongerAvailable')
-        if (item.quantity > product.stock) return t('onlyInStock', { count: product.stock })
+    const promotions = useMemo(() => {
+        const map = new Map<string, PromotionListItem>()
+        for (const promo of activePromos.data?.data ?? []) map.set(promo.id, promo)
+        for (const promo of cartPromos.data?.data ?? []) map.set(promo.id, promo)
+        return map
+    }, [activePromos.data, cartPromos.data])
+
+    const lines: CartLineView[] = items.map(item =>
+        item.kind === 'product'
+            ? { kind: 'product', item, product: products.get(item.productId) }
+            : { kind: 'promotion', item, promotion: promotions.get(item.promotionId) }
+    )
+
+    const lookupSettled =
+        (productIds === '' || (cartProducts.data !== undefined && !cartProducts.loading)) &&
+        (promoIds === '' || (cartPromos.data !== undefined && !cartPromos.loading))
+
+    const problemWith = (line: CartLineView) => {
+        if (line.kind === 'product') {
+            const { item, product } = line
+            if (!product) return lookupSettled ? t('noLongerAvailable') : null
+            if (!product.is_active || product.stock === null) return t('noLongerAvailable')
+            if (item.quantity > product.stock) return t('onlyInStock', { count: product.stock })
+            return null
+        }
+        const { item, promotion } = line
+        if (!promotion) return lookupSettled ? t('noLongerAvailable') : null
+        if (!promotion.is_active || promotion.available === null) return t('noLongerAvailable')
+        if (item.quantity > promotion.available) return t('onlyInStock', { count: promotion.available })
         return null
     }
-    // Checkout stays disabled while any line cannot be sold (or is still loading): the server would refuse it anyway.
-    const blocked = lines.some(line => !line.product || problemWith(line) !== null)
-    const totals = previewTotals(
-        lines.flatMap(({ item, product }) =>
-            product
-                ? [
-                      {
-                          unitPrice: product.selling_price,
-                          taxRate: product.tax_rate,
-                          quantity: item.quantity,
-                          discount: item.discount
-                      }
-                  ]
-                : []
-        ),
-        discount,
-        decimals
-    )
+
+    const blocked = lines.some(line => {
+        if (line.kind === 'product') return !line.product || problemWith(line) !== null
+        return !line.promotion || problemWith(line) !== null
+    })
+
+    const previewLines: PreviewLine[] = []
+    for (const line of lines) {
+        if (line.kind === 'product') {
+            if (!line.product) continue
+            previewLines.push({
+                unitPrice: line.product.selling_price,
+                taxRate: line.product.tax_rate,
+                quantity: line.item.quantity,
+                discount: line.item.discount
+            })
+            continue
+        }
+        if (!line.promotion) continue
+        const components = line.promotion.items
+            .filter(c => c.product)
+            .map(c => ({
+                productId: c.product_id,
+                quantity: c.quantity,
+                sellingPrice: c.product!.selling_price,
+                taxRate: c.product!.tax_rate
+            }))
+        for (const allocated of allocatePackagePrice(
+            line.promotion.package_price,
+            line.item.quantity,
+            components,
+            decimals
+        )) {
+            previewLines.push({
+                unitPrice: allocated.unitPrice,
+                taxRate: allocated.taxRate,
+                quantity: allocated.quantity,
+                discount: allocated.discount
+            })
+        }
+    }
+    const totals = previewTotals(previewLines, discount, decimals)
     const activeCustomers = (customers.data?.data ?? []).filter(customer => customer.is_active)
+    const canAddToTab = lines.length > 0 && !blocked
 
     const handleCheckout = async () => {
         setProcessing(true)
@@ -127,14 +235,13 @@ export default function POSPage() {
             const order = await salesApi.create({
                 customer_id: selectedCustomer || null,
                 payment_method: paymentMethod,
-                items: items.map(item => ({
-                    product_id: item.productId,
-                    quantity: item.quantity,
-                    discount: item.discount
-                })),
+                items: items.map(item =>
+                    item.kind === 'product'
+                        ? { product_id: item.productId, quantity: item.quantity, discount: item.discount }
+                        : { promotion_id: item.promotionId, quantity: item.quantity }
+                ),
                 discount
             })
-            // The receipt total comes from the server, which priced the sale from the database.
             toast.success(t('orderCompleted', { orderNumber: order.order_number, total: money(order.total) }), {
                 action: { label: t('viewOrder'), onClick: () => router.push(`/orders/${order.id}`) }
             })
@@ -143,20 +250,26 @@ export default function POSPage() {
             setShowPaymentDialog(false)
             setShowCart(false)
             catalog.reload()
+            activePromos.reload()
             setTopReloadSignal(count => count + 1)
         } catch (error: unknown) {
             toast.error(errorMessage(error, t('processFailed')))
-            // Most failures are stock or price changes: refresh what the till shows.
             catalog.reload()
             cartProducts.reload()
+            cartPromos.reload()
+            activePromos.reload()
         } finally {
             setProcessing(false)
         }
     }
 
+    const handleAddToTabClick = () => {
+        setShowAddToTabDialog(true)
+    }
+
     return (
-        <div className="flex flex-col gap-4">
-            <div>
+        <div className="space-y-6">
+            <div className="hidden lg:block">
                 <h1 className="text-3xl font-bold">{t('title')}</h1>
                 <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>
@@ -186,16 +299,61 @@ export default function POSPage() {
                 </Select>
             </div>
 
-            <TopProducts reloadSignal={topReloadSignal} onAdd={addItem} />
+            <PromotionsStrip
+                promotions={activePromos.data?.data ?? []}
+                loading={!activePromos.data && activePromos.loading}
+                pendingId={pendingId}
+                pendingQty={pendingQty}
+                qtyInCart={qtyInCartPromo}
+                onSelect={handleSelectPromotion}
+                onChangeQty={handleChangePendingQty}
+                onConfirm={handleConfirmPending}
+            />
 
-            <ProductGrid catalog={catalog} onAdd={addItem} />
+            <TopProducts
+                reloadSignal={topReloadSignal}
+                pendingId={pendingId}
+                pendingQty={pendingQty}
+                qtyInCart={qtyInCartProduct}
+                onSelect={handleSelectProduct}
+                onChangeQty={handleChangePendingQty}
+                onConfirm={handleConfirmPending}
+            />
+
+            <ProductGrid
+                catalog={catalog}
+                pendingId={pendingId}
+                pendingQty={pendingQty}
+                qtyInCart={qtyInCartProduct}
+                onSelect={handleSelectProduct}
+                onChangeQty={handleChangePendingQty}
+                onConfirm={handleConfirmPending}
+            />
 
             <CartBubble
                 itemCount={items.length}
                 total={totals.total}
-                lines={lines.flatMap(({ item, product }) =>
-                    product ? [{ productId: item.productId, name: product.name, quantity: item.quantity }] : []
-                )}
+                lines={lines.flatMap(line => {
+                    if (line.kind === 'product' && line.product) {
+                        return [
+                            {
+                                productId: line.item.productId,
+                                name: line.product.name,
+                                quantity: line.item.quantity
+                            }
+                        ]
+                    }
+                    if (line.kind === 'promotion' && line.promotion) {
+                        return [
+                            {
+                                productId: line.item.promotionId,
+                                name: line.promotion.name,
+                                quantity: line.item.quantity
+                            }
+                        ]
+                    }
+                    return []
+                })}
                 hasProblem={blocked}
                 openTabsLabel={
                     openTabs.data && openTabs.data.total > 0
@@ -233,8 +391,8 @@ export default function POSPage() {
                     setSelectedTabId(tabId)
                     setShowCart(false)
                 }}
-                onAddToTab={() => setShowAddToTabDialog(true)}
-                canAddToTab={lines.length > 0 && !blocked}
+                onAddToTab={handleAddToTabClick}
+                canAddToTab={canAddToTab}
             />
 
             <OpenTabDialog
@@ -249,12 +407,17 @@ export default function POSPage() {
                 onOpenChange={setShowAddToTabDialog}
                 openTabs={openTabs.data?.data ?? []}
                 customers={activeCustomers}
-                items={items.map(item => ({ product_id: item.productId, quantity: item.quantity }))}
+                items={items.map(item =>
+                    item.kind === 'product'
+                        ? { product_id: item.productId, quantity: item.quantity }
+                        : { promotion_id: item.promotionId, quantity: item.quantity }
+                )}
                 onAdded={() => {
                     clearCart()
                     setShowCart(false)
                     openTabs.reload()
                     catalog.reload()
+                    activePromos.reload()
                 }}
             />
 

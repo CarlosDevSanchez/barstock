@@ -1,4 +1,5 @@
 import { redirect } from 'next/navigation'
+import { cookies } from 'next/headers'
 import type { ReactNode } from 'react'
 import { AppShell } from '@/components/app-shell'
 import { getSession } from '@/lib/server/auth'
@@ -10,8 +11,9 @@ export default async function DashboardLayout({ children }: { children: ReactNod
     const session = await getSession()
     if (!session) redirect('/login')
     const settings = await getSettings(session.supabase)
+    const sidebarState = (await cookies()).get('sidebar_state')?.value
     return (
-        <AppShell user={session.user} settings={settings}>
+        <AppShell user={session.user} settings={settings} defaultSidebarOpen={sidebarState !== 'false'}>
             {children}
         </AppShell>
     )

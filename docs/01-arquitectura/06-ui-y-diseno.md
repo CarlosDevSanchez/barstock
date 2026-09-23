@@ -33,17 +33,52 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 | `AppShell` | Navegación lateral/móvil **filtrada por rol**, menú de usuario (tema, idioma ES/EN, logout que vacía el carrito) |
 | `ConfirmDialog` | Sustituye a `window.confirm()`: `AlertDialog` accesible que muestra progreso y no se cierra si falla |
 | `TextField`, `SelectField` | Campos de `react-hook-form` con etiqueta y mensaje de error asociados (`htmlFor`/`aria-describedby` por `FormControl`) |
-| `Pagination` | Anterior/siguiente con "Page x of y · N results"; oculta si cabe en una página |
+| `Pagination` (`lib/pagination.ts`, `hooks/use-pagination.ts`) | "Mostrando X–Y de N" + `Select` de tamaño (10/25/50, namespace `pagination` de next-intl) + primera/anterior/números/siguiente/última; **siempre visible** (ya no se oculta con una sola página); los números se ocultan en pantallas estrechas |
 | `QueryError`, `PageSpinner` | Error con "Try again" y spinner (antes copiado en 5 archivos) |
 
 ## Layout del dashboard
 
-`app/(dashboard)/layout.tsx` es un **Server Component** (sesión + ajustes) que monta `AppShell`:
+`app/(dashboard)/layout.tsx` es un **Server Component** (sesión + ajustes) que monta `AppShell`, construido sobre el
+`Sidebar` de shadcn (`components/ui/sidebar.tsx`, editado: breakpoint `lg` en vez de `md`, `SidebarInset` es un
+`<div min-w-0>` en vez de un `<main>` sin acotar). Breakpoint único: **`lg` (1024 px)**, fijado en `hooks/use-mobile.ts`
+(`MOBILE_BREAKPOINT`), único consumidor de `Sidebar`.
 
-- **Escritorio (`lg+`):** sidebar de `w-64` con el nombre de la tienda, los enlaces permitidos al rol y el menú de usuario (inicial, nombre o email, rol).
-- **Móvil:** cabecera con `Sheet` lateral (mismos enlaces) y menú de usuario.
-- Resalte de ruta activa por **igualdad exacta** (`pathname === href`): `/orders/[id]` no resalta "Orders" (pendiente menor).
-- El markup de navegación sigue duplicado entre escritorio y móvil (candidato a `<SidebarNav>`).
+**Escritorio (≥ 1024 px):**
+- **4 grupos colapsables** (`SidebarGroup` + `Collapsible`, abiertos por defecto): Ventas (Panel, Caja, Órdenes,
+  Clientes), Catálogo (Productos, Categorías, Promociones, Inventario, Proveedores), Análisis (Reportes) y
+  Administración (Ajustes, Usuarios, Auditoría). Un grupo sin ítems visibles para el rol actual se oculta entero.
+- `SidebarHeader` (nombre de la tienda, `<span data-testid="store-name">`), `SidebarFooter` (`AccountMenu` variante
+  `full`: avatar, nombre o email, rol) y `SidebarInset` con `TopBar` (`SidebarTrigger`, indicador de conexión,
+  avatar) ([PWA y offline](09-pwa-offline.md)).
+- Resalte de ruta activa por **prefijo** (`pathname === href || pathname.startsWith(href + '/')`): `/orders/[id]` sí
+  resalta "Órdenes".
+- El estado abierto/colapsado se guarda en la cookie `sidebar_state` (shadcn) y el layout la lee para fijar
+  `defaultOpen` en el primer render, evitando el parpadeo al recargar.
+
+**Móvil (< 1024 px), experiencia tipo app nativa** (`components/shell/`):
+- **`TopBar`**: en las raíces muestra el nombre/inicial de la tienda; en rutas de detalle (`/orders/[id]`,
+  `/customers/[id]`) un botón volver (`ChevronLeft`); siempre el título de la sección actual, el indicador de
+  conexión y el avatar (`AccountMenu` variante `icon`).
+- **`BottomNav`** (`nav[aria-label="Mobile navigation"]`, oculta en `lg+` y al imprimir): 5 destinos — Panel,
+  Órdenes, **Caja** (centro, botón circular destacado), Inventario y **Más**. "Más" abre el `Sidebar` completo
+  (mismo componente que en escritorio, como `Sheet`) con `setOpenMobile(true)`; navegar desde ahí lo cierra. El
+  `Sidebar`, en móvil, **solo se monta mientras está abierto** (`data-mobile="true"` en el DOM solo entonces) — ojo
+  con los selectores e2e.
+- Safe areas: `env(safe-area-inset-top/bottom)` en `TopBar`, `BottomNav`, el FAB y las hojas inferiores; `app/layout.tsx`
+  fija `viewportFit: 'cover'` (detalle en [PWA y offline](09-pwa-offline.md)).
+
+## Patrones móviles (`< lg`)
+
+| Componente | Comportamiento |
+|---|---|
+| `PageHeader` (`components/page-header.tsx`) | Título + descripción + `primaryAction`. En escritorio: `h1` grande y botón. En móvil: `h1` compacto (el título ya lo da `TopBar`) y `primaryAction` como **FAB** |
+| `Fab` (`components/fab.tsx`) | Botón circular flotante sobre la `BottomNav` (`bottom-[calc(4rem+safe-area+1rem)]`), un único por pantalla, `lg:hidden` |
+| `FilterBar` (`components/filter-bar.tsx`) | Buscador a ancho completo. En escritorio los filtros adicionales van en línea; en móvil se ocultan tras un botón **Filtros** (con contador) que abre un `Sheet side="bottom"` |
+| `ResponsiveList` + `ListCardRow` (`components/responsive-list.tsx`) | Muestra la tabla existente en `md+` y una lista de tarjetas (`ListCardRow`: título, subtítulo, valor, `›` o `…`) por debajo; la tabla no se reescribe |
+| `Dialog` (`components/ui/dialog.tsx`) | Por debajo de `sm`, se ancla como **hoja inferior** (`rounded-t-2xl`, `max-h-[90dvh]`); en `sm+` sigue centrado. Todos los formularios de alta/edición heredan esto sin tocarlos uno a uno |
+
+Reglas táctiles: objetivos de al menos 44 px, `text-base` en inputs (evita el zoom de iOS, ya lo hace shadcn) y
+`touch-manipulation` en la burbuja del carrito, la `BottomNav` y el FAB.
 
 ## Patrones de pantalla
 
@@ -56,14 +91,17 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 6. **Formularios de autenticación:** `method="post"` y botón deshabilitado hasta hidratar (ver [autenticación](03-autenticacion-y-sesion.md)).
 
 ## Impresión
-Solo el detalle de orden usa `window.print()` (con `print:hidden`/`print:space-y-4` para ocultar controles). **No hay plantilla de recibo**; `receipt_template` de Ajustes se guarda
-pero no se imprime (D15). El POS ya no llama a `window.print()`.
+El detalle de orden usa `window.print()`. Desde la Fase 5 (etapa 3) imprime un **ticket térmico no fiscal de 80 mm**
+(`components/orders/receipt-ticket.tsx`, `hidden print:block`): la vista normal y el `AppShell` (sidebar/header) se
+ocultan con `print:hidden` y `app/globals.css` fija `@page { size: 80mm auto; margin: 0 }`. Detalle en
+[órdenes y reembolsos](../03-modulos/ordenes-y-reembolsos.md) y la decisión D21 (no es factura electrónica) en
+[decisiones pendientes](../06-roadmap/decisiones-pendientes.md). El POS no llama a `window.print()`.
 
 ## Accesibilidad y responsive
-- Etiquetas y errores de formulario asociados a su control por `FormControl`; los botones de solo icono llevan `aria-label` (cantidad +/−, quitar, editar, borrar, volver, página anterior/siguiente).
+- Etiquetas y errores de formulario asociados a su control por `FormControl`; los botones de solo icono llevan `aria-label` (cantidad +/−, quitar, editar, borrar, volver, página anterior/siguiente, alternar sidebar, menú de la cuenta).
 - El catálogo del POS es navegable con teclado (`role="button"`, `Enter`/`Espacio`) y marca `aria-disabled` los productos sin stock.
-- **[Inferido]** Diseño responsive con `grid`/`flex` y breakpoints `sm/md/lg`; el POS colapsa a una columna. No se ha probado en dispositivos ni con lectores de pantalla.
-- Sin auditoría automatizada de accesibilidad ni pruebas visuales.
+- **[Verificado]** `e2e/responsive.e2e.ts` (proyecto `mobile` de Playwright, 375×812 con `hasTouch`/`isMobile`) comprueba que ninguna ruta principal tenga scroll horizontal, para los roles admin y cashier, a 375, 768 y 1280 px, además de la barra inferior, "Más", el FAB como hoja inferior, el avatar y una venta completa desde el POS en móvil. `bun run test:e2e` pasa (28/28, proyectos `chromium` y `mobile`) contra Supabase local.
+- **[Por verificar]** No se ha probado con lectores de pantalla ni en dispositivos reales (solo Chromium headless); sin auditoría automatizada de accesibilidad (axe, Lighthouse).
 
 ## Reglas para UI nueva
 - Reutilizar `components/ui/*` y los compartidos de arriba; no crear estilos ad hoc para tarjetas o botones.

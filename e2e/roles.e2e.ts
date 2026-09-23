@@ -3,7 +3,7 @@ import { ensureTestUsers } from '../test/helpers/integration'
 import { navLinks, newSession, signInWith } from './helpers'
 import { TEST_PASSWORD } from '../test/helpers/integration'
 
-const CASHIER_NAV = ['Dashboard', 'POS', 'Products', 'Categories', 'Inventory', 'Orders', 'Customers']
+const CASHIER_NAV = ['Dashboard', 'POS', 'Orders', 'Customers', 'Products', 'Categories', 'Inventory']
 
 test('a cashier only sees the till and the catalog and is bounced from restricted pages', async ({ browser }) => {
     const page = await newSession(browser, 'cashier')
@@ -82,7 +82,7 @@ test('a wrong password and a disabled account show clear errors, and never put t
 
 test('signing out ends the session', async ({ browser }) => {
     const page = await newSession(browser, 'cashier')
-    await page.locator('aside button', { hasText: 'cashier@barstock.test' }).click()
+    await page.locator('header').getByRole('button', { name: 'Account menu' }).click()
     await page.getByRole('menuitem', { name: 'Sign out' }).click()
     await page.waitForURL('**/login')
     await page.goto('/dashboard')
@@ -93,7 +93,21 @@ test('signing out ends the session', async ({ browser }) => {
 
 test('an admin sees every section and settings persist across a reload', async ({ browser }) => {
     const page = await newSession(browser, 'admin')
-    expect(await navLinks(page)).toEqual([...CASHIER_NAV, 'Suppliers', 'Reports', 'Settings', 'Users'])
+    expect(await navLinks(page)).toEqual([
+        'Dashboard',
+        'POS',
+        'Orders',
+        'Customers',
+        'Products',
+        'Categories',
+        'Promotions',
+        'Inventory',
+        'Suppliers',
+        'Reports',
+        'Settings',
+        'Users',
+        'Audit log'
+    ])
 
     await page.goto('/settings')
     const name = page.getByLabel('Store Name')
@@ -101,11 +115,11 @@ test('an admin sees every section and settings persist across a reload', async (
     await name.fill('Barstock E2E Shop')
     await page.getByRole('button', { name: 'Save Settings' }).click()
     await expect(page.getByText('Settings saved')).toBeVisible()
-    await expect(page.locator('aside h1')).toHaveText('Barstock E2E Shop')
+    await expect(page.getByTestId('store-name')).toHaveText('Barstock E2E Shop')
     await page.reload()
-    await expect(page.locator('aside h1')).toHaveText('Barstock E2E Shop')
+    await expect(page.getByTestId('store-name')).toHaveText('Barstock E2E Shop')
 
     await name.fill(original)
     await page.getByRole('button', { name: 'Save Settings' }).click()
-    await expect(page.locator('aside h1')).toHaveText(original)
+    await expect(page.getByTestId('store-name')).toHaveText(original)
 })
