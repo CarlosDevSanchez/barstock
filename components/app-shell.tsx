@@ -27,6 +27,7 @@ import { TopBar } from '@/components/shell/top-bar'
 import { BottomNav } from '@/components/shell/bottom-nav'
 import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 import { SessionProvider, type SessionUser } from '@/components/session-provider'
+import { BarstockIcon } from '@/components/branding/barstock-mark'
 import { ChevronRight } from 'lucide-react'
 
 interface AppShellProps {
@@ -88,12 +89,20 @@ export function AppShell({ user, settings, children, defaultSidebarOpen = true }
             <SidebarProvider defaultOpen={defaultSidebarOpen} className="print:block">
                 <Sidebar collapsible="icon" className="print:hidden">
                     <SidebarHeader>
-                        <span
-                            data-testid="store-name"
-                            className="px-2 py-1 text-lg font-bold text-sidebar-primary truncate block group-data-[collapsible=icon]:hidden"
-                        >
-                            {settings.store_name}
-                        </span>
+                        <div className="flex items-center gap-2 px-2 py-1">
+                            <BarstockIcon className="size-7 shrink-0 text-emerald-600 dark:text-emerald-400" />
+                            <div className="min-w-0 group-data-[collapsible=icon]:hidden">
+                                <span className="block text-[0.65rem] font-semibold uppercase tracking-wide text-muted-foreground leading-none">
+                                    Barstock
+                                </span>
+                                <span
+                                    data-testid="store-name"
+                                    className="block truncate text-lg font-bold text-sidebar-primary leading-tight"
+                                >
+                                    {settings.store_name}
+                                </span>
+                            </div>
+                        </div>
                     </SidebarHeader>
                     <SidebarContent>
                         <SidebarNav user={user} />

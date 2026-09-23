@@ -1,6 +1,6 @@
 import type { MetadataRoute } from 'next'
 
-// Provisional icons (generated from the brand color, public/icons/*): replace with the real logo when there is one.
+// Icons generated from the Barstock brand mark (public/branding/barstock-icon.svg → public/icons/*).
 export default function manifest(): MetadataRoute.Manifest {
     return {
         name: 'Barstock POS',

@@ -7,7 +7,8 @@ import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowLeft, Mail } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
+import { BarstockIcon } from '@/components/branding/barstock-mark'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card, CardContent, CardDescription, CardFooter, CardHeader, CardTitle } from '@/components/ui/card'
@@ -42,8 +43,8 @@ export default function ForgotPasswordPage() {
             <Card className="w-full max-w-md shadow-2xl">
                 <CardHeader className="space-y-1">
                     <div className="flex items-center justify-center mb-4">
-                        <div className="p-3 rounded-2xl bg-emerald-100 dark:bg-emerald-900/30">
-                            <Mail className="w-8 h-8 text-emerald-600 dark:text-emerald-400" />
+                        <div className="p-4 rounded-2xl bg-emerald-600 dark:bg-emerald-700 shadow-lg">
+                            <BarstockIcon className="w-12 h-12 text-white" />
                         </div>
                     </div>
                     <CardTitle className="text-2xl text-center font-bold">{t('forgotTitle')}</CardTitle>
