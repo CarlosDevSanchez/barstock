@@ -18,8 +18,8 @@ const geistMono = Geist_Mono({
 })
 
 export const metadata: Metadata = {
-    title: 'POS Inventory System - Modern Point of Sale',
-    description: 'Full-stack POS and Inventory Management System',
+    title: 'Barstock POS System',
+    description: 'Sistema de gestion de inventario y ventas para bares',
     manifest: '/manifest.webmanifest',
     appleWebApp: { capable: true, statusBarStyle: 'black-translucent', title: 'Barstock' }
 }

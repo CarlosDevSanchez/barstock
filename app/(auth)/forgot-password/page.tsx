@@ -76,7 +76,7 @@ export default function ForgotPasswordPage() {
                                     )}
                                 />
                             </CardContent>
-                            <CardFooter className="flex flex-col space-y-4">
+                            <CardFooter className="flex flex-col space-y-4 mt-4">
                                 <Button type="submit" className="w-full" size="lg" disabled={submitting || !hydrated}>
                                     {submitting ? t('sending') : t('sendReset')}
                                 </Button>

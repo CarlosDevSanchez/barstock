@@ -128,7 +128,15 @@
   },
   "pwa": {
     "updateAvailable": "A new version is available",
-    "update": "Update"
+    "update": "Update",
+    "installTitle": "Install Barstock",
+    "installBody": "Add it to your device to open it like an app.",
+    "install": "Install",
+    "installIosHow": "How to install",
+    "installIosStep1": "Tap the Share button in Safari.",
+    "installIosStep2": "Choose “Add to Home Screen”.",
+    "installIosStep3": "Confirm with “Add”.",
+    "dismiss": "Dismiss install notice"
   },
   "dashboard": {
     "title": "Dashboard",

@@ -1,6 +1,6 @@
 # PWA y modo offline (lectura)
 
-> Nuevo en la etapa 2 · Confianza: **[Verificado]** (`test/components/use-online-status.test.tsx`, `test/components/connection-status.test.tsx`, `lib/api/client.test.ts`, `e2e/offline.e2e.ts`).
+> Nuevo en la etapa 2 · Confianza: **[Verificado]** (`test/components/use-online-status.test.tsx`, `test/components/connection-status.test.tsx`, `test/components/install-banner.test.tsx`, `lib/api/client.test.ts`, `e2e/offline.e2e.ts`).
 
 La app es instalable (escritorio y Android/iOS) y sigue mostrando las **vistas ya visitadas** sin red, con avisos claros
 de conexión. **No hay cola de escrituras sin red**: eso queda documentado como plan en
@@ -16,6 +16,7 @@ de conexión. **No hay cola de escrituras sin red**: eso queda documentado como 
 | `public/sw.js` | Service worker escrito a mano (sin Serwist: su integración con Turbopack/Next 16 es **[Por verificar]**). Versionado con `CACHE_VERSION`; solo intercepta `GET`, nunca escrituras |
 | `public/offline.html` | Página estática bilingüe (fallback de navegación sin red ni caché) |
 | `components/pwa/sw-register.tsx` | Registra el SW (**solo en producción**: en `next dev` cachear el output de Turbopack rompería el hot reload). Muestra un toast "Actualizar" cuando hay una versión nueva |
+| `components/pwa/install-banner.tsx` | Aviso en `/login` para instalar la PWA: botón nativo si el navegador dispara `beforeinstallprompt` (Chrome/Edge/Android); pasos breves en iOS Safari. Se oculta en modo `standalone` y si el usuario lo descarta (`localStorage`) |
 | `components/connection-status.tsx` | Badge siempre visible + toast persistente al perder la red + toast de éxito al volver, en el header del layout ([sidebar](../03-modulos/) via `app-shell.tsx`) |
 | `hooks/use-online-status.ts` | `useSyncExternalStore` sobre `navigator.onLine` y los eventos `online`/`offline` |
 | `components/pwa/offline-disabled-button.tsx` | Botón que se deshabilita solo (con tooltip) mientras no hay red: usado en cobrar, añadir/pagar cuenta y ajustar inventario |
