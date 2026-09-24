@@ -6,6 +6,7 @@ import { ChevronLeft } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { SidebarTrigger } from '@/components/ui/sidebar'
 import { ConnectionStatus } from '@/components/connection-status'
+import { SyncCenter } from '@/components/offline/sync-center'
 import { AccountMenu } from '@/components/shell/account-menu'
 import { findNavItem } from '@/components/shell/nav-config'
 import type { SessionUser } from '@/components/session-provider'
@@ -15,9 +16,11 @@ const DETAIL_ROUTE_PREFIXES = ['/orders/', '/customers/']
 interface TopBarProps {
     user: SessionUser
     storeName: string
+    pendingOutboxCount: number
+    onSyncNow: () => void
 }
 
-export function TopBar({ user, storeName }: TopBarProps) {
+export function TopBar({ user, storeName, pendingOutboxCount, onSyncNow }: TopBarProps) {
     const pathname = usePathname()
     const router = useRouter()
     const tNav = useTranslations('nav')
@@ -51,6 +54,7 @@ export function TopBar({ user, storeName }: TopBarProps) {
             </div>
             <h1 className="truncate text-sm font-semibold lg:hidden">{navItem ? tNav(navItem.key) : ''}</h1>
             <div className="ml-auto flex items-center gap-3">
+                <SyncCenter pendingCount={pendingOutboxCount} onSyncNow={onSyncNow} />
                 <ConnectionStatus />
                 <AccountMenu user={user} />
             </div>

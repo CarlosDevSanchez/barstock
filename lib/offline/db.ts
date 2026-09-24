@@ -59,6 +59,21 @@ export async function idbSet<T>(store: StoreName, key: string, value: T): Promis
     }
 }
 
+export async function idbDelete(store: StoreName, key: string): Promise<void> {
+    if (!available()) return
+    const db = await openDb()
+    try {
+        await new Promise<void>((resolve, reject) => {
+            const tx = db.transaction(store, 'readwrite')
+            tx.objectStore(store).delete(key)
+            tx.oncomplete = () => resolve()
+            tx.onerror = () => reject(tx.error)
+        })
+    } finally {
+        db.close()
+    }
+}
+
 export async function idbGetAll<T>(store: StoreName): Promise<T[]> {
     if (!available()) return []
     const db = await openDb()

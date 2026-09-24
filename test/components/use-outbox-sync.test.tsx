@@ -7,7 +7,10 @@ const { renderHook, waitFor, act, cleanup } = await import('@testing-library/rea
 const runSync = mock(async () => {})
 const pendingOutboxCount = mock(async () => 0)
 void mock.module('@/lib/offline/sync', () => ({ runSync }))
-void mock.module('@/lib/offline/outbox', () => ({ pendingOutboxCount }))
+void mock.module('@/lib/offline/outbox', () => ({
+    pendingOutboxCount,
+    OUTBOX_CHANGED_EVENT: 'barstock:outbox-changed'
+}))
 
 const { useOutboxSync } = await import('@/hooks/use-outbox-sync')
 
@@ -52,5 +55,29 @@ describe('useOutboxSync', () => {
         })
         await waitFor(() => expect(runSync).toHaveBeenCalledTimes(2))
         expect(result.current.pendingCount).toBe(3)
+    })
+
+    test('a local outbox change (e.g. checkout queuing a sale) recounts immediately without a full sync', async () => {
+        const { result } = renderHook(() => useOutboxSync())
+        await waitFor(() => expect(runSync).toHaveBeenCalledTimes(1))
+
+        pendingOutboxCount.mockImplementation(async () => 1)
+        act(() => {
+            window.dispatchEvent(new Event('barstock:outbox-changed'))
+        })
+        await waitFor(() => expect(result.current.pendingCount).toBe(1))
+        expect(runSync).toHaveBeenCalledTimes(1) // still just the mount run, no extra sync attempt
+    })
+
+    test('syncNow triggers a sync and updates the count', async () => {
+        const { result } = renderHook(() => useOutboxSync())
+        await waitFor(() => expect(runSync).toHaveBeenCalledTimes(1))
+
+        pendingOutboxCount.mockImplementation(async () => 0)
+        act(() => {
+            result.current.syncNow()
+        })
+        await waitFor(() => expect(runSync).toHaveBeenCalledTimes(2))
+        expect(result.current.pendingCount).toBe(0)
     })
 })

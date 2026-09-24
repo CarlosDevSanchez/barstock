@@ -14,11 +14,12 @@ import { errorMessage } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
 import { promotionsApi, type PromotionListItem } from '@/lib/api/promotions'
-import { salesApi } from '@/lib/api/orders'
+import { salesApi, type OrderDetail } from '@/lib/api/orders'
 import { tabsApi } from '@/lib/api/tabs'
 import { enqueueSale, type OutboxSaleItem } from '@/lib/offline/outbox'
 import { previewTotals, type PreviewLine } from '@/lib/cart-preview'
 import { allocatePackagePrice } from '@/lib/promotion-allocate'
+import { buildProvisionalOrder } from '@/lib/receipt-preview'
 import { useMoney, useSession } from '@/components/session-provider'
 import type { PaymentMethod } from '@/types'
 import { useCartStore } from '@/stores/cart'
@@ -33,6 +34,7 @@ import { CartSheet, type CartLineView } from '@/components/pos/cart-sheet'
 import { OpenTabDialog } from '@/components/pos/open-tab-dialog'
 import { ProductGrid } from '@/components/pos/product-grid'
 import { PromotionsStrip, promoPendingKey } from '@/components/pos/promotions-strip'
+import { ReceiptTicket } from '@/components/orders/receipt-ticket'
 import { TabDetailSheet } from '@/components/pos/tab-detail-sheet'
 import { TopProducts } from '@/components/pos/top-products'
 
@@ -106,6 +108,8 @@ export default function POSPage() {
     // One key per checkout attempt: pressing "Cobrar" again before a reply arrives reuses it, so a retry cannot
     // charge twice. A fresh attempt (dialog reopened) gets a fresh key.
     const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
+    // Last offline sale queued (F4): printable via the hidden ticket below, marked PROVISIONAL until it syncs.
+    const [provisionalReceipt, setProvisionalReceipt] = useState<OrderDetail | null>(null)
     const search = useDebouncedValue(searchQuery)
 
     const items = useCartStore(state => state.items)
@@ -345,8 +349,24 @@ export default function POSPage() {
                     },
                     totals.total
                 )
+                setProvisionalReceipt(
+                    buildProvisionalOrder({
+                        provisionalNumber: entry.provisional_number,
+                        occurredAt: entry.created_at,
+                        customerName: activeCustomers.find(customer => customer.id === selectedCustomer)?.name ?? null,
+                        paymentMethod,
+                        cashierName: user.fullName || user.email,
+                        lines,
+                        totals,
+                        decimals
+                    })
+                )
                 toast.success(
-                    t('orderQueuedOffline', { provisionalNumber: entry.provisional_number, total: money(totals.total) })
+                    t('orderQueuedOffline', {
+                        provisionalNumber: entry.provisional_number,
+                        total: money(totals.total)
+                    }),
+                    { action: { label: t('printTicket'), onClick: () => window.print() } }
                 )
                 clearCart()
                 setSelectedCustomer('')
@@ -391,172 +411,176 @@ export default function POSPage() {
     }
 
     return (
-        <div className="space-y-6">
-            <div className="hidden lg:block">
-                <h1 className="text-3xl font-bold">{t('title')}</h1>
-                <p className="text-muted-foreground">{t('subtitle')}</p>
-            </div>
-
-            <div className="flex flex-col sm:flex-row gap-3">
-                <div className="relative flex-1">
-                    <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
-                    <Input
-                        placeholder={t('searchPlaceholder')}
-                        value={searchQuery}
-                        onChange={e => setSearchQuery(e.target.value)}
-                        className="pl-10"
-                    />
+        <>
+            <div className="space-y-6 print:hidden">
+                <div className="hidden lg:block">
+                    <h1 className="text-3xl font-bold">{t('title')}</h1>
+                    <p className="text-muted-foreground">{t('subtitle')}</p>
                 </div>
-                <Select value={selectedCategory} onValueChange={setSelectedCategory}>
-                    <SelectTrigger className="w-full sm:w-48" aria-label={t('category')}>
-                        <SelectValue placeholder={t('category')} />
-                    </SelectTrigger>
-                    <SelectContent>
-                        <SelectItem value={ALL}>{t('allCategories')}</SelectItem>
-                        {categoryOptions.map(category => (
-                            <SelectItem key={category.id} value={category.id}>
-                                {category.name}
-                            </SelectItem>
-                        ))}
-                    </SelectContent>
-                </Select>
+
+                <div className="flex flex-col sm:flex-row gap-3">
+                    <div className="relative flex-1">
+                        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                        <Input
+                            placeholder={t('searchPlaceholder')}
+                            value={searchQuery}
+                            onChange={e => setSearchQuery(e.target.value)}
+                            className="pl-10"
+                        />
+                    </div>
+                    <Select value={selectedCategory} onValueChange={setSelectedCategory}>
+                        <SelectTrigger className="w-full sm:w-48" aria-label={t('category')}>
+                            <SelectValue placeholder={t('category')} />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ALL}>{t('allCategories')}</SelectItem>
+                            {categoryOptions.map(category => (
+                                <SelectItem key={category.id} value={category.id}>
+                                    {category.name}
+                                </SelectItem>
+                            ))}
+                        </SelectContent>
+                    </Select>
+                </div>
+
+                <PromotionsStrip
+                    promotions={activePromos.data?.data ?? []}
+                    loading={!activePromos.data && activePromos.loading}
+                    pendingId={pendingId}
+                    pendingQty={pendingQty}
+                    qtyInCart={qtyInCartPromo}
+                    onSelect={handleSelectPromotion}
+                    onChangeQty={handleChangePendingQty}
+                    onConfirm={handleConfirmPending}
+                />
+
+                <TopProducts
+                    reloadSignal={topReloadSignal}
+                    pendingId={pendingId}
+                    pendingQty={pendingQty}
+                    qtyInCart={qtyInCartProduct}
+                    onSelect={handleSelectProduct}
+                    onChangeQty={handleChangePendingQty}
+                    onConfirm={handleConfirmPending}
+                />
+
+                <ProductGrid
+                    catalog={catalog}
+                    pendingId={pendingId}
+                    pendingQty={pendingQty}
+                    qtyInCart={qtyInCartProduct}
+                    onSelect={handleSelectProduct}
+                    onChangeQty={handleChangePendingQty}
+                    onConfirm={handleConfirmPending}
+                />
+
+                <CartBubble
+                    itemCount={items.length}
+                    total={totals.total}
+                    lines={lines.flatMap(line => {
+                        if (line.kind === 'product' && line.product) {
+                            return [
+                                {
+                                    productId: line.item.productId,
+                                    name: line.product.name,
+                                    quantity: line.item.quantity
+                                }
+                            ]
+                        }
+                        if (line.kind === 'promotion' && line.promotion) {
+                            return [
+                                {
+                                    productId: line.item.promotionId,
+                                    name: line.promotion.name,
+                                    quantity: line.item.quantity
+                                }
+                            ]
+                        }
+                        return []
+                    })}
+                    hasProblem={blocked}
+                    openTabsLabel={
+                        openTabs.data && openTabs.data.total > 0
+                            ? tTabs('openTab') + ` (${openTabs.data.total})`
+                            : undefined
+                    }
+                    onClick={() => setShowCart(true)}
+                />
+
+                <CartSheet
+                    open={showCart}
+                    onOpenChange={setShowCart}
+                    lines={lines}
+                    lookupSettled={lookupSettled}
+                    problemWith={problemWith}
+                    totals={totals}
+                    discount={discount}
+                    onDiscountChange={setGlobalDiscount}
+                    onUpdateQuantity={updateQuantity}
+                    onRemove={removeItem}
+                    customers={activeCustomers}
+                    selectedCustomer={selectedCustomer}
+                    onSelectCustomer={setSelectedCustomer}
+                    blocked={blocked}
+                    offlineWindowExpired={offlineWindowExpired}
+                    showPaymentDialog={showPaymentDialog}
+                    onShowPaymentDialog={open => {
+                        setShowPaymentDialog(open)
+                        // Cancelling (or the dialog closing after success, already cleared) starts the next attempt fresh.
+                        if (!open) setCheckoutKey(null)
+                    }}
+                    paymentMethod={paymentMethod}
+                    onPaymentMethodChange={setPaymentMethod}
+                    processing={processing}
+                    onCheckout={handleCheckout}
+                    openTabs={openTabs.data?.data ?? []}
+                    openTabsLoading={!openTabs.data}
+                    onOpenNewTab={() => setShowOpenTabDialog(true)}
+                    onSelectTab={tabId => {
+                        setSelectedTabId(tabId)
+                        setShowCart(false)
+                    }}
+                    onAddToTab={handleAddToTabClick}
+                    canAddToTab={canAddToTab}
+                />
+
+                <OpenTabDialog
+                    open={showOpenTabDialog}
+                    onOpenChange={setShowOpenTabDialog}
+                    customers={activeCustomers}
+                    onOpened={() => openTabs.reload()}
+                />
+
+                <AddToTabDialog
+                    open={showAddToTabDialog}
+                    onOpenChange={setShowAddToTabDialog}
+                    openTabs={openTabs.data?.data ?? []}
+                    customers={activeCustomers}
+                    items={items.map(item =>
+                        item.kind === 'product'
+                            ? { product_id: item.productId, quantity: item.quantity }
+                            : { promotion_id: item.promotionId, quantity: item.quantity }
+                    )}
+                    onAdded={() => {
+                        clearCart()
+                        setShowCart(false)
+                        openTabs.reload()
+                        catalog.reload()
+                        activePromos.reload()
+                    }}
+                />
+
+                <TabDetailSheet
+                    tabId={selectedTabId}
+                    onClose={() => setSelectedTabId(null)}
+                    onChanged={() => {
+                        openTabs.reload()
+                        catalog.reload()
+                    }}
+                />
             </div>
 
-            <PromotionsStrip
-                promotions={activePromos.data?.data ?? []}
-                loading={!activePromos.data && activePromos.loading}
-                pendingId={pendingId}
-                pendingQty={pendingQty}
-                qtyInCart={qtyInCartPromo}
-                onSelect={handleSelectPromotion}
-                onChangeQty={handleChangePendingQty}
-                onConfirm={handleConfirmPending}
-            />
-
-            <TopProducts
-                reloadSignal={topReloadSignal}
-                pendingId={pendingId}
-                pendingQty={pendingQty}
-                qtyInCart={qtyInCartProduct}
-                onSelect={handleSelectProduct}
-                onChangeQty={handleChangePendingQty}
-                onConfirm={handleConfirmPending}
-            />
-
-            <ProductGrid
-                catalog={catalog}
-                pendingId={pendingId}
-                pendingQty={pendingQty}
-                qtyInCart={qtyInCartProduct}
-                onSelect={handleSelectProduct}
-                onChangeQty={handleChangePendingQty}
-                onConfirm={handleConfirmPending}
-            />
-
-            <CartBubble
-                itemCount={items.length}
-                total={totals.total}
-                lines={lines.flatMap(line => {
-                    if (line.kind === 'product' && line.product) {
-                        return [
-                            {
-                                productId: line.item.productId,
-                                name: line.product.name,
-                                quantity: line.item.quantity
-                            }
-                        ]
-                    }
-                    if (line.kind === 'promotion' && line.promotion) {
-                        return [
-                            {
-                                productId: line.item.promotionId,
-                                name: line.promotion.name,
-                                quantity: line.item.quantity
-                            }
-                        ]
-                    }
-                    return []
-                })}
-                hasProblem={blocked}
-                openTabsLabel={
-                    openTabs.data && openTabs.data.total > 0
-                        ? tTabs('openTab') + ` (${openTabs.data.total})`
-                        : undefined
-                }
-                onClick={() => setShowCart(true)}
-            />
-
-            <CartSheet
-                open={showCart}
-                onOpenChange={setShowCart}
-                lines={lines}
-                lookupSettled={lookupSettled}
-                problemWith={problemWith}
-                totals={totals}
-                discount={discount}
-                onDiscountChange={setGlobalDiscount}
-                onUpdateQuantity={updateQuantity}
-                onRemove={removeItem}
-                customers={activeCustomers}
-                selectedCustomer={selectedCustomer}
-                onSelectCustomer={setSelectedCustomer}
-                blocked={blocked}
-                offlineWindowExpired={offlineWindowExpired}
-                showPaymentDialog={showPaymentDialog}
-                onShowPaymentDialog={open => {
-                    setShowPaymentDialog(open)
-                    // Cancelling (or the dialog closing after success, already cleared) starts the next attempt fresh.
-                    if (!open) setCheckoutKey(null)
-                }}
-                paymentMethod={paymentMethod}
-                onPaymentMethodChange={setPaymentMethod}
-                processing={processing}
-                onCheckout={handleCheckout}
-                openTabs={openTabs.data?.data ?? []}
-                openTabsLoading={!openTabs.data}
-                onOpenNewTab={() => setShowOpenTabDialog(true)}
-                onSelectTab={tabId => {
-                    setSelectedTabId(tabId)
-                    setShowCart(false)
-                }}
-                onAddToTab={handleAddToTabClick}
-                canAddToTab={canAddToTab}
-            />
-
-            <OpenTabDialog
-                open={showOpenTabDialog}
-                onOpenChange={setShowOpenTabDialog}
-                customers={activeCustomers}
-                onOpened={() => openTabs.reload()}
-            />
-
-            <AddToTabDialog
-                open={showAddToTabDialog}
-                onOpenChange={setShowAddToTabDialog}
-                openTabs={openTabs.data?.data ?? []}
-                customers={activeCustomers}
-                items={items.map(item =>
-                    item.kind === 'product'
-                        ? { product_id: item.productId, quantity: item.quantity }
-                        : { promotion_id: item.promotionId, quantity: item.quantity }
-                )}
-                onAdded={() => {
-                    clearCart()
-                    setShowCart(false)
-                    openTabs.reload()
-                    catalog.reload()
-                    activePromos.reload()
-                }}
-            />
-
-            <TabDetailSheet
-                tabId={selectedTabId}
-                onClose={() => setSelectedTabId(null)}
-                onChanged={() => {
-                    openTabs.reload()
-                    catalog.reload()
-                }}
-            />
-        </div>
+            {provisionalReceipt && <ReceiptTicket order={provisionalReceipt} settings={settings} provisional />}
+        </>
     )
 }

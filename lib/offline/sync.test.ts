@@ -25,7 +25,10 @@ void mock.module('@/lib/offline/db', () => ({
     idbSet: async (store: string, key: string, value: unknown) => {
         fakeIdbStore(store).set(key, value)
     },
-    idbGetAll: async (store: string) => [...fakeIdbStore(store).values()]
+    idbGetAll: async (store: string) => [...fakeIdbStore(store).values()],
+    idbDelete: async (store: string, key: string) => {
+        fakeIdbStore(store).delete(key)
+    }
 }))
 
 const { enqueueSale, updateOutboxEntry, listOutboxEntries } = await import('./outbox')

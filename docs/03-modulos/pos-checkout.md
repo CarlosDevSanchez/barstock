@@ -1,6 +1,13 @@
 # Módulo: POS y cobro
 
-> Actualizado con idempotencia (F0), instantánea offline (F1), recepción de ventas offline (F2) y cobro sin red (F3) · `app/(dashboard)/pos/page.tsx` + `components/pos/*` · API `POST /sales`, `GET /pos/snapshot` · RPC `create_sale` · Servicio `services/sales.ts`, `services/pos.ts` · Cliente `lib/offline/{outbox,sync}.ts` · Confianza: **[Verificado]** (`sales.test.ts` / `offline-sales.test.ts` / `rpc.test.ts` / `create-sale-promotions.test.ts` / `pos-snapshot.test.ts`, `pos.test.tsx`, `use-pos-snapshot.test.tsx`, `outbox.test.ts`, `sync.test.ts`, `use-outbox-sync.test.tsx`, `promotion-allocate.test.ts`, `e2e/offline.e2e.ts`).
+> Actualizado con idempotencia (F0), instantánea offline (F1), recepción de ventas offline (F2), cobro sin red (F3) y
+> ticket/centro de sincronización (F4) · `app/(dashboard)/pos/page.tsx` + `components/pos/*` ·
+> `components/offline/sync-center.tsx` · `lib/receipt-preview.ts` · API `POST /sales`, `GET /pos/snapshot` · RPC
+> `create_sale` · Servicio `services/sales.ts`, `services/pos.ts` · Cliente `lib/offline/{outbox,sync}.ts` ·
+> Confianza: **[Verificado]** (`sales.test.ts` / `offline-sales.test.ts` / `rpc.test.ts` /
+> `create-sale-promotions.test.ts` / `pos-snapshot.test.ts`, `pos.test.tsx`, `use-pos-snapshot.test.tsx`,
+> `outbox.test.ts`, `sync.test.ts`, `use-outbox-sync.test.tsx`, `sync-center.test.tsx`, `receipt-preview.test.ts`,
+> `receipt-ticket.test.tsx`, `promotion-allocate.test.ts`, `e2e/offline.e2e.ts`).
 
 > Sustituye al análisis anterior, donde el cobro eran 5 llamadas sueltas desde el navegador, sin transacción, con totales calculados en el cliente y un descuento de stock que probablemente no funcionaba
 > ([C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md), ahora **Verificado**). El estado previo queda en el historial de git (commit `54962b9`).
@@ -25,7 +32,7 @@ cabecera `Idempotency-Key`; se conserva mientras el carrito no cambie, así rein
 llega dos veces con el mismo `user_id` y el mismo payload, devuelve la orden ya creada en vez de cobrar otra vez; con
 un payload distinto responde 409. Corrige el doble cobro por respuesta perdida (F0 en
 [offline y sincronización](../06-roadmap/offline-y-sincronizacion.md), que documenta el resto del diseño offline —
-F0 a F3 ya implementadas, F4 pendiente).
+F0 a F4 implementadas).
 
 **Navegar sin red:** mientras `useOnlineStatus()` es `false`, la búsqueda y el filtro por categoría del catálogo (y
 las promociones, clientes y líneas del carrito) se leen en memoria de una instantánea (`GET /api/v1/pos/snapshot`,
@@ -37,23 +44,30 @@ las promociones, clientes y líneas del carrito) se leen en memoria de una insta
 `settings.offline_max_hours` (si no, el botón se deshabilita con un aviso — "demasiado tiempo sin conexión"),
 encola la venta en IndexedDB (`lib/offline/outbox.ts`, `enqueueSale`) con el mismo `client_ref` que ya generaba
 para la cabecera `Idempotency-Key`, el total previsto y el payload de la venta; el toast muestra el número
-provisional (`OFF-XXXXXXXX`) y el carrito se vacía igual que en una venta online. Un motor de sincronización
-(`lib/offline/sync.ts`, disparado por `hooks/use-outbox-sync.ts` — montado una vez en `AppShell`, corre al volver
-la conexión y cada 60 s) manda esa cola a `POST /sales` con `occurred_at`/`expected_total`/`Idempotency-Key` en
-cuanto hay red y sesión: ahí es donde `create_sale` calcula precio y stock de verdad (F2, más abajo). El servidor
-recalcula, nunca se pierde una venta por falta de stock (se anota el faltante) y una orden repetida por
-reintento/doble pestaña se resuelve por la misma idempotencia. Cerrar sesión con ventas sin sincronizar las
-conserva y avisa (no las borra). Detalle completo, incluidos los estados de la cola y las pruebas, en F3 de
-[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md).
+provisional (`OFF-XXXXXXXX`), con un botón "Print ticket" que imprime el ticket provisional (§F4, más abajo), y el
+carrito se vacía igual que en una venta online. Un motor de sincronización (`lib/offline/sync.ts`, disparado por
+`hooks/use-outbox-sync.ts` — montado una vez en `AppShell`, corre al volver la conexión, cada 60 s, y al instante
+tras cualquier escritura local en la cola) manda esa cola a `POST /sales` con
+`occurred_at`/`expected_total`/`Idempotency-Key` en cuanto hay red y sesión: ahí es donde `create_sale` calcula
+precio y stock de verdad (F2, más abajo). El servidor recalcula, nunca se pierde una venta por falta de stock (se
+anota el faltante) y una orden repetida por reintento/doble pestaña se resuelve por la misma idempotencia. Cerrar
+sesión con ventas sin sincronizar las conserva y avisa (no las borra). Detalle completo, incluidos los estados de
+la cola y las pruebas, en F3 de [offline y sincronización](../06-roadmap/offline-y-sincronizacion.md).
 
 **Lo que el servidor hace con una venta offline (F2).** `saleSchema` acepta `occurred_at` (hora del dispositivo) y
 `expected_total` (el total provisional que mostró el POS) opcionales; `create_sale` los usa si llegan: recalcula
 precio/impuestos como siempre (nunca confía en `expected_total`, solo anota la diferencia), ajusta `occurred_at` a
 la ventana `settings.offline_max_hours` (recortándolo si se pasa) y, si `occurred_at` no es nulo, **nunca rechaza
 por falta de stock** — descuenta lo que haya (hasta 0) y anota el faltante. Cualquier diferencia queda en
-`orders.sync_issues` (`occurred_at_clamped`/`price_mismatch`/`stock_shortfall`) para que un gerente la revise (F4,
-sin pantalla todavía — hoy la cola solo muestra un toast, sin centro de sincronización ni ticket marcado
-"PROVISIONAL").
+`orders.sync_issues` (`occurred_at_clamped`/`price_mismatch`/`stock_shortfall`).
+
+**Ticket provisional y centro de sincronización (F4).** El ticket impreso desde el toast de checkout offline
+(`lib/receipt-preview.ts`, `buildProvisionalOrder`) muestra un sello "PROVISIONAL — pending sync" hasta que la
+venta sincroniza y tiene `order_number` real. El header muestra un botón con el número de ventas en cola
+(`components/offline/sync-center.tsx`, montado en `components/shell/top-bar.tsx`) que abre un panel con
+reintentar/descartar por entrada; aparece al instante tras encolar (evento `barstock:outbox-changed`, ver F5 en
+[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md)). Una orden con `sync_issues` se revisa desde
+su pantalla de detalle (`orders/[id]`, gerente+): ver [órdenes y reembolsos](ordenes-y-reembolsos.md).
 
 **Cuentas abiertas:** el carrito (productos y/o promociones) se puede enviar a una cuenta vía `tab_add_items` (misma expansión de paquetes que `create_sale`). Ver [cuentas-abiertas](cuentas-abiertas.md) y [promociones](promociones.md).
 

@@ -1,5 +1,7 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { GET as getOrder } from '@/app/api/v1/orders/[id]/route'
+import { PATCH as reviewOrder } from '@/app/api/v1/orders/[id]/review/route'
+import { GET as listOrders } from '@/app/api/v1/orders/route'
 import { POST as createSale } from '@/app/api/v1/sales/route'
 import {
     adminClient,
@@ -8,6 +10,7 @@ import {
     pinStoreCurrency,
     signedInClient,
     stockOf,
+    uniq,
     type Db
 } from '../helpers/integration'
 import { dataOf, errorOf, loginAs, type TestClient } from '../helpers/http'
@@ -19,11 +22,14 @@ interface Order {
     occurred_at: string | null
     source: 'online' | 'offline'
     sync_issues: Record<string, unknown> | null
+    reviewed_by: string | null
+    reviewed_at: string | null
     payments: Array<{ amount: number }>
     items: Array<{ product_id: string; quantity: number }>
 }
 
 let cashier: TestClient
+let managerClient: TestClient
 let manager: Db
 let restoreCurrency: () => Promise<void>
 
@@ -52,7 +58,11 @@ const sale = (body: unknown) => cashier.post(createSale, 'sales', { body })
 beforeAll(async () => {
     await ensureTestUsers()
     restoreCurrency = await pinStoreCurrency('USD')
-    ;[cashier, manager] = await Promise.all([loginAs('cashier'), signedInClient('manager')])
+    ;[cashier, managerClient, manager] = await Promise.all([
+        loginAs('cashier'),
+        loginAs('manager'),
+        signedInClient('manager')
+    ])
 })
 afterAll(async () => {
     await restoreCurrency()
@@ -255,5 +265,104 @@ describe('reporting groups by when the sale happened, not when it reached the se
         } finally {
             await restoreWindow()
         }
+    })
+})
+
+describe('manager review of a synced-with-issues order (F4)', () => {
+    const review = (id: string) => managerClient.patch(reviewOrder, `orders/${id}/review`, { params: { id } })
+
+    test('needs a session, and only a manager+', async () => {
+        const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 1 })
+        const order = dataOf<Order>(
+            await sale({
+                payment_method: 'cash',
+                occurred_at: hoursAgo(1),
+                items: [{ product_id: product.id, quantity: 3 }]
+            })
+        )
+        expect(
+            (await cashier.patch(reviewOrder, `orders/${order.id}/review`, { params: { id: order.id } })).status
+        ).toBe(403)
+        expect(await review(order.id)).toMatchObject({ status: 200 })
+    })
+
+    test('marks reviewed_by/reviewed_at, and the order carries them afterwards', async () => {
+        const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 1 })
+        const order = dataOf<Order>(
+            await sale({
+                payment_method: 'cash',
+                occurred_at: hoursAgo(1),
+                items: [{ product_id: product.id, quantity: 3 }]
+            })
+        )
+        expect(order.reviewed_at).toBeNull()
+
+        const reviewed = dataOf<Order>(await review(order.id))
+        expect(reviewed.reviewed_by).not.toBeNull()
+        expect(reviewed.reviewed_at).not.toBeNull()
+
+        const fetched = dataOf<Order>(await cashier.get(getOrder, `orders/${order.id}`, { params: { id: order.id } }))
+        expect(fetched.reviewed_at).toBe(reviewed.reviewed_at)
+    })
+
+    test('reviewing twice just refreshes who/when (idempotent, not an error)', async () => {
+        const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 1 })
+        const order = dataOf<Order>(
+            await sale({
+                payment_method: 'cash',
+                occurred_at: hoursAgo(1),
+                items: [{ product_id: product.id, quantity: 3 }]
+            })
+        )
+        const first = dataOf<Order>(await review(order.id))
+        const second = dataOf<Order>(await review(order.id))
+        expect(second.reviewed_by).toBe(first.reviewed_by)
+    })
+
+    test('an order with no sync_issues has nothing to review', async () => {
+        const product = await createProduct({ selling_price: 10, stock: 5 })
+        const order = dataOf<Order>(
+            await sale({ payment_method: 'cash', items: [{ product_id: product.id, quantity: 1 }] })
+        )
+        expect(order.sync_issues).toBeNull()
+        const response = await review(order.id)
+        expect(response.status).toBe(422)
+        expect(errorOf(response).message).toBe('This order has no sync issues to review')
+    })
+
+    test('a missing order is 404', async () => {
+        const response = await review(crypto.randomUUID())
+        expect(response.status).toBe(404)
+    })
+
+    test('GET /orders?needs_review=true lists only unreviewed sync_issues, and drops one once reviewed', async () => {
+        const tag = uniq('review')
+        const productA = await createProduct({ name: `${tag}-a`, selling_price: 10, tax_rate: 0, stock: 1 })
+        const productB = await createProduct({ name: `${tag}-b`, selling_price: 10, tax_rate: 0, stock: 1 })
+        const withIssue = dataOf<Order>(
+            await sale({
+                payment_method: 'cash',
+                occurred_at: hoursAgo(1),
+                items: [{ product_id: productA.id, quantity: 3 }]
+            })
+        )
+        const clean = dataOf<Order>(
+            await sale({
+                payment_method: 'cash',
+                occurred_at: hoursAgo(1),
+                items: [{ product_id: productB.id, quantity: 1 }]
+            })
+        )
+        expect(clean.sync_issues).toBeNull()
+
+        const before = await managerClient.get(listOrders, `orders?needs_review=true&pageSize=100`)
+        const beforeIds = dataOf<Order[]>(before).map(order => order.id)
+        expect(beforeIds).toContain(withIssue.id)
+        expect(beforeIds).not.toContain(clean.id)
+
+        await review(withIssue.id)
+
+        const after = await managerClient.get(listOrders, `orders?needs_review=true&pageSize=100`)
+        expect(dataOf<Order[]>(after).map(order => order.id)).not.toContain(withIssue.id)
     })
 })

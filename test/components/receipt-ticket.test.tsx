@@ -211,4 +211,20 @@ describe('ReceiptTicket', () => {
         expect(screen.queryByTestId('receipt-logo')).toBeNull()
         expect(screen.getByTestId('receipt-ticket').querySelector('img')).toBeNull()
     })
+
+    test('shows the PROVISIONAL stamp for a queued-but-not-synced sale (F4), and not otherwise', () => {
+        const { rerender } = render(
+            <IntlProvider>
+                <ReceiptTicket order={baseOrder} settings={testSettings} />
+            </IntlProvider>
+        )
+        expect(screen.queryByTestId('receipt-provisional-stamp')).toBeNull()
+
+        rerender(
+            <IntlProvider>
+                <ReceiptTicket order={baseOrder} settings={testSettings} provisional />
+            </IntlProvider>
+        )
+        expect(screen.getByTestId('receipt-provisional-stamp').textContent).toBe('PROVISIONAL — pending sync')
+    })
 })

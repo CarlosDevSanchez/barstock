@@ -1,10 +1,19 @@
 import type { PaymentMethod } from '@/types'
-import { idbGet, idbGetAll, idbSet } from './db'
+import { idbDelete, idbGet, idbGetAll, idbSet } from './db'
 
 export type OutboxState = 'pending' | 'syncing' | 'synced' | 'synced_with_issues' | 'rejected' | 'paused_auth'
 
 /** States a sync run still tries to send. Everything else (`synced`, `synced_with_issues`, `rejected`) is terminal. */
 const RETRYABLE: ReadonlySet<OutboxState> = new Set(['pending', 'syncing', 'paused_auth'])
+
+/** Fired after every write to the outbox (queue, update, discard). `hooks/use-outbox-sync.ts` listens for this to
+ * refresh its count right away — e.g. right after checkout queues a sale — instead of waiting for its next tick
+ * (every 60s) or the browser's `online` event. Just a local re-read, not a sync attempt. */
+export const OUTBOX_CHANGED_EVENT = 'barstock:outbox-changed'
+
+function notifyChanged(): void {
+    if (typeof window !== 'undefined') window.dispatchEvent(new Event(OUTBOX_CHANGED_EVENT))
+}
 
 export type OutboxSaleItem =
     | { product_id: string; variant_id?: string | null; quantity: number; discount?: number }
@@ -57,6 +66,7 @@ export async function enqueueSale(
         attempts: 0
     }
     await idbSet('outbox', clientRef, entry)
+    notifyChanged()
     return entry
 }
 
@@ -79,4 +89,19 @@ export async function updateOutboxEntry(clientRef: string, patch: Partial<Outbox
     const current = await idbGet<OutboxEntry>('outbox', clientRef)
     if (!current) return
     await idbSet('outbox', clientRef, { ...current, ...patch })
+    notifyChanged()
+}
+
+/** Puts a `rejected` or `paused_auth` entry back in the queue (the sync center's "retry"): the next `runSync()`
+ * picks it up again, immediately (no backoff carried over). A no-op for a state that is already retryable. */
+export async function retryOutboxEntry(clientRef: string): Promise<void> {
+    await updateOutboxEntry(clientRef, { state: 'pending', next_attempt_at: undefined, last_error: undefined })
+}
+
+/** Removes an entry for good (the sync center's "discard", after a `ConfirmDialog`). This is local-only: a
+ * discarded entry never reached the server, so there is nothing to undo there — the reason the cashier gives is
+ * shown in the confirmation only, not stored anywhere, since there is no order to attach it to. */
+export async function discardOutboxEntry(clientRef: string): Promise<void> {
+    await idbDelete('outbox', clientRef)
+    notifyChanged()
 }

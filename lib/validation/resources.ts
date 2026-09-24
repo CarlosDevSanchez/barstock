@@ -231,7 +231,9 @@ export const ordersQuerySchema = paginationSchema.extend({
     status: z.preprocess(value => blankToNull(value) ?? undefined, z.enum(ORDER_STATUSES).optional()),
     customer_id: optionalUuid,
     from: optionalDate,
-    to: optionalDate
+    to: optionalDate,
+    // Offline sales that synced with a difference (F4): sync_issues is not null and no manager has reviewed it yet.
+    needs_review: queryBoolean
 })
 
 export const AUDIT_ACTIONS = [

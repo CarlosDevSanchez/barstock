@@ -8,7 +8,8 @@ import { format } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { useLocale, useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { ArrowLeft, Receipt, RotateCcw, Printer } from 'lucide-react'
+import Link from 'next/link'
+import { AlertTriangle, ArrowLeft, Receipt, RotateCcw, Printer } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,6 +35,19 @@ import { roleAtLeast } from '@/lib/auth/roles'
 import { groupOrderItemsByPromotion } from '@/lib/order-item-groups'
 import { refundSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
+
+/** Shape `create_sale` writes to `orders.sync_issues` (F2/F4, docs/06-roadmap/offline-y-sincronizacion.md). Every
+ * field is optional: only the differences that actually happened are present. */
+interface SyncIssues {
+    occurred_at_clamped?: { requested: string; used: string }
+    price_mismatch?: { expected: number; actual: number }
+    stock_shortfall?: Array<{ product_id: string; missing: number }>
+}
+
+function parseSyncIssues(value: OrderDetail['sync_issues']): SyncIssues | null {
+    if (!value || typeof value !== 'object' || Array.isArray(value)) return null
+    return value as SyncIssues
+}
 
 interface RefundDialogProps {
     order: OrderDetail
@@ -97,8 +111,22 @@ export default function OrderDetailPage() {
     const { user, settings } = useSession()
     const money = useMoney()
     const [refunding, setRefunding] = useState(false)
+    const [reviewing, setReviewing] = useState(false)
 
     const orderQuery = useApiQuery(signal => ordersApi.get(params.id, signal), `order:${params.id}`)
+
+    const handleReview = async () => {
+        setReviewing(true)
+        try {
+            await ordersApi.review(params.id)
+            toast.success(t('reviewedToast'))
+            orderQuery.reload()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('reviewFailed')))
+        } finally {
+            setReviewing(false)
+        }
+    }
 
     const statusLabel = (value: string) => {
         if (value === 'completed' || value === 'refunded' || value === 'draft' || value === 'pending') {
@@ -130,7 +158,10 @@ export default function OrderDetailPage() {
     if (!orderQuery.data) return <PageSpinner />
 
     const order = orderQuery.data
-    const canRefund = order.status === 'completed' && roleAtLeast(user.role, 'manager')
+    const canManage = roleAtLeast(user.role, 'manager')
+    const canRefund = order.status === 'completed' && canManage
+    const syncIssues = parseSyncIssues(order.sync_issues)
+    const productName = (productId: string) => order.items.find(item => item.product_id === productId)?.product.name
 
     return (
         <div className="space-y-6">
@@ -264,6 +295,74 @@ export default function OrderDetailPage() {
                         </CardContent>
                     </Card>
                 </div>
+
+                {syncIssues && (
+                    <Card className="rounded-2xl border-amber-500/50">
+                        <CardHeader>
+                            <CardTitle className="flex items-center gap-2 text-amber-600">
+                                <AlertTriangle className="h-5 w-5" />
+                                {t('syncIssuesTitle')}
+                            </CardTitle>
+                        </CardHeader>
+                        <CardContent className="space-y-3">
+                            {syncIssues.occurred_at_clamped && (
+                                <p className="text-sm">
+                                    {t('syncIssueClamped', {
+                                        requested: format(new Date(syncIssues.occurred_at_clamped.requested), 'PPp', {
+                                            locale: dateLocale
+                                        }),
+                                        used: format(new Date(syncIssues.occurred_at_clamped.used), 'PPp', {
+                                            locale: dateLocale
+                                        })
+                                    })}
+                                </p>
+                            )}
+                            {syncIssues.price_mismatch && (
+                                <p className="text-sm">
+                                    {t('syncIssuePriceMismatch', {
+                                        expected: money(syncIssues.price_mismatch.expected),
+                                        actual: money(syncIssues.price_mismatch.actual)
+                                    })}
+                                </p>
+                            )}
+                            {syncIssues.stock_shortfall && syncIssues.stock_shortfall.length > 0 && (
+                                <div className="text-sm">
+                                    <p>{t('syncIssueStockShortfall')}</p>
+                                    <ul className="list-disc pl-5">
+                                        {syncIssues.stock_shortfall.map(shortfall => (
+                                            <li key={shortfall.product_id}>
+                                                {t('syncIssueStockShortfallLine', {
+                                                    name: productName(shortfall.product_id) ?? shortfall.product_id,
+                                                    missing: shortfall.missing
+                                                })}
+                                            </li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
+                            <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
+                                {order.reviewed_at ? (
+                                    <p className="text-sm text-muted-foreground">
+                                        {t('reviewedOn', {
+                                            date: format(new Date(order.reviewed_at), 'PPp', { locale: dateLocale })
+                                        })}
+                                    </p>
+                                ) : canManage ? (
+                                    <Button size="sm" onClick={handleReview} disabled={reviewing}>
+                                        {reviewing ? t('reviewing') : t('markReviewed')}
+                                    </Button>
+                                ) : (
+                                    <span />
+                                )}
+                                {syncIssues.stock_shortfall && syncIssues.stock_shortfall.length > 0 && (
+                                    <Button asChild variant="outline" size="sm">
+                                        <Link href="/inventory">{t('goToInventory')}</Link>
+                                    </Button>
+                                )}
+                            </div>
+                        </CardContent>
+                    </Card>
+                )}
 
                 <Card className="rounded-2xl">
                     <CardHeader>

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation'
 import { format } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { useLocale, useTranslations } from 'next-intl'
-import { Eye } from 'lucide-react'
+import { AlertTriangle, Eye } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Label } from '@/components/ui/label'
@@ -19,13 +19,16 @@ import { PageHeader } from '@/components/page-header'
 import { FilterBar } from '@/components/filter-bar'
 import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
 import { useMoney, useSession } from '@/components/session-provider'
-import { ordersApi } from '@/lib/api/orders'
+import { ordersApi, type OrderListItem } from '@/lib/api/orders'
 import { roleAtLeast } from '@/lib/auth/roles'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePagination } from '@/hooks/use-pagination'
 
 const ALL = 'all'
+
+/** An offline sale that synced with a difference (F2/F4) and no manager has reviewed yet. */
+const needsReview = (order: OrderListItem): boolean => order.sync_issues !== null && order.reviewed_at === null
 
 const getStatusColor = (status: string) => {
     switch (status) {
@@ -50,12 +53,24 @@ export default function OrdersPage() {
     const money = useMoney()
     const [searchQuery, setSearchQuery] = useState('')
     const [status, setStatus] = useState(ALL)
+    const canReview = roleAtLeast(user.role, 'manager')
+    const [needsReviewOnly, setNeedsReviewOnly] = useState(false)
     const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const search = useDebouncedValue(searchQuery)
 
     const orders = useApiQuery(
-        signal => ordersApi.list({ page, pageSize, q: search, status: status === ALL ? undefined : status }, signal),
-        JSON.stringify({ page, pageSize, search, status })
+        signal =>
+            ordersApi.list(
+                {
+                    page,
+                    pageSize,
+                    q: search,
+                    status: status === ALL ? undefined : status,
+                    needs_review: canReview && needsReviewOnly ? true : undefined
+                },
+                signal
+            ),
+        JSON.stringify({ page, pageSize, search, status, needsReviewOnly: canReview && needsReviewOnly })
     )
 
     const statusLabel = (value: string) => {
@@ -79,7 +94,7 @@ export default function OrdersPage() {
                     reset()
                 }}
                 searchPlaceholder={t('searchPlaceholder')}
-                activeCount={status === ALL ? 0 : 1}
+                activeCount={(status === ALL ? 0 : 1) + (canReview && needsReviewOnly ? 1 : 0)}
             >
                 <div className="space-y-1.5">
                     <Label className="lg:sr-only">{t('filterStatusAria')}</Label>
@@ -100,6 +115,20 @@ export default function OrdersPage() {
                         </SelectContent>
                     </Select>
                 </div>
+                {canReview && (
+                    <Button
+                        variant={needsReviewOnly ? 'default' : 'outline'}
+                        aria-pressed={needsReviewOnly}
+                        className="w-full lg:w-auto"
+                        onClick={() => {
+                            setNeedsReviewOnly(value => !value)
+                            reset()
+                        }}
+                    >
+                        <AlertTriangle className="mr-2 h-4 w-4" />
+                        {t('needsReviewOnly')}
+                    </Button>
+                )}
             </FilterBar>
 
             {orders.error ? (
@@ -144,9 +173,17 @@ export default function OrdersPage() {
                                                     {money(order.total)}
                                                 </TableCell>
                                                 <TableCell>
-                                                    <Badge variant={getStatusColor(order.status)}>
-                                                        {statusLabel(order.status)}
-                                                    </Badge>
+                                                    <div className="flex flex-wrap gap-1.5">
+                                                        <Badge variant={getStatusColor(order.status)}>
+                                                            {statusLabel(order.status)}
+                                                        </Badge>
+                                                        {needsReview(order) && (
+                                                            <Badge variant="outline" className="gap-1">
+                                                                <AlertTriangle className="h-3 w-3" />
+                                                                {t('needsReview')}
+                                                            </Badge>
+                                                        )}
+                                                    </div>
                                                 </TableCell>
                                                 <TableCell className="text-right">
                                                     <div className="flex justify-end gap-2">
@@ -186,6 +223,12 @@ export default function OrdersPage() {
                                         <Badge variant={getStatusColor(order.status)}>
                                             {statusLabel(order.status)}
                                         </Badge>
+                                        {needsReview(order) && (
+                                            <Badge variant="outline" className="gap-1">
+                                                <AlertTriangle className="h-3 w-3" />
+                                                {t('needsReview')}
+                                            </Badge>
+                                        )}
                                     </div>
                                 }
                             />

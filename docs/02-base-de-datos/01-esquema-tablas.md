@@ -98,3 +98,4 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `audit_log` (append-only), trigger genérico en 13 tablas, `log_auth_event` RPC | `20260926000001` |
 | `idempotency_keys`; `create_sale` gana `p_idempotency_key` (drop + recreate, firma antigua eliminada) | `20260927000001` |
 | `orders.client_ref/occurred_at/source/sync_issues/reviewed_by/reviewed_at`; `create_sale` gana `p_occurred_at`/`p_expected_total` (drop + recreate); `dashboard_summary`/`sales_report`/`top_selling_products` agrupan por `coalesce(occurred_at, created_at)`; setting `offline_max_hours` | `20260928000001` |
+| `mark_order_reviewed` (RPC, `SECURITY DEFINER`, gerente+): marca `orders.reviewed_by/reviewed_at` para una orden con `sync_issues`; idempotente | `20260929000001` |

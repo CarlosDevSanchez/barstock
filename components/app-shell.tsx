@@ -85,8 +85,8 @@ function SidebarNav({ user }: { user: SessionUser }) {
 }
 
 export function AppShell({ user, settings, children, defaultSidebarOpen = true }: AppShellProps) {
-    // Keeps sending queued offline sales (F3) no matter which page is open; nothing here needs its return value.
-    useOutboxSync()
+    // Keeps sending queued offline sales (F3) no matter which page is open; the counter/sheet (F4) live in TopBar.
+    const { pendingCount, syncNow } = useOutboxSync()
 
     return (
         <SessionProvider value={{ user, settings }}>
@@ -117,7 +117,12 @@ export function AppShell({ user, settings, children, defaultSidebarOpen = true }
                 </Sidebar>
 
                 <SidebarInset className="print:block">
-                    <TopBar user={user} storeName={settings.store_name} />
+                    <TopBar
+                        user={user}
+                        storeName={settings.store_name}
+                        pendingOutboxCount={pendingCount}
+                        onSyncNow={syncNow}
+                    />
                     <main className="flex-1 min-w-0 overflow-y-auto overflow-x-hidden bg-slate-50 dark:bg-slate-900 px-4 py-4 sm:px-6 sm:py-6 pb-[calc(4rem+env(safe-area-inset-bottom)+1rem)] lg:pb-6 print:overflow-visible print:p-0 print:bg-white">
                         <div className="mx-auto w-full max-w-7xl">{children}</div>
                     </main>

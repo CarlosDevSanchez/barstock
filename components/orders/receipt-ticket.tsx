@@ -11,6 +11,9 @@ import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 interface ReceiptTicketProps {
     order: OrderDetail
     settings: SettingsWithLogoUrl
+    /** Set for a queued-but-not-yet-synced sale (F4): the order/items are a preview (`lib/receipt-preview.ts`),
+     * not the real thing yet, so the ticket says so instead of showing a real `order_number`. */
+    provisional?: boolean
 }
 
 /**
@@ -19,7 +22,7 @@ interface ReceiptTicketProps {
  * printed page to 80mm and `app/(dashboard)/orders/[id]/page.tsx` hides the normal on-screen view while printing.
  * Promotion packages are grouped under the promo name; component lines are indented under it.
  */
-export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
+export function ReceiptTicket({ order, settings, provisional = false }: ReceiptTicketProps) {
     const t = useTranslations('orders')
     const tc = useTranslations('common')
     const locale = useLocale()
@@ -72,6 +75,15 @@ export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
                 <p>{t('orderNumberSubtitle', { orderNumber: order.order_number })}</p>
                 <p>{dateTime}</p>
             </div>
+
+            {provisional && (
+                <>
+                    <div className="border-t border-dashed border-black my-2" />
+                    <p className="text-center text-sm font-bold" data-testid="receipt-provisional-stamp">
+                        {t('receiptProvisionalStamp')}
+                    </p>
+                </>
+            )}
 
             <div className="border-t border-dashed border-black my-2" />
 

@@ -1,11 +1,11 @@
 # Plan: cola offline y sincronización
 
 > Estado: F0 (idempotencia de `create_sale`), F1 (instantánea del catálogo del POS), F2 (el servidor recibe una
-> venta offline) y F3 (outbox + motor de sincronización del cliente) están **implementadas**: **cobrar ya funciona
-> sin red**. Falta F4 (la UI: ticket provisional con su número, centro de sincronización con contador y lista, y la
-> pantalla de revisión de gerente para `sync_issues`) — funcionalmente completo hoy, solo con feedback mínimo
-> (un toast). Complementa [PWA y modo offline](../01-arquitectura/09-pwa-offline.md). Referencia: D16 en
-> [decisiones-pendientes](decisiones-pendientes.md).
+> venta offline), F3 (outbox + motor de sincronización del cliente) y F4 (UI: ticket provisional, centro de
+> sincronización, revisión de gerente para `sync_issues`) están **implementadas**: cobrar sin red funciona de punta
+> a punta, con feedback visible en cada paso. Complementa [PWA y modo offline](../01-arquitectura/09-pwa-offline.md).
+> Referencia: D16 en [decisiones-pendientes](decisiones-pendientes.md). F5 (esta documentación) es este mismo
+> documento, ya al día.
 >
 > **Decisiones tomadas (2026-09-22):** alcance v1 = solo ventas nuevas del POS (cuentas abiertas, ajustes de
 > inventario y reembolsos siguen deshabilitados sin red); sin stock al sincronizar → se registra la venta y se marca
@@ -114,10 +114,14 @@ solo-admin, defecto).
 ## 5. Disparadores de la sincronización — ✅ Implementados
 
 `hooks/use-outbox-sync.ts`, montado una vez en `components/app-shell.tsx` (corre sin importar en qué página esté el
-cajero): al montar, en cada evento `online`, y cada 60 s (barato cuando la cola está vacía — sale antes de pedir la
-sesión). El botón manual del centro de sincronización queda para F4. Background Sync API sigue descartada: el
-service worker (`public/sw.js`) está escrito a mano, y duplicar ahí la lógica de sesión/401 no compensa frente a un
-intervalo de 60 s en la pestaña abierta.
+cajero): al montar, en cada evento `online`, cada 60 s (barato cuando la cola está vacía — sale antes de pedir la
+sesión), y de forma inmediata cada vez que una escritura local toca la cola (encolar, reintentar, descartar) vía el
+evento de `window` `barstock:outbox-changed` (`OUTBOX_CHANGED_EVENT`, `lib/offline/outbox.ts`) — este último es solo
+una relectura del contador en IndexedDB, no un intento de sincronizar, así el botón del centro de sincronización
+(§9) aparece al instante después de un cobro offline en vez de esperar hasta 60 s. El botón manual "sincronizar
+ahora" del centro de sincronización llama a `syncNow()`, que sí intenta un envío real. Background Sync API sigue
+descartada: el service worker (`public/sw.js`) está escrito a mano, y duplicar ahí la lógica de sesión/401 no
+compensa frente a un intervalo de 60 s en la pestaña abierta.
 
 ## 6. Reglas por acción
 
@@ -127,9 +131,11 @@ intervalo de 60 s en la pestaña abierta.
   stock **nunca** la rechaza (se registra el faltante, `sync_issues.stock_shortfall` — decisión tomada 2026-09-22,
   ver la cabecera del documento). Solo un producto/promoción inactivo o borrado la rechaza de verdad (`rejected` en
   la cola, §4). El número de orden (`order_number`, una secuencia) se asigna **al sincronizar**, no al vender: antes
-  de eso el POS solo conoce el `provisional_number` (`OFF-XXXXXXXX`) — mostrarlo en el ticket impreso (marcado
-  "PROVISIONAL") y en una pantalla de revisión para `sync_issues` es F4, todavía sin construir; hoy solo hay un
-  toast al encolar.
+  de eso el POS solo conoce el `provisional_number` (`OFF-XXXXXXXX`) — el ticket impreso lo muestra marcado
+  "PROVISIONAL — pending sync" (`lib/receipt-preview.ts` arma la orden provisional con la misma matemática que la
+  vista previa del carrito; `components/orders/receipt-ticket.tsx` pinta el sello) y la pantalla de detalle de la
+  orden (`app/(dashboard)/orders/[id]/page.tsx`) muestra `sync_issues` con la acción "marcar revisada" para
+  gerente+ (§9).
 - **Cuentas.** Fuera de alcance v1 (decisión 2026-09-22, ver la cabecera): siguen deshabilitadas sin red
   (`OfflineDisabledButton`). Si se necesitan más adelante: solo se podría operar sobre cuentas ya vistas en caché, y
   dos dispositivos añadiendo a la misma cuenta offline es un conflicto real sin resolver (último gana, o unir
@@ -154,16 +160,34 @@ Las acciones sincronizadas se registran igual que cualquier otra escritura (ver 
 el trigger genérico usa `auth.uid()` de la sesión que sincroniza, y `orders.occurred_at`/`source`/`sync_issues`
 llegan a `changes` sin trabajo aparte, ya que son columnas normales de `orders`.
 
-## 9. Centro de sincronización en la UI — F4, sin construir
+## 9. Centro de sincronización en la UI — ✅ Implementado
 
-- Un contador de pendientes visible en el header (junto al badge de conexión, `components/connection-status.tsx`).
-  `useOutboxSync()` ya expone `pendingCount`; falta pintarlo.
-- Una lista de entradas con su estado (`pending`/`syncing`/`rejected`/`paused_auth`/…) y las acciones "reintentar" y
-  "descartar" (esta última necesita una función de borrado que `lib/offline/outbox.ts` todavía no expone).
-- Marcar el ticket impreso como "PROVISIONAL" mientras no tiene `order_number` real, y mostrar el
-  `provisional_number` en el toast/recibo en vez de solo en la notificación de éxito.
-- Filtro "con incidencias de sincronización" en `/orders` (`sync_issues is not null and reviewed_at is null`) y la
-  acción "marcar revisada" para un gerente (`reviewed_by`/`reviewed_at`, ya existen en `orders` desde F2).
+- `components/offline/sync-center.tsx` (`SyncCenter`), montado en `components/shell/top-bar.tsx` junto al badge de
+  conexión: un botón con el conteo (`useOutboxSync().pendingCount`, ICU plural) visible solo mientras hay alguna
+  entrada en un estado que necesita atención (`pending`/`syncing`/`paused_auth`/`rejected`; `synced`/
+  `synced_with_issues` no cuentan). Se abre en un `Sheet` con la lista completa de la cola
+  (`listOutboxEntries`, `lib/offline/outbox.ts`): número provisional, estado, total esperado, y el último error si
+  lo hay.
+- Acciones por entrada: "Retry" (`retryOutboxEntry`, solo para `rejected`/`paused_auth` — vuelve a `pending` sin
+  arrastrar el backoff) y "Discard" (`discardOutboxEntry`, con un `ConfirmDialog` que exige un motivo de al menos 3
+  caracteres antes de habilitar el botón; el motivo no se guarda en ningún lado — no hay orden con la que asociarlo,
+  ver §4). Ambas disparan el evento `barstock:outbox-changed` (§5) para que el contador se actualice al instante.
+- El ticket impreso muestra "PROVISIONAL — pending sync" mientras la venta no tiene `order_number` real
+  (`ReceiptTicketProps.provisional`, `components/orders/receipt-ticket.tsx`); el toast de checkout offline incluye
+  un botón "Print ticket" que imprime esa vista provisional (`lib/receipt-preview.ts` construye la orden a partir
+  del carrito, sin tocar el servidor).
+- Filtro "con incidencias de sincronización" en `/orders` (`?needs_review=true` → `sync_issues is not null and
+  reviewed_at is null`, solo visible para gerente+) y la acción "Mark reviewed" en el detalle de la orden
+  (`app/(dashboard)/orders/[id]/page.tsx`), que llama a la nueva RPC `mark_order_reviewed` (§3.1) vía
+  `PATCH /api/v1/orders/[id]/review` — necesaria porque los privilegios de tabla de `orders` están revocados y toda
+  escritura pasa por una RPC `SECURITY DEFINER` (regla dura 1).
+
+### 9.1 RPC `mark_order_reviewed`
+
+Migración `20260929000001_order_review.sql`. Gerente+; recibe `p_order_id`, bloquea la fila (`for update`), lanza
+`P0002` si no existe la orden o un error genérico si `sync_issues` es `null` (no tiene sentido revisar una orden sin
+incidencias), y si no, actualiza `reviewed_by`/`reviewed_at`. Es **intencionalmente idempotente** — volver a marcar
+una orden ya revisada solo refresca quién y cuándo, igual que `refund_order` — no un descuido.
 
 ## 10. Decisiones de negocio
 
@@ -176,7 +200,7 @@ llegan a `changes` sin trabajo aparte, ya que son columnas normales de `orders`.
    configurable, `settings.offline_max_hours`, 12 h por defecto (§3).
 4. ~~¿Qué pasa con una venta rechazada al sincronizar (stock insuficiente) si el producto ya se entregó al cliente?~~
    **Decidido (2026-09-22):** no se rechaza; se registra con el faltante anotado para que un gerente la revise (§3,
-   §6; la pantalla de revisión es F4, sin construir).
+   §6, §9 — la pantalla de revisión ya está construida).
 
 ## 11. Pruebas
 
@@ -192,5 +216,12 @@ llegan a `changes` sin trabajo aparte, ya que son columnas normales de `orders`.
 - Disparadores del hook (montaje, evento `online`, un fallo conserva el contador anterior):
   `test/components/use-outbox-sync.test.tsx`.
 - Checkout offline en el POS (cola en vez de red, botón bloqueado si expiró la ventana): `test/components/pos.test.tsx`.
+- Ticket provisional (`buildProvisionalOrder`: línea simple, expansión de promoción, línea sin resolver, cliente/
+  cajero, un solo pago): `lib/receipt-preview.test.ts`; sello "PROVISIONAL" en el ticket: `test/components/receipt-ticket.test.tsx`.
+- Centro de sincronización (oculto sin nada pendiente, contador y lista, retry, discard con motivo obligatorio):
+  `test/components/sync-center.test.tsx`.
+- Revisión de gerente (`mark_order_reviewed`: solo gerente+, error sin `sync_issues`, idempotente, filtro
+  `needs_review`): `test/integration/offline-sales.test.ts`.
 - E2E de ida y vuelta offline → online (`e2e/offline.e2e.ts`): cobrar sin red, comprobar que el stock no se mueve
-  todavía, recuperar la red y comprobar que sincroniza sola (el stock baja).
+  todavía, que el centro de sincronización aparece al instante con la venta en cola, que el ticket impreso dice
+  "PROVISIONAL", recuperar la red y comprobar que sincroniza sola (el stock baja y el botón desaparece).

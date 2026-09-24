@@ -1166,6 +1166,7 @@ export type Database = {
         Args: { p_action: string; p_metadata?: Json }
         Returns: undefined
       }
+      mark_order_reviewed: { Args: { p_order_id: string }; Returns: undefined }
       money_scale: { Args: never; Returns: number }
       open_tab: {
         Args: { p_customer_id: string; p_label: string; p_members: string[] }

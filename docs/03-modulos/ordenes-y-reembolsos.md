@@ -1,6 +1,6 @@
 # Módulo: Órdenes y reembolsos
 
-> Actualizado con las columnas offline (F2) · `app/(dashboard)/orders/page.tsx`, `orders/[id]/page.tsx`, `components/orders/receipt-ticket.tsx` · API `orders`, `orders/[id]`, `orders/[id]/refund` · RPC `refund_order`, `create_sale` · Confianza: **[Verificado]** (`sales.test.ts`, `offline-sales.test.ts`, `rpc.test.ts`, `rls.test.ts`, `receipt.test.ts`, `receipt-ticket.test.tsx`, e2e).
+> Actualizado con las columnas offline (F2) y la revisión de gerente para `sync_issues` (F4) · `app/(dashboard)/orders/page.tsx`, `orders/[id]/page.tsx`, `components/orders/receipt-ticket.tsx` · API `orders`, `orders/[id]`, `orders/[id]/refund`, `orders/[id]/review` · RPC `refund_order`, `create_sale`, `mark_order_reviewed` · Confianza: **[Verificado]** (`sales.test.ts`, `offline-sales.test.ts`, `rpc.test.ts`, `rls.test.ts`, `receipt.test.ts`, `receipt-ticket.test.tsx`, e2e).
 
 ## Quién ve qué
 | Rol | Lista y detalle | Reembolsar |
@@ -11,11 +11,12 @@
 Las líneas (`order_items`) y los pagos (`payments`) heredan la visibilidad de su orden.
 
 ## Lista
-Paginada (25), ordenada por fecha; búsqueda por **número de orden** (`ORD-YYMMDD-NNNNNN`) y filtro por estado (`completed`, `refunded`). Al pulsar una fila se abre el detalle.
+Paginada (25), ordenada por fecha; búsqueda por **número de orden** (`ORD-YYMMDD-NNNNNN`) y filtro por estado (`completed`, `refunded`). Gerente+ ve además un filtro "Needs review" (`?needs_review=true`, ver §Revisión más abajo) y una `Badge` de alerta en las filas que lo necesitan. Al pulsar una fila se abre el detalle.
 
 ## Detalle
 Datos de la orden, quién la creó (nombre o email), cliente (o "Walk-in"), método y monto del pago, líneas con precio, descuento, impuesto y total, y el resumen (subtotal, impuesto, descuento, total).
 Una orden reembolsada muestra fecha y **motivo** del reembolso.
+Una orden con `sync_issues` muestra una tarjeta con el detalle (§Revisión).
 
 ## Ticket de 80 mm (Fase 5, `components/orders/receipt-ticket.tsx`)
 "Print" (`window.print()`) oculta la vista normal y el `AppShell` (`print:hidden`) e imprime en su lugar un ticket
@@ -49,7 +50,23 @@ Verificado, incluido **30 rondas × 8 reembolsos simultáneos** (sin el `FOR UPD
 `orders(order_number, customer_id, status, subtotal, discount, tax, total, created_by, refunded_*)` — `CHECK (total = subtotal − discount + tax)` en filas nuevas; `order_items`; `payments`.
 Estados: `completed` y `refunded` los produce la aplicación; `draft` y `pending` existen en el enum pero **no se usan**. Las órdenes **no se editan ni se borran** (privilegios revocados, incluso al admin).
 
-Desde F2 (offline, ver [pos-checkout](pos-checkout.md) y [offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md)): `client_ref` (mismo valor que la clave de idempotencia del cobro), `occurred_at` (hora del dispositivo; nulo en una venta online), `source` (`online`/`offline`), `sync_issues` (nulo si no hubo incidencias; si no, `occurred_at_clamped`/`price_mismatch`/`stock_shortfall`) y `reviewed_by`/`reviewed_at` (reservados para la revisión de gerente, sin pantalla todavía — F4). El **reporte** (`sales_report`/`dashboard_summary`/`top_selling_products`) agrupa por `coalesce(occurred_at, created_at)`; el listado de `/orders` (`?from&to`, orden por fecha) sigue usando `created_at` (cuándo llegó al servidor), sin cambios.
+Desde F2 (offline, ver [pos-checkout](pos-checkout.md) y [offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md)): `client_ref` (mismo valor que la clave de idempotencia del cobro), `occurred_at` (hora del dispositivo; nulo en una venta online), `source` (`online`/`offline`), `sync_issues` (nulo si no hubo incidencias; si no, `occurred_at_clamped`/`price_mismatch`/`stock_shortfall`) y `reviewed_by`/`reviewed_at` (revisión de gerente, F4, ver abajo). El **reporte** (`sales_report`/`dashboard_summary`/`top_selling_products`) agrupa por `coalesce(occurred_at, created_at)`; el listado de `/orders` (`?from&to`, orden por fecha) sigue usando `created_at` (cuándo llegó al servidor), sin cambios.
+
+## Revisión de incidencias de sincronización (F4)
+
+Una orden sincronizada con `sync_issues` no nulo y sin revisar (`reviewed_at is null`) aparece marcada en la lista y
+en su detalle muestra una tarjeta con lo que pasó: hora recortada a la ventana offline (`occurred_at_clamped`),
+diferencia entre el total mostrado en el POS y el cobrado de verdad (`price_mismatch`) y/o el faltante de stock por
+producto (`stock_shortfall`, con un atajo a Inventario). Botón **Mark reviewed** (gerente+) → `PATCH
+/api/v1/orders/{id}/review` → RPC `mark_order_reviewed`:
+
+1. Bloquea la fila (`FOR UPDATE`); `P0002` si la orden no existe.
+2. Error si `sync_issues` es `null` (no hay nada que revisar).
+3. Marca `reviewed_by`/`reviewed_at`. **Idempotente a propósito**: volver a marcarla solo refresca quién y cuándo,
+   igual que `refund_order` — no hace falta "des-revisar" antes de corregir el stock, por ejemplo.
+
+`orders`/`order_items`/`payments` siguen sin privilegios de tabla (regla dura 1): esta es la razón de una RPC
+dedicada en vez de un `UPDATE` directo desde el servicio, igual que `refund_order`.
 
 ## Límites conocidos
 - **Reembolso total** únicamente; sin parciales por línea, ventana de tiempo ni autorización escalonada (D8).
