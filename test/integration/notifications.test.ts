@@ -312,3 +312,36 @@ describe('dispatchOutbox', () => {
         expect(endpoints).not.toContain(goneEndpoint)
     })
 })
+
+describe('notification preference and push HTTP routes', () => {
+    test('PATCH prefs and POST/DELETE push subscription load validation schemas', async () => {
+        const { PATCH: patchPrefs } = await import('@/app/api/v1/me/notifications/route')
+        const { POST: postPush, DELETE: deletePush } = await import('@/app/api/v1/me/push-subscriptions/route')
+        const { GET: getKey } = await import('@/app/api/v1/me/push-key/route')
+        const { loginAs, dataOf } = await import('../helpers/http')
+
+        const http = await loginAs('cashier')
+        const prefs = await http.patch(patchPrefs, 'me/notifications', {
+            body: { notify_email: false, notify_push: true }
+        })
+        expect(prefs.status).toBe(200)
+        expect(dataOf<{ notify_email: boolean; notify_push: boolean }>(prefs)).toEqual({
+            notify_email: false,
+            notify_push: true
+        })
+
+        const endpoint = `https://push.example.test/${uniq('http')}`
+        const created = await http.post(postPush, 'me/push-subscriptions', {
+            body: { endpoint, p256dh: 'pk', auth: 'ak', user_agent: 'test' }
+        })
+        expect(created.status).toBe(200)
+
+        const removed = await http.delete(deletePush, 'me/push-subscriptions', {
+            body: { endpoint }
+        })
+        expect(removed.status).toBe(200)
+
+        const key = await http.get(getKey, 'me/push-key')
+        expect([200, 503]).toContain(key.status)
+    })
+})

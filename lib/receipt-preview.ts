@@ -130,6 +130,13 @@ export function buildProvisionalOrder(input: ProvisionalOrderInput): OrderDetail
         sync_issues: null,
         reviewed_by: null,
         reviewed_at: null,
+        settled_at: input.occurredAt,
+        due_date: null,
+        reminder_enabled: false,
+        reminder_note: null,
+        written_off_at: null,
+        written_off_by: null,
+        write_off_reason: null,
         customer: input.customerName ? { id: '', name: input.customerName, email: null, phone: null } : null,
         items,
         payments: [

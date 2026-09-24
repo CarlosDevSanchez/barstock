@@ -1,6 +1,6 @@
 # Módulo: Cuentas por cobrar
 
-> Nuevo en la fase E · `app/(dashboard)/receivables/page.tsx` · API `GET /receivables`, `POST /tabs/{id}/defer`, `POST /receivables/{id}/payments`, `PATCH /receivables/{id}`, `POST /receivables/{id}/write-off` · Migraciones `20261005000002_order_status_written_off.sql` + `20261005000003_receivables.sql` · Confianza: **[Por verificar]** (`test/integration/receivables.test.ts`, no ejecutado en esta entrega).
+> Nuevo en la fase E · `app/(dashboard)/receivables/page.tsx` · API `GET /receivables`, `POST /tabs/{id}/defer`, `POST /receivables/{id}/payments`, `PATCH /receivables/{id}`, `POST /receivables/{id}/write-off` · Migraciones `20261005000002_order_status_written_off.sql` + `20261005000003_receivables.sql` · Confianza: **[Verificado]** (`test/integration/receivables.test.ts`, UI `/receivables` y tarjeta del dashboard en local).
 
 Una cuenta abierta con cliente puede **cerrarse como pendiente** (`defer_tab`): el stock ya bajó al añadir ítems, se crea una orden `pending` con el saldo restante y la cuenta (`tab`) queda `closed`. El ingreso **no** cuenta en reportes hasta que el saldo se paga por completo (`pay_receivable` → `completed` + `settled_at`).
 

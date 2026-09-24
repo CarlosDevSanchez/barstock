@@ -284,7 +284,8 @@ describe('refund_order', () => {
             p_order_id: pending.data?.id ?? '',
             p_reason: 'should not work'
         })
-        expect(refusal.error?.message).toBe('Only completed orders can be refunded')
+        expect(refusal.error?.message).toBe('Pending receivables cannot be refunded')
+        expect(refusal.error?.code).toBe('P0001')
     })
 
     test('a reason is mandatory and an unknown order is reported as not found', async () => {

@@ -5,7 +5,7 @@ import { adminClient, createProduct, ensureTestUsers, signedInClient, type Db } 
 import { dataOf, loginAs } from '../helpers/http'
 
 let cashier: Db
-let manager: Db
+let admin: Db
 const service = () => adminClient()
 
 /** Call an RPC that may not yet appear in generated Database types. */
@@ -24,7 +24,7 @@ async function createSupplier(name: string) {
 
 beforeAll(async () => {
     await ensureTestUsers()
-    ;[cashier, manager] = await Promise.all([signedInClient('cashier'), signedInClient('manager')])
+    ;[cashier, admin] = await Promise.all([signedInClient('cashier'), signedInClient('admin')])
 })
 
 describe('purchases', () => {
@@ -90,7 +90,7 @@ describe('purchases', () => {
         const burn = await service().from('inventory').update({ quantity: 2 }).eq('product_id', product.id)
         if (burn.error) throw burn.error
 
-        const voided = await rpc(manager, 'void_purchase', { p_id: purchaseId, p_reason: 'too late' })
+        const voided = await rpc(admin, 'void_purchase', { p_id: purchaseId, p_reason: 'too late' })
         expect(voided.error?.code).toBe('P0001')
 
         const stock = await service().from('inventory').select('quantity').eq('product_id', product.id).single()

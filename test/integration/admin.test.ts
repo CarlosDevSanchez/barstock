@@ -185,7 +185,8 @@ describe('reports', () => {
                     discount,
                     total,
                     customer_id: customer.id,
-                    created_at: at
+                    created_at: at,
+                    settled_at: at
                 })
                 .select('id')
                 .single()
@@ -285,7 +286,7 @@ describe('reports', () => {
 
         await db
             .from('orders')
-            .update({ created_at: `${day}T15:00:00Z` })
+            .update({ created_at: `${day}T15:00:00Z`, settled_at: `${day}T15:00:00Z` })
             .eq('id', orderId!)
 
         const data = dataOf<Report>(await manager.get(report, `reports?from=${day}&to=${day}`))

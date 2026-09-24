@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { afterResponse } from '@/lib/server/after'
 import { ok, route } from '@/lib/server/http'
 import { adjustInventory } from '@/lib/server/services/inventory'
 import { dispatchOutbox } from '@/lib/server/services/notifications'
@@ -11,7 +11,7 @@ export const POST = route({
     body: inventoryAdjustSchema,
     handler: async ({ supabase, params, body }) => {
         const result = await adjustInventory(supabase, params.id, body.delta, body.reason)
-        after(() => {
+        afterResponse(() => {
             void dispatchOutbox()
         })
         return ok(result)

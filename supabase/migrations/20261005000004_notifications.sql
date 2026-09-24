@@ -21,13 +21,14 @@ create table public.notification_outbox (
   payload      jsonb not null default '{}',
   created_at   timestamptz not null default now(),
   processed_at timestamptz,
+  claimed_at   timestamptz,
   attempts     int not null default 0,
   last_error   text
 );
 
 create index notification_outbox_pending_idx
   on public.notification_outbox (id)
-  where processed_at is null;
+  where processed_at is null and claimed_at is null;
 
 alter table public.notification_outbox enable row level security;
 -- No policies: only SECURITY DEFINER RPCs / service_role touch this table.
@@ -279,14 +280,24 @@ language plpgsql security definer
 set search_path = ''
 as $$
 begin
+  -- UPDATE ... RETURNING keeps the claim across the RPC commit (plain SELECT FOR UPDATE
+  -- releases the lock when the function returns, so concurrent callers would see the same rows).
   return query
-  select o.*
-  from public.notification_outbox o
-  where o.processed_at is null
-    and o.attempts < 5
-  order by o.id
-  limit least(coalesce(p_limit, 50), 50)
-  for update of o skip locked;
+  with picked as (
+    select o.id
+    from public.notification_outbox o
+    where o.processed_at is null
+      and o.claimed_at is null
+      and o.attempts < 5
+    order by o.id
+    for update of o skip locked
+    limit least(coalesce(p_limit, 50), 50)
+  )
+  update public.notification_outbox n
+     set claimed_at = now()
+    from picked
+   where n.id = picked.id
+  returning n.*;
 end;
 $$;
 

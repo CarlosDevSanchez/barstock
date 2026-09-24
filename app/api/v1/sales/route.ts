@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { afterResponse } from '@/lib/server/after'
 import { z } from 'zod'
 import { badRequest } from '@/lib/server/errors'
 import { created, route } from '@/lib/server/http'
@@ -22,7 +22,7 @@ export const POST = route({
     body: saleSchema,
     handler: async ({ request, supabase, body }) => {
         const order = await createSale(supabase, body, readIdempotencyKey(request))
-        after(() => {
+        afterResponse(() => {
             void dispatchOutbox()
         })
         return created(order)

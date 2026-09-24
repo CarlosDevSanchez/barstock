@@ -12,12 +12,15 @@ void mock.module('next/navigation', () => ({
 class MockApiError extends Error {}
 void mock.module('@/lib/api/client', () => ({
     ApiError: MockApiError,
+    isStale: () => false,
     apiGet: async () => {
         throw new Error('no session in this test')
     },
     apiList: async () => ({ data: [], page: 1, pageSize: 0, total: 0 }),
     apiPost: async () => undefined,
+    apiPostForm: async () => undefined,
     apiPatch: async () => undefined,
+    apiDelete: async () => undefined,
     errorMessage: (error: unknown, fallback = 'Something went wrong') =>
         error instanceof Error ? error.message : fallback
 }))

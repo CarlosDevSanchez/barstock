@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { afterResponse } from '@/lib/server/after'
 import { ok, route } from '@/lib/server/http'
 import { payTab, payTabSplit } from '@/lib/server/services/tabs'
 import { dispatchOutbox } from '@/lib/server/services/notifications'
@@ -12,7 +12,7 @@ export const POST = route({
     handler: async ({ supabase, params, body }) => {
         const result =
             'payments' in body ? await payTabSplit(supabase, params.id, body) : await payTab(supabase, params.id, body)
-        after(() => {
+        afterResponse(() => {
             void dispatchOutbox()
         })
         return ok(result)

@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { afterResponse } from '@/lib/server/after'
 import { noContent, route } from '@/lib/server/http'
 import { dispatchOutbox } from '@/lib/server/services/notifications'
 import { voidPurchase } from '@/lib/server/services/purchases'
@@ -11,7 +11,7 @@ export const DELETE = route({
     body: purchaseVoidSchema,
     handler: async ({ supabase, params, body }) => {
         await voidPurchase(supabase, params.id, body)
-        after(() => {
+        afterResponse(() => {
             void dispatchOutbox()
         })
         return noContent()

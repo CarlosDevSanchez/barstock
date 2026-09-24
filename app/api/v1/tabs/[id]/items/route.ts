@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { afterResponse } from '@/lib/server/after'
 import { ok, route } from '@/lib/server/http'
 import { addTabItems } from '@/lib/server/services/tabs'
 import { dispatchOutbox } from '@/lib/server/services/notifications'
@@ -11,7 +11,7 @@ export const POST = route({
     body: addTabItemsSchema,
     handler: async ({ supabase, params, body }) => {
         const result = await addTabItems(supabase, params.id, body)
-        after(() => {
+        afterResponse(() => {
             void dispatchOutbox()
         })
         return ok(result)

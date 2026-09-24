@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { afterResponse } from '@/lib/server/after'
 import { z } from 'zod'
 import { ok, route } from '@/lib/server/http'
 import { removeTabItem } from '@/lib/server/services/tabs'
@@ -14,7 +14,7 @@ export const DELETE = route({
     body: removeTabItemSchema,
     handler: async ({ supabase, params, body }) => {
         const result = await removeTabItem(supabase, params.id, params.itemId, body)
-        after(() => {
+        afterResponse(() => {
             void dispatchOutbox()
         })
         return ok(result)

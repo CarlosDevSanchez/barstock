@@ -1,6 +1,6 @@
 # Módulo: Proveedores y compras
 
-> Actualizado tras la fase D (recepción de compras) · `app/(dashboard)/suppliers/`, `inventory` · API `purchases`, `suppliers/[id]/history` · RPC `receive_purchase`, `void_purchase`, `supplier_purchase_history` · Confianza: **[Por verificar]** (migración y pruebas de integración escritas; no ejecutadas en este cambio porque otra sesión usa el Supabase local).
+> Actualizado tras la fase D (recepción de compras) · `app/(dashboard)/suppliers/`, `inventory` · API `purchases`, `suppliers/[id]/history` · RPC `receive_purchase`, `void_purchase`, `supplier_purchase_history` · Confianza: **[Verificado]** (migración, integración `purchases.test.ts`, UI inventario/proveedores en local).
 
 ## Proveedores (hecho)
 - **Quién:** gerente y admin (los cajeros no ven la sección: `proxy.ts` los redirige, la API responde `403` y RLS devuelve 0 filas). Editar es gerente+; **eliminar es solo admin**, con `ConfirmDialog`.

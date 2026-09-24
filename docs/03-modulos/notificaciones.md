@@ -1,8 +1,7 @@
 # Módulo: Notificaciones (alertas de personal)
 
 > Fase F · migración `20261005000004_notifications.sql` · servicio `lib/server/services/notifications.ts` ·
-> Confianza: **[Por verificar]** (pruebas de integración escritas; no ejecutadas en este worktree porque las
-> columnas de cobros de la fase E aún no están en la BD local compartida).
+> Confianza: **[Verificado]** (`test/integration/notifications.test.ts`, campana y preferencias en UI; push/email reales no verificados sin claves).
 
 ## Qué hace
 

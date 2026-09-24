@@ -131,7 +131,11 @@ async function markSuccess(db: UntypedAdmin, id: number): Promise<void> {
 
 async function markFailure(db: UntypedAdmin, row: OutboxRow, message: string): Promise<void> {
     const attempts = row.attempts + 1
-    const patch: Record<string, unknown> = { attempts, last_error: message.slice(0, 500) }
+    const patch: Record<string, unknown> = {
+        attempts,
+        last_error: message.slice(0, 500),
+        claimed_at: null
+    }
     if (attempts >= 5) patch.processed_at = new Date().toISOString()
     const { error } = await db.from('notification_outbox').update(patch).eq('id', row.id)
     if (error) console.error('[notifications] mark failure failed', row.id, error)

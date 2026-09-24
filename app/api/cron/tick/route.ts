@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { afterResponse } from '@/lib/server/after'
 import { createSupabaseAdminClient } from '@/lib/server/supabase-admin'
 import { dispatchOutbox } from '@/lib/server/services/notifications'
 
@@ -45,7 +45,7 @@ export async function GET(request: Request) {
         )
     }
 
-    after(() => {
+    afterResponse(() => {
         void dispatchOutbox()
     })
     return Response.json({ data: { ok: true } }, { headers: noStore })

@@ -1,4 +1,4 @@
-import { after } from 'next/server'
+import { afterResponse } from '@/lib/server/after'
 import { created, route } from '@/lib/server/http'
 import { dispatchOutbox } from '@/lib/server/services/notifications'
 import { receivePurchase } from '@/lib/server/services/purchases'
@@ -9,7 +9,7 @@ export const POST = route({
     body: purchaseReceiveSchema,
     handler: async ({ supabase, body }) => {
         const result = await receivePurchase(supabase, body)
-        after(() => {
+        afterResponse(() => {
             void dispatchOutbox()
         })
         return created(result)

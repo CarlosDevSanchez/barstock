@@ -1,6 +1,6 @@
 # Módulo: Inventario
 
-> Actualizado tras la fase D · `app/(dashboard)/inventory/page.tsx` · API `inventory`, `inventory/[id]/adjust`, `purchases` · RPC `adjust_inventory`, `receive_purchase` · Confianza: **[Por verificar]** para la recepción de compras (pruebas escritas, no ejecutadas aquí); el resto del módulo sigue **[Verificado]** en etapas anteriores.
+> Actualizado tras la fase D · `app/(dashboard)/inventory/page.tsx` · API `inventory`, `inventory/[id]/adjust`, `purchases` · RPC `adjust_inventory`, `receive_purchase` · Confianza: **[Verificado]** (incluye recepción de compras vía `receive_purchase`).
 
 ## Quién puede qué
 | Rol | Ver | Ajustar stock | Recibir compra |

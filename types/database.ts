@@ -578,7 +578,9 @@ export type Database = {
           notes: string | null
           quantity: number
           reference_id: string | null
+          supplier_id: string | null
           transaction_type: string
+          unit_cost: number | null
         }
         Insert: {
           created_at?: string
@@ -588,7 +590,9 @@ export type Database = {
           notes?: string | null
           quantity: number
           reference_id?: string | null
+          supplier_id?: string | null
           transaction_type: string
+          unit_cost?: number | null
         }
         Update: {
           created_at?: string
@@ -598,7 +602,9 @@ export type Database = {
           notes?: string | null
           quantity?: number
           reference_id?: string | null
+          supplier_id?: string | null
           transaction_type?: string
+          unit_cost?: number | null
         }
         Relationships: [
           {
@@ -608,7 +614,47 @@ export type Database = {
             referencedRelation: "inventory"
             referencedColumns: ["id"]
           },
+          {
+            foreignKeyName: "inventory_transactions_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
         ]
+      }
+      notification_outbox: {
+        Row: {
+          attempts: number
+          claimed_at: string | null
+          created_at: string
+          id: number
+          kind: string
+          last_error: string | null
+          payload: Json
+          processed_at: string | null
+        }
+        Insert: {
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          id?: never
+          kind: string
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+        }
+        Update: {
+          attempts?: number
+          claimed_at?: string | null
+          created_at?: string
+          id?: never
+          kind?: string
+          last_error?: string | null
+          payload?: Json
+          processed_at?: string | null
+        }
+        Relationships: []
       }
       order_items: {
         Row: {
@@ -699,6 +745,7 @@ export type Database = {
           created_by: string | null
           customer_id: string | null
           discount: number
+          due_date: string | null
           id: string
           notes: string | null
           occurred_at: string | null
@@ -706,8 +753,11 @@ export type Database = {
           refund_reason: string | null
           refunded_at: string | null
           refunded_by: string | null
+          reminder_enabled: boolean
+          reminder_note: string | null
           reviewed_at: string | null
           reviewed_by: string | null
+          settled_at: string | null
           source: string
           status: Database["public"]["Enums"]["order_status"]
           subtotal: number
@@ -716,6 +766,9 @@ export type Database = {
           tax: number
           total: number
           updated_at: string
+          write_off_reason: string | null
+          written_off_at: string | null
+          written_off_by: string | null
         }
         Insert: {
           business_day_id?: string | null
@@ -725,6 +778,7 @@ export type Database = {
           created_by?: string | null
           customer_id?: string | null
           discount?: number
+          due_date?: string | null
           id?: string
           notes?: string | null
           occurred_at?: string | null
@@ -732,8 +786,11 @@ export type Database = {
           refund_reason?: string | null
           refunded_at?: string | null
           refunded_by?: string | null
+          reminder_enabled?: boolean
+          reminder_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          settled_at?: string | null
           source?: string
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
@@ -742,6 +799,9 @@ export type Database = {
           tax?: number
           total?: number
           updated_at?: string
+          write_off_reason?: string | null
+          written_off_at?: string | null
+          written_off_by?: string | null
         }
         Update: {
           business_day_id?: string | null
@@ -751,6 +811,7 @@ export type Database = {
           created_by?: string | null
           customer_id?: string | null
           discount?: number
+          due_date?: string | null
           id?: string
           notes?: string | null
           occurred_at?: string | null
@@ -758,8 +819,11 @@ export type Database = {
           refund_reason?: string | null
           refunded_at?: string | null
           refunded_by?: string | null
+          reminder_enabled?: boolean
+          reminder_note?: string | null
           reviewed_at?: string | null
           reviewed_by?: string | null
+          settled_at?: string | null
           source?: string
           status?: Database["public"]["Enums"]["order_status"]
           subtotal?: number
@@ -768,6 +832,9 @@ export type Database = {
           tax?: number
           total?: number
           updated_at?: string
+          write_off_reason?: string | null
+          written_off_at?: string | null
+          written_off_by?: string | null
         }
         Relationships: [
           {
@@ -796,6 +863,13 @@ export type Database = {
             columns: ["tab_id"]
             isOneToOne: false
             referencedRelation: "tabs"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_written_off_by_fkey"
+            columns: ["written_off_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -976,6 +1050,8 @@ export type Database = {
           id: string
           is_active: boolean
           locale: string
+          notify_email: boolean
+          notify_push: boolean
           phone: string | null
           role: Database["public"]["Enums"]["user_role"]
           updated_at: string
@@ -988,6 +1064,8 @@ export type Database = {
           id: string
           is_active?: boolean
           locale?: string
+          notify_email?: boolean
+          notify_push?: boolean
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -1000,6 +1078,8 @@ export type Database = {
           id?: string
           is_active?: boolean
           locale?: string
+          notify_email?: boolean
+          notify_push?: boolean
           phone?: string | null
           role?: Database["public"]["Enums"]["user_role"]
           updated_at?: string
@@ -1132,8 +1212,11 @@ export type Database = {
       }
       purchase_orders: {
         Row: {
+          business_day_id: string | null
+          cash_session_id: string | null
           created_at: string
           id: string
+          invoice_number: string | null
           notes: string | null
           ordered_at: string | null
           ordered_by: string | null
@@ -1146,8 +1229,11 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          business_day_id?: string | null
+          cash_session_id?: string | null
           created_at?: string
           id?: string
+          invoice_number?: string | null
           notes?: string | null
           ordered_at?: string | null
           ordered_by?: string | null
@@ -1160,8 +1246,11 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          business_day_id?: string | null
+          cash_session_id?: string | null
           created_at?: string
           id?: string
+          invoice_number?: string | null
           notes?: string | null
           ordered_at?: string | null
           ordered_by?: string | null
@@ -1175,10 +1264,62 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "purchase_orders_business_day_id_fkey"
+            columns: ["business_day_id"]
+            isOneToOne: false
+            referencedRelation: "business_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "purchase_orders_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "purchase_orders_supplier_id_fkey"
             columns: ["supplier_id"]
             isOneToOne: false
             referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      push_subscriptions: {
+        Row: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        Insert: {
+          auth: string
+          created_at?: string
+          endpoint: string
+          id?: string
+          p256dh: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Update: {
+          auth?: string
+          created_at?: string
+          endpoint?: string
+          id?: string
+          p256dh?: string
+          user_agent?: string | null
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "push_subscriptions_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
             referencedColumns: ["id"]
           },
         ]
@@ -1206,6 +1347,32 @@ export type Database = {
           value?: Json
         }
         Relationships: []
+      }
+      stock_alert_state: {
+        Row: {
+          inventory_id: string
+          is_low: boolean
+          last_notified_at: string | null
+        }
+        Insert: {
+          inventory_id: string
+          is_low?: boolean
+          last_notified_at?: string | null
+        }
+        Update: {
+          inventory_id?: string
+          is_low?: boolean
+          last_notified_at?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "stock_alert_state_inventory_id_fkey"
+            columns: ["inventory_id"]
+            isOneToOne: true
+            referencedRelation: "inventory"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       suppliers: {
         Row: {
@@ -1492,7 +1659,33 @@ export type Database = {
     }
     Functions: {
       _auto_close_stale_business_days: { Args: never; Returns: undefined }
+      _claim_outbox: {
+        Args: { p_limit: number }
+        Returns: {
+          attempts: number
+          claimed_at: string | null
+          created_at: string
+          id: number
+          kind: string
+          last_error: string | null
+          payload: Json
+          processed_at: string | null
+        }[]
+        SetofOptions: {
+          from: "*"
+          to: "notification_outbox"
+          isOneToOne: false
+          isSetofReturn: true
+        }
+      }
       _close_tab: { Args: { p_tab_id: string }; Returns: string }
+      _create_order_from_tab: {
+        Args: {
+          p_status: Database["public"]["Enums"]["order_status"]
+          p_tab_id: string
+        }
+        Returns: string
+      }
       _current_assignment: {
         Args: { p_at: string; p_user: string }
         Returns: {
@@ -1500,6 +1693,7 @@ export type Database = {
           cash_session_id: string
         }[]
       }
+      _enqueue_due_receivables: { Args: never; Returns: undefined }
       _session_cash: { Args: { p_session_id: string }; Returns: Json }
       _tab_totals: {
         Args: { p_tab_id: string }
@@ -1578,9 +1772,22 @@ export type Database = {
         Returns: Database["public"]["Enums"]["user_role"]
       }
       dashboard_summary: { Args: { p_tz?: string }; Returns: Json }
+      defer_tab: {
+        Args: {
+          p_due_date: string
+          p_note: string
+          p_reminder: boolean
+          p_tab_id: string
+        }
+        Returns: string
+      }
       has_min_role: {
         Args: { p_minimum: Database["public"]["Enums"]["user_role"] }
         Returns: boolean
+      }
+      list_receivables: {
+        Args: { p_customer_id: string; p_status: string }
+        Returns: Json
       }
       log_auth_event: {
         Args: { p_action: string; p_metadata?: Json }
@@ -1612,6 +1819,24 @@ export type Database = {
         Args: { p_customer_id: string; p_label: string; p_members: string[] }
         Returns: string
       }
+      pay_receivable: {
+        Args: {
+          p_idempotency_key?: string
+          p_order_id: string
+          p_payments: Json
+        }
+        Returns: Json
+      }
+      receive_purchase: {
+        Args: {
+          p_cash_session_id: string
+          p_invoice: string
+          p_items: Json
+          p_notes: string
+          p_supplier_id: string
+        }
+        Returns: string
+      }
       refresh_business_days: { Args: never; Returns: undefined }
       refresh_customer_totals: {
         Args: { p_customer_id: string }
@@ -1628,6 +1853,14 @@ export type Database = {
       set_low_stock_threshold: {
         Args: { p_inventory_id: string; p_threshold: number }
         Returns: undefined
+      }
+      set_notification_prefs: {
+        Args: { p_email: boolean; p_push: boolean }
+        Returns: undefined
+      }
+      supplier_purchase_history: {
+        Args: { p_from: string; p_supplier_id: string; p_to: string }
+        Returns: Json
       }
       tab_add_items: {
         Args: { p_items: Json; p_tab_id: string }
@@ -1685,7 +1918,20 @@ export type Database = {
           stock: number
         }[]
       }
+      update_receivable: {
+        Args: {
+          p_due_date: string
+          p_note: string
+          p_order_id: string
+          p_reminder: boolean
+        }
+        Returns: undefined
+      }
       void_expense: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
+      }
+      void_purchase: {
         Args: { p_id: string; p_reason: string }
         Returns: undefined
       }
@@ -1693,9 +1939,18 @@ export type Database = {
         Args: { p_reason: string; p_tab_id: string }
         Returns: undefined
       }
+      write_off_receivable: {
+        Args: { p_order_id: string; p_reason: string }
+        Returns: undefined
+      }
     }
     Enums: {
-      order_status: "draft" | "pending" | "completed" | "refunded"
+      order_status:
+        | "draft"
+        | "pending"
+        | "completed"
+        | "refunded"
+        | "written_off"
       payment_method: "cash" | "card" | "ewallet"
       po_status: "draft" | "pending" | "received" | "cancelled"
       tab_status: "open" | "closed" | "voided"
@@ -1830,7 +2085,13 @@ export const Constants = {
   },
   public: {
     Enums: {
-      order_status: ["draft", "pending", "completed", "refunded"],
+      order_status: [
+        "draft",
+        "pending",
+        "completed",
+        "refunded",
+        "written_off",
+      ],
       payment_method: ["cash", "card", "ewallet"],
       po_status: ["draft", "pending", "received", "cancelled"],
       tab_status: ["open", "closed", "voided"],
