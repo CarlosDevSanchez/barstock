@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useMemo, useState } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, Gift, PackagePlus, Pencil, TrendingUp, Warehouse } from 'lucide-react'
+import { AlertTriangle, Gift, PackagePlus, Pencil, ShoppingCart, TrendingUp, Warehouse } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,8 @@ import {
     DialogTitle
 } from '@/components/ui/dialog'
 import { Form } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
@@ -31,9 +33,13 @@ import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { errorMessage } from '@/lib/api/client'
+import { cashApi } from '@/lib/api/cash'
 import { inventoryApi, type InventoryListItem } from '@/lib/api/inventory'
 import { promotionsApi } from '@/lib/api/promotions'
+import { purchasesApi } from '@/lib/api/purchases'
+import { suppliersApi } from '@/lib/api/suppliers'
 import { roleAtLeast } from '@/lib/auth/roles'
+import { purchaseReceiveSchema } from '@/lib/validation/purchases'
 import { inventoryAdjustSchema, inventoryThresholdSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
@@ -50,16 +56,35 @@ interface AdjustDialogProps {
     onSaved: () => void
 }
 
-// Stock never changes through a plain UPDATE: the adjustment goes through a database function that records who, why and how
-// much, and refuses to make the stock negative.
 function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     const t = useTranslations('inventory')
     const tc = useTranslations('common')
+    const money = useMoney()
+    const [mode, setMode] = useState<'adjust' | 'purchase'>('adjust')
+    const [supplierId, setSupplierId] = useState('')
+    const [unitCost, setUnitCost] = useState(String(item.product.cost_price))
+    const [invoice, setInvoice] = useState('')
+    const [fromTill, setFromTill] = useState(false)
+    const [sessionId, setSessionId] = useState('')
+    const [pendingPurchase, setPendingPurchase] = useState(false)
+
     const form = useForm<AdjustInput, unknown, AdjustOutput>({
         resolver: zodResolver(inventoryAdjustSchema),
         defaultValues: { delta: undefined, reason: '' }
     })
     const submitting = form.formState.isSubmitting
+    const delta = useWatch({ control: form.control, name: 'delta' })
+    const deltaNum = typeof delta === 'number' ? delta : Number(delta)
+    const showPurchaseOption = Number.isFinite(deltaNum) && deltaNum > 0
+
+    const suppliers = useApiQuery(signal => suppliersApi.list({ pageSize: 100 }, signal), 'purchase-suppliers')
+    const desk = useApiQuery(signal => cashApi.current(signal), 'purchase-cash-desk')
+    const sessions = desk.data?.sessions ?? []
+    const selectedSupplier = supplierId || suppliers.data?.data[0]?.id || ''
+    const selectedSession = sessionId || sessions[0]?.id || ''
+    const parsedCost = Number(unitCost)
+    const costMismatch =
+        Number.isFinite(parsedCost) && Math.round(parsedCost * 100) !== Math.round(item.product.cost_price * 100)
 
     const onSubmit = form.handleSubmit(async values => {
         try {
@@ -71,17 +96,41 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
         }
     })
 
+    const onPurchase = async () => {
+        const parsed = purchaseReceiveSchema.safeParse({
+            supplier_id: selectedSupplier,
+            items: [{ product_id: item.product.id, quantity: deltaNum, unit_cost: unitCost }],
+            invoice_number: invoice || null,
+            notes: null,
+            cash_session_id: fromTill ? selectedSession || null : null
+        })
+        if (!parsed.success) {
+            toast.error(errorMessage(parsed.error, t('purchaseFailed')))
+            return
+        }
+        setPendingPurchase(true)
+        try {
+            await purchasesApi.receive(parsed.data)
+            toast.success(t('purchaseSaved'))
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('purchaseFailed')))
+        } finally {
+            setPendingPurchase(false)
+        }
+    }
+
     return (
         <Dialog open onOpenChange={open => !open && onClose()}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>{t('adjustTitle')}</DialogTitle>
+                    <DialogTitle>{mode === 'purchase' ? t('supplierEntry') : t('adjustTitle')}</DialogTitle>
                     <DialogDescription>
                         {t('adjustDescription', { name: item.product.name, quantity: item.quantity })}
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={onSubmit} noValidate>
+                    <form onSubmit={mode === 'purchase' ? event => event.preventDefault() : onSubmit} noValidate>
                         <div className="space-y-4 py-4">
                             <TextField
                                 name="delta"
@@ -90,15 +139,124 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
                                 step="1"
                                 placeholder={t('changePlaceholder')}
                             />
-                            <TextField name="reason" label={t('reasonLabel')} placeholder={t('reasonPlaceholder')} />
+                            {showPurchaseOption && (
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={mode === 'adjust' ? 'default' : 'outline'}
+                                        onClick={() => setMode('adjust')}
+                                    >
+                                        {t('asAdjustment')}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={mode === 'purchase' ? 'default' : 'outline'}
+                                        onClick={() => setMode('purchase')}
+                                    >
+                                        {t('asPurchase')}
+                                    </Button>
+                                </div>
+                            )}
+                            {mode === 'purchase' && showPurchaseOption ? (
+                                <>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="adj-supplier">{t('supplier')}</Label>
+                                        <select
+                                            id="adj-supplier"
+                                            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                                            value={selectedSupplier}
+                                            onChange={event => setSupplierId(event.target.value)}
+                                        >
+                                            {(suppliers.data?.data ?? []).map(supplier => (
+                                                <option key={supplier.id} value={supplier.id}>
+                                                    {supplier.name}
+                                                </option>
+                                            ))}
+                                        </select>
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="adj-cost">{t('unitCost')}</Label>
+                                        <Input
+                                            id="adj-cost"
+                                            inputMode="decimal"
+                                            value={unitCost}
+                                            onChange={event => setUnitCost(event.target.value)}
+                                        />
+                                    </div>
+                                    {costMismatch && (
+                                        <p className="text-sm text-muted-foreground">
+                                            {t('costMismatch', {
+                                                purchase: money(parsedCost),
+                                                catalog: money(item.product.cost_price)
+                                            })}
+                                        </p>
+                                    )}
+                                    <div className="space-y-1">
+                                        <Label htmlFor="adj-invoice">{t('invoice')}</Label>
+                                        <Input
+                                            id="adj-invoice"
+                                            value={invoice}
+                                            placeholder={t('invoicePlaceholder')}
+                                            onChange={event => setInvoice(event.target.value)}
+                                        />
+                                    </div>
+                                    <label className="flex items-center gap-2 text-sm">
+                                        <input
+                                            type="checkbox"
+                                            checked={fromTill}
+                                            onChange={event => setFromTill(event.target.checked)}
+                                        />
+                                        {t('paidFromTill')}
+                                    </label>
+                                    {fromTill ? (
+                                        sessions.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">{t('noOpenTill')}</p>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                <Label htmlFor="adj-till">{t('till')}</Label>
+                                                <select
+                                                    id="adj-till"
+                                                    className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                                                    value={selectedSession}
+                                                    onChange={event => setSessionId(event.target.value)}
+                                                >
+                                                    {sessions.map(session => (
+                                                        <option key={session.id} value={session.id}>
+                                                            {session.register_name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )
+                                    ) : null}
+                                </>
+                            ) : (
+                                <TextField
+                                    name="reason"
+                                    label={t('reasonLabel')}
+                                    placeholder={t('reasonPlaceholder')}
+                                />
+                            )}
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={onClose}>
                                 {tc('cancel')}
                             </Button>
-                            <OfflineDisabledButton type="submit" disabled={submitting}>
-                                {submitting ? tc('saving') : t('apply')}
-                            </OfflineDisabledButton>
+                            {mode === 'purchase' && showPurchaseOption ? (
+                                <OfflineDisabledButton
+                                    type="button"
+                                    disabled={pendingPurchase || !selectedSupplier}
+                                    onClick={onPurchase}
+                                >
+                                    {pendingPurchase ? tc('saving') : t('savePurchase')}
+                                </OfflineDisabledButton>
+                            ) : (
+                                <OfflineDisabledButton type="submit" disabled={submitting}>
+                                    {submitting ? tc('saving') : t('apply')}
+                                </OfflineDisabledButton>
+                            )}
                         </DialogFooter>
                     </form>
                 </Form>
@@ -157,6 +315,257 @@ function ThresholdDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     )
 }
 
+interface PurchaseLine {
+    product_id: string
+    quantity: string
+    unit_cost: string
+}
+
+function RegisterPurchaseDialog({
+    products,
+    onClose,
+    onSaved
+}: {
+    products: InventoryListItem[]
+    onClose: () => void
+    onSaved: () => void
+}) {
+    const t = useTranslations('inventory')
+    const tc = useTranslations('common')
+    const money = useMoney()
+    const [supplierId, setSupplierId] = useState('')
+    const [invoice, setInvoice] = useState('')
+    const [notes, setNotes] = useState('')
+    const [fromTill, setFromTill] = useState(false)
+    const [sessionId, setSessionId] = useState('')
+    const [pending, setPending] = useState(false)
+    const [lines, setLines] = useState<PurchaseLine[]>([
+        {
+            product_id: products[0]?.product.id ?? '',
+            quantity: '1',
+            unit_cost: String(products[0]?.product.cost_price ?? 0)
+        }
+    ])
+
+    const suppliers = useApiQuery(signal => suppliersApi.list({ pageSize: 100 }, signal), 'multi-purchase-suppliers')
+    const desk = useApiQuery(signal => cashApi.current(signal), 'multi-purchase-cash-desk')
+    const sessions = desk.data?.sessions ?? []
+    const selectedSupplier = supplierId || suppliers.data?.data[0]?.id || ''
+    const selectedSession = sessionId || sessions[0]?.id || ''
+    const productById = useMemo(() => new Map(products.map(item => [item.product.id, item.product])), [products])
+
+    const onSave = async () => {
+        const parsed = purchaseReceiveSchema.safeParse({
+            supplier_id: selectedSupplier,
+            items: lines.map(line => ({
+                product_id: line.product_id,
+                quantity: line.quantity,
+                unit_cost: line.unit_cost
+            })),
+            invoice_number: invoice || null,
+            notes: notes || null,
+            cash_session_id: fromTill ? selectedSession || null : null
+        })
+        if (!parsed.success) {
+            toast.error(errorMessage(parsed.error, t('purchaseFailed')))
+            return
+        }
+        setPending(true)
+        try {
+            await purchasesApi.receive(parsed.data)
+            toast.success(t('purchaseSaved'))
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('purchaseFailed')))
+        } finally {
+            setPending(false)
+        }
+    }
+
+    return (
+        <Dialog open onOpenChange={open => !open && onClose()}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>{t('registerPurchase')}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                    <div className="space-y-1">
+                        <Label htmlFor="po-supplier">{t('supplier')}</Label>
+                        <select
+                            id="po-supplier"
+                            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                            value={selectedSupplier}
+                            onChange={event => setSupplierId(event.target.value)}
+                        >
+                            {(suppliers.data?.data ?? []).map(supplier => (
+                                <option key={supplier.id} value={supplier.id}>
+                                    {supplier.name}
+                                </option>
+                            ))}
+                        </select>
+                    </div>
+                    {lines.map((line, index) => {
+                        const catalog = productById.get(line.product_id)
+                        const cost = Number(line.unit_cost)
+                        const mismatch =
+                            catalog &&
+                            Number.isFinite(cost) &&
+                            Math.round(cost * 100) !== Math.round(catalog.cost_price * 100)
+                        return (
+                            <div key={index} className="space-y-2 rounded-md border p-3">
+                                <div className="space-y-1">
+                                    <Label>{t('product')}</Label>
+                                    <select
+                                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                                        value={line.product_id}
+                                        onChange={event => {
+                                            const id = event.target.value
+                                            const next = productById.get(id)
+                                            setLines(current =>
+                                                current.map((row, i) =>
+                                                    i === index
+                                                        ? {
+                                                              product_id: id,
+                                                              quantity: row.quantity,
+                                                              unit_cost: String(next?.cost_price ?? row.unit_cost)
+                                                          }
+                                                        : row
+                                                )
+                                            )
+                                        }}
+                                    >
+                                        {products.map(item => (
+                                            <option key={item.product.id} value={item.product.id}>
+                                                {item.product.name}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <Label>{t('quantity')}</Label>
+                                        <Input
+                                            inputMode="numeric"
+                                            value={line.quantity}
+                                            onChange={event =>
+                                                setLines(current =>
+                                                    current.map((row, i) =>
+                                                        i === index ? { ...row, quantity: event.target.value } : row
+                                                    )
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>{t('unitCost')}</Label>
+                                        <Input
+                                            inputMode="decimal"
+                                            value={line.unit_cost}
+                                            onChange={event =>
+                                                setLines(current =>
+                                                    current.map((row, i) =>
+                                                        i === index ? { ...row, unit_cost: event.target.value } : row
+                                                    )
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                                {mismatch && catalog && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {t('costMismatch', {
+                                            purchase: money(cost),
+                                            catalog: money(catalog.cost_price)
+                                        })}
+                                    </p>
+                                )}
+                                {lines.length > 1 && (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setLines(current => current.filter((_, i) => i !== index))}
+                                    >
+                                        {t('removeLine')}
+                                    </Button>
+                                )}
+                            </div>
+                        )
+                    })}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={lines.length >= 100 || products.length === 0}
+                        onClick={() =>
+                            setLines(current => [
+                                ...current,
+                                {
+                                    product_id: products[0]?.product.id ?? '',
+                                    quantity: '1',
+                                    unit_cost: String(products[0]?.product.cost_price ?? 0)
+                                }
+                            ])
+                        }
+                    >
+                        {t('addLine')}
+                    </Button>
+                    <div className="space-y-1">
+                        <Label htmlFor="po-invoice">{t('invoice')}</Label>
+                        <Input
+                            id="po-invoice"
+                            value={invoice}
+                            placeholder={t('invoicePlaceholder')}
+                            onChange={event => setInvoice(event.target.value)}
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="po-notes">{t('notes')}</Label>
+                        <Input id="po-notes" value={notes} onChange={event => setNotes(event.target.value)} />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                        <input
+                            type="checkbox"
+                            checked={fromTill}
+                            onChange={event => setFromTill(event.target.checked)}
+                        />
+                        {t('paidFromTill')}
+                    </label>
+                    {fromTill ? (
+                        sessions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">{t('noOpenTill')}</p>
+                        ) : (
+                            <div className="space-y-1">
+                                <Label htmlFor="po-till">{t('till')}</Label>
+                                <select
+                                    id="po-till"
+                                    className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                                    value={selectedSession}
+                                    onChange={event => setSessionId(event.target.value)}
+                                >
+                                    {sessions.map(session => (
+                                        <option key={session.id} value={session.id}>
+                                            {session.register_name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )
+                    ) : null}
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={onClose}>
+                        {tc('cancel')}
+                    </Button>
+                    <OfflineDisabledButton type="button" disabled={pending || !selectedSupplier} onClick={onSave}>
+                        {pending ? tc('saving') : t('savePurchase')}
+                    </OfflineDisabledButton>
+                </DialogFooter>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 export default function InventoryPage() {
     const t = useTranslations('inventory')
     const tc = useTranslations('common')
@@ -169,12 +578,14 @@ export default function InventoryPage() {
     const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const [adjusting, setAdjusting] = useState<InventoryListItem | null>(null)
     const [thresholdItem, setThresholdItem] = useState<InventoryListItem | null>(null)
+    const [buying, setBuying] = useState(false)
     const search = useDebouncedValue(searchQuery)
 
     const inventory = useApiQuery(
         signal => inventoryApi.list({ page, pageSize, q: search, low: lowOnly }, signal),
         JSON.stringify({ page, pageSize, search, lowOnly })
     )
+    const catalog = useApiQuery(signal => inventoryApi.list({ pageSize: 100 }, signal), 'purchase-catalog')
     const summary = inventory.data?.summary
     const sellablePackages = useApiQuery(
         signal => promotionsApi.list({ pageSize: 100, active: true }, signal),
@@ -183,7 +594,19 @@ export default function InventoryPage() {
 
     return (
         <div className="space-y-6">
-            <PageHeader title={t('title')} description={t('subtitle')} />
+            <PageHeader
+                title={t('title')}
+                description={t('subtitle')}
+                primaryAction={
+                    canAdjust
+                        ? {
+                              label: t('registerPurchase'),
+                              icon: ShoppingCart,
+                              onClick: () => setBuying(true)
+                          }
+                        : undefined
+                }
+            />
 
             <div className="grid grid-cols-1 gap-3 md:gap-4">
                 <Card className="gap-2 rounded-2xl py-4 md:gap-6 md:py-6">
@@ -468,6 +891,7 @@ export default function InventoryPage() {
                     onSaved={() => {
                         setAdjusting(null)
                         inventory.reload()
+                        catalog.reload()
                     }}
                 />
             )}
@@ -479,6 +903,17 @@ export default function InventoryPage() {
                     onSaved={() => {
                         setThresholdItem(null)
                         inventory.reload()
+                    }}
+                />
+            )}
+            {buying && (
+                <RegisterPurchaseDialog
+                    products={catalog.data?.data ?? inventory.data?.data ?? []}
+                    onClose={() => setBuying(false)}
+                    onSaved={() => {
+                        setBuying(false)
+                        inventory.reload()
+                        catalog.reload()
                     }}
                 />
             )}

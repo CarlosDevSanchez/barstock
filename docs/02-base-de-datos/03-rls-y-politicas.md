@@ -30,7 +30,8 @@
 | `inventory` | SELECT | SELECT | SELECT (escritura solo vía RPC) |
 | `inventory_transactions` | — | SELECT | SELECT (las escribe el RPC) |
 | `customers` | SELECT, INSERT, UPDATE (solo `name, email, phone, address, is_active, deleted_at`; `deleted_at` solo admin, trigger `guard_soft_delete`) | ídem | + DELETE; borrado lógico (`deleted_at`) |
-| `suppliers`, `purchase_orders`, `purchase_order_items` | — | SELECT, INSERT, UPDATE (en `suppliers`, `deleted_at` solo admin: trigger `guard_soft_delete`) | + DELETE; borrado lógico de `suppliers` (`deleted_at`) |
+| `suppliers` | — | SELECT, INSERT, UPDATE (`deleted_at` solo admin: `guard_soft_delete`) | + DELETE; borrado lógico |
+| `purchase_orders`, `purchase_order_items` | — | SELECT (gerente+); escrituras **solo** vía RPC (`receive_purchase` / `void_purchase`); INSERT/UPDATE/DELETE revocados a `authenticated` **[Por verificar]** | — |
 | `orders` | SELECT **propias** (`created_by`) | SELECT todas | SELECT todas |
 | `order_items`, `payments` | SELECT de sus órdenes (heredan la visibilidad de `orders`) | todas | todas |
 | `expenses` | — | SELECT (escritura solo vía `create_expense`) | SELECT; anulación vía `void_expense` |

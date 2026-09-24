@@ -26,7 +26,7 @@ erDiagram
 ```
 
 `settings` no tiene relaciones (clave/valor). `inventory_transactions.reference_id` apunta lógicamente a
-`orders` o `purchase_orders` **sin FK**.
+`orders` o `purchase_orders` **sin FK**. `purchase_orders` también puede apuntar a `business_days` y `cash_sessions`; `inventory_transactions.supplier_id` → `suppliers` en compras. **[Por verificar]**.
 
 ## Reglas de borrado (efectos reales)
 

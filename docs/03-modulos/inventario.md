@@ -1,12 +1,12 @@
 # Módulo: Inventario
 
-> Actualizado tras la etapa 1 · `app/(dashboard)/inventory/page.tsx` · API `inventory`, `inventory/[id]/adjust` · Servicio `services/inventory.ts` · RPC `adjust_inventory` · Confianza: **[Verificado]** (`sales.test.ts`, `rpc.test.ts`, `rls.test.ts`, e2e).
+> Actualizado tras la fase D · `app/(dashboard)/inventory/page.tsx` · API `inventory`, `inventory/[id]/adjust`, `purchases` · RPC `adjust_inventory`, `receive_purchase` · Confianza: **[Por verificar]** para la recepción de compras (pruebas escritas, no ejecutadas aquí); el resto del módulo sigue **[Verificado]** en etapas anteriores.
 
 ## Quién puede qué
-| Rol | Ver | Ajustar stock |
-|---|---|---|
-| cajero | ✅ | ❌ |
-| gerente, admin | ✅ | ✅ (`adjust_inventory`, `set_low_stock_threshold`) |
+| Rol | Ver | Ajustar stock | Recibir compra |
+|---|---|---|---|
+| cajero | ✅ | ❌ | ❌ |
+| gerente, admin | ✅ | ✅ (`adjust_inventory`, `set_low_stock_threshold`) | ✅ (`receive_purchase`) |
 
 ## Cómo cambia el stock (la única vía)
 El stock **no se puede escribir directamente** (privilegios `INSERT/UPDATE/DELETE` revocados sobre `inventory` e `inventory_transactions`, incluso al admin). Cambia solo por:
@@ -16,25 +16,29 @@ El stock **no se puede escribir directamente** (privilegios `INSERT/UPDATE/DELET
 | Venta (`create_sale`) | `sale`, cantidad negativa, `reference_id` = orden |
 | Reembolso (`refund_order`) | `return`, positiva, `reference_id` = orden |
 | Ajuste manual (`adjust_inventory`) | `adjustment`, con el **motivo** en `notes` |
-| Compra a proveedor | `purchase` (**sin implementar**, etapa 2) |
+| Compra a proveedor (`receive_purchase`) | `purchase`, positiva, `reference_id` = OC, `supplier_id`, `unit_cost` |
+| Anulación de compra (`void_purchase`) | `purchase`, negativa, mismo proveedor/costo, motivo en `notes` |
 
-Reglas: nunca negativo (`CHECK` + `UPDATE … WHERE quantity + delta >= 0`); un ajuste exige motivo (≥ 3 caracteres) y cambio distinto de 0; concurrente seguro.
+Reglas: nunca negativo (`CHECK` + `UPDATE … WHERE quantity + delta >= 0`); un ajuste exige motivo (≥ 3 caracteres) y cambio distinto de 0; concurrente seguro. **La recepción no actualiza `products.cost_price`.**
 
 ## Pantalla
 - Tarjetas (calculadas por el servidor sobre **todo** el conjunto filtrado, no solo la página): **unidades totales**, **stock bajo** y **valor del stock a costo**.
-- Sección **Paquetes vendibles** (solo lectura): promociones activas con `available = floor(min(stock_i / qty_i))` y receta+stock por componente. Tabla con **altura máxima + scroll** (no alarga toda la página si hay muchas promos). No se ajusta stock de paquetes aquí — se ajusta el de cada producto. Ver [Promociones](promociones.md).
-- Lista paginada con búsqueda por nombre/SKU y filtro "Low stock only". **Stock bajo = `quantity <= low_stock_threshold`** de **cada fila** (antes: `< 10` fijo y topado en 5).
-- Gerente/admin: botón de ajuste → diálogo con **cambio (unidades, + o −)** y **motivo**; el `toast` confirma la nueva cantidad o explica el rechazo ("would make the stock negative").
-- Gerente/admin: lápiz junto al umbral → `PATCH /api/v1/inventory/{id}` (`set_low_stock_threshold`, entero ≥ 0). El alta de producto puede enviar un umbral inicial; si no, queda el de Ajustes. Ajustes dice «Valor por defecto para productos nuevos».
+- Sección **Paquetes vendibles** (solo lectura): promociones activas con `available = floor(min(stock_i / qty_i))` y receta+stock por componente.
+- Lista paginada con búsqueda por nombre/SKU y filtro "Low stock only". **Stock bajo = `quantity <= low_stock_threshold`**.
+- Gerente/admin: botón de ajuste → diálogo con **cambio** y **motivo**; si el delta es **positivo**, opción **Entrada de proveedor** (proveedor, costo unitario, factura, caja opcional) que llama a `receive_purchase` con una línea.
+- Gerente/admin: **Registrar compra** (varias líneas) en la cabecera.
+- Si el costo de compra ≠ `cost_price` del catálogo, aviso informativo (sin escribir el costo).
+- Gerente/admin: lápiz junto al umbral → `PATCH /api/v1/inventory/{id}`.
 
 ## Datos
 `inventory(product_id, variant_id, quantity, low_stock_threshold, location, last_restocked_at)`. Índice único parcial para (`product_id`, sin variante). Cada producto nuevo recibe su fila (cantidad 0, umbral = `settings.low_stock_threshold` o 10).
-`last_restocked_at` se actualiza en los ajustes positivos.
+`last_restocked_at` se actualiza en los ajustes positivos y al recibir compras.
+`inventory_transactions` admite `supplier_id` y `unit_cost` en movimientos de compra.
 
 ## Límites conocidos
 - `location` no tiene UI. Las variantes tienen fila de inventario pero no se venden ni se crean desde la UI.
-- Sin historial de movimientos en pantalla (la tabla existe y la lee gerente+ por RLS, sin endpoint).
+- Sin historial de movimientos en pantalla (la tabla existe; el historial de compras vive en `/suppliers/[id]`).
 - El resumen y el filtro de stock bajo operan sobre hasta 1000 filas (tope de PostgREST).
-- Sin conteos cíclicos ni recepción de compras.
+- Sin conteos cíclicos.
 
-Relacionados: [POS](pos-checkout.md), [Órdenes](ordenes-y-reembolsos.md), [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md), [testing](../05-guias/testing.md) (concurrencia).
+Relacionados: [Proveedores y compras](proveedores-y-compras.md), [POS](pos-checkout.md), [Órdenes](ordenes-y-reembolsos.md), [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md).

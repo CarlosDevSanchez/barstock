@@ -90,4 +90,8 @@ Registra un evento de sesión (`login`, `logout`, `invite`, `password_reset`) en
 ## Ausencias conocidas
 
 - No hay trigger que cree inventario para **variantes** (las variantes no se venden desde el POS todavía, D10).
-- `purchase_orders` no repone stock al recibirse (sin UI, etapa 2).
+- `receive_purchase` / `void_purchase` / `supplier_purchase_history` (migración `20261005000001_purchases.sql`): reciben o anulan una compra en una transacción; `_session_cash` resta el total de OC `received` de esa caja (`purchases`). **No** tocan `products.cost_price`. Auditoría `audit_row_change` en `purchase_orders` y `purchase_order_items`. **[Por verificar]**.
+
+
+### Secuencias (compras)
+`purchase_order_number_seq` alimenta `po_number` (`PO-YYMMDD-######`). **[Por verificar]**.
