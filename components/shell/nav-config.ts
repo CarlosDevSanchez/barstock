@@ -13,7 +13,8 @@ import {
     UserCog,
     ScrollText,
     Banknote,
-    Receipt
+    Receipt,
+    HandCoins
 } from 'lucide-react'
 import type { UserRole } from '@/lib/auth/roles'
 
@@ -26,6 +27,7 @@ export type NavKey =
     | 'promotions'
     | 'inventory'
     | 'orders'
+    | 'receivables'
     | 'customers'
     | 'suppliers'
     | 'reports'
@@ -54,6 +56,7 @@ export const navGroups: NavGroup[] = [
             { icon: ShoppingCart, key: 'pos', href: '/pos', minimumRole: 'cashier' },
             { icon: Banknote, key: 'cash', href: '/cash', minimumRole: 'cashier' },
             { icon: ShoppingBag, key: 'orders', href: '/orders', minimumRole: 'cashier' },
+            { icon: HandCoins, key: 'receivables', href: '/receivables', minimumRole: 'cashier' },
             { icon: Users, key: 'customers', href: '/customers', minimumRole: 'cashier' }
         ]
     },

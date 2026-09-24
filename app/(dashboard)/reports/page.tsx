@@ -269,6 +269,11 @@ export default function ReportsPage() {
                     <CardContent>
                         <div className="text-2xl font-bold">{money(data.net_profit)}</div>
                         <p className="text-xs text-muted-foreground mt-1">{t('netProfitHint')}</p>
+                        {data.written_off_total > 0 ? (
+                            <p className="mt-2 text-sm">
+                                {t('writtenOffTotal')}: {money(data.written_off_total)}
+                            </p>
+                        ) : null}
                     </CardContent>
                 </Card>
             </div>

@@ -17,7 +17,9 @@ const PAGE_ROLE_GUARDS: Array<{ prefix: string; minimum: UserRole }> = [
     { prefix: '/reports', minimum: 'manager' },
     { prefix: '/expenses', minimum: 'manager' },
     { prefix: '/suppliers', minimum: 'manager' },
-    { prefix: '/promotions', minimum: 'manager' }
+    { prefix: '/promotions', minimum: 'manager' },
+    // Cashier+ (same floor as /orders); listed so the route is explicit next to higher guards.
+    { prefix: '/receivables', minimum: 'cashier' }
 ]
 
 const profileSchema = z.object({ role: z.enum(USER_ROLES), is_active: z.boolean() })

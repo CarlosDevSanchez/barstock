@@ -13,6 +13,7 @@
     "promotions": "Promociones",
     "inventory": "Inventario",
     "orders": "Órdenes",
+    "receivables": "Cuentas por cobrar",
     "customers": "Clientes",
     "suppliers": "Proveedores",
     "reports": "Reportes",
@@ -58,7 +59,8 @@
       "completed": "Completada",
       "refunded": "Reembolsada",
       "draft": "Borrador",
-      "pending": "Pendiente"
+      "pending": "Pendiente",
+      "written_off": "Castigada"
     },
     "payment": {
       "cash": "Efectivo",
@@ -193,7 +195,10 @@
     "left": "{count} restantes",
     "min": "Mín: {count}",
     "andMore": "y {count} más",
-    "needsReview": "{count, plural, one {# jornada espera revisión} other {# jornadas esperan revisión}}"
+    "needsReview": "{count, plural, one {# jornada espera revisión} other {# jornadas esperan revisión}}",
+    "receivables": "Por cobrar",
+    "receivablesHint": "Saldo pendiente de clientes",
+    "receivablesOverdue": "Vencido: {amount}"
   },
   "pos": {
     "title": "Punto de venta",
@@ -558,7 +563,8 @@
     "receiptPayments": "Pagos",
     "refundedStamp": "REEMBOLSADA",
     "receiptPromo": "Promo: {name}",
-    "promoGroup": "Promo: {name} × {count}"
+    "promoGroup": "Promo: {name} × {count}",
+    "receiptPendingStamp": "PENDIENTE DE PAGO — Saldo {balance} — Vence {due}"
   },
   "customers": {
     "title": "Clientes",
@@ -606,7 +612,9 @@
     "colDate": "Fecha",
     "colTotal": "Total",
     "noHistory": "Aún no hay historial de compras",
-    "view": "Ver"
+    "view": "Ver",
+    "openBalance": "Saldo pendiente",
+    "noOpenBalance": "Sin saldo pendiente"
   },
   "suppliers": {
     "title": "Proveedores",
@@ -688,7 +696,7 @@
     "totalExpenses": "Gastos",
     "totalExpensesHint": "Gastos operativos del rango. Las compras de mercancía no entran aquí.",
     "netProfit": "Ganancia neta",
-    "netProfitHint": "Utilidad bruta − descuentos − gastos",
+    "netProfitHint": "Utilidad bruta − descuentos − gastos − castigos",
     "grossProfit": "Utilidad bruta",
     "grossProfitHint": "Bases cobradas − costo (sin impuesto)",
     "dailySales": "Ventas diarias",
@@ -728,7 +736,9 @@
     "openingFloat": "Fondo",
     "expectedCash": "Efectivo esperado",
     "countedCash": "Efectivo contado",
-    "difference": "Diferencia"
+    "difference": "Diferencia",
+    "writtenOffTotal": "Castigos",
+    "writtenOffTotalHint": "Saldos castigados en el rango"
   },
   "cash": {
     "title": "Jornada",
@@ -889,7 +899,18 @@
       "open": "Abierta",
       "closed": "Cerrada",
       "voided": "Anulada"
-    }
+    },
+    "deferAsReceivable": "Cerrar como cuenta por cobrar",
+    "deferTitle": "Cerrar como cuenta por cobrar",
+    "deferDescription": "La cuenta se cierra y el saldo queda pendiente de cobro.",
+    "dueDate": "Fecha de vencimiento",
+    "reminder": "Recordatorio",
+    "reminderYes": "Sí",
+    "reminderNo": "No",
+    "note": "Nota",
+    "deferConfirm": "Cerrar como por cobrar",
+    "deferSuccess": "Cuenta diferida",
+    "deferFailed": "No se pudo diferir"
   },
   "pagination": {
     "showing": "Mostrando {from}–{to} de {total}",
@@ -900,5 +921,48 @@
     "nextPage": "Página siguiente",
     "lastPage": "Última página",
     "pageAria": "Página {page}"
+  },
+  "receivables": {
+    "title": "Cuentas por cobrar",
+    "subtitle": "Saldos pendientes de pago",
+    "empty": "No hay cuentas por cobrar",
+    "customer": "Cliente",
+    "total": "Total",
+    "paid": "Pagado",
+    "balance": "Saldo",
+    "dueDate": "Vence",
+    "overdue": "Vencida",
+    "status": "Estado",
+    "recordPayment": "Registrar pago",
+    "edit": "Editar",
+    "writeOff": "Castigar",
+    "writeOffTitle": "Castigar cuenta por cobrar",
+    "writeOffDescription": "El saldo restante dejará de cobrarse. Esta acción no se puede deshacer.",
+    "writeOffReason": "Motivo",
+    "writeOffConfirm": "Castigar",
+    "writeOffSuccess": "Cuenta castigada",
+    "writeOffFailed": "No se pudo castigar",
+    "paymentSuccess": "Pago registrado",
+    "paymentFailed": "No se pudo registrar el pago",
+    "editTitle": "Editar cuenta por cobrar",
+    "editSuccess": "Cuenta actualizada",
+    "editFailed": "No se pudo actualizar",
+    "reminder": "Recordatorio",
+    "reminderYes": "Sí",
+    "reminderNo": "No",
+    "note": "Nota",
+    "save": "Guardar",
+    "cancel": "Cancelar",
+    "paymentMethod": "Método",
+    "amount": "Monto",
+    "splitPayment": "Dividir pago",
+    "secondPayment": "Segundo método",
+    "filterAll": "Pendientes y castigadas",
+    "filterPending": "Pendientes",
+    "filterWrittenOff": "Castigadas",
+    "statusPending": "Pendiente",
+    "statusWrittenOff": "Castigada",
+    "openBalance": "Saldo pendiente",
+    "noOpenBalance": "Sin saldo pendiente"
   }
 }
