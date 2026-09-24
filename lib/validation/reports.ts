@@ -22,7 +22,11 @@ export const dashboardSummarySchema = z.object({
             quantity: num,
             low_stock_threshold: num
         })
-    )
+    ),
+    /** Sum of balances on pending receivable orders. */
+    receivables_total: num,
+    /** Pending balances whose due_date is before today in the store time zone. */
+    receivables_overdue: num
 })
 export type DashboardSummary = z.infer<typeof dashboardSummarySchema>
 
@@ -43,7 +47,9 @@ export const salesReportSchema = z.object({
     gross_profit: num,
     total_expenses: num,
     expenses_by_category: z.array(z.object({ category: z.string(), total: num })),
-    /** gross_profit − total_discount − total_expenses. */
+    /** Remaining balance of written_off orders whose written_off_at falls in the range. */
+    written_off_total: num,
+    /** gross_profit − total_discount − total_expenses − written_off_total. */
     net_profit: num,
     daily: z.array(z.object({ date: z.string(), revenue: num, orders: num })),
     top_products: z.array(

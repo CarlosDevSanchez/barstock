@@ -41,12 +41,23 @@ const linksFor = (role: 'cashier' | 'manager' | 'admin') => {
 }
 
 describe('navigation follows the role', () => {
-    const CASHIER = ['Dashboard', 'POS', 'Till', 'Orders', 'Customers', 'Products', 'Categories', 'Inventory']
+    const CASHIER = [
+        'Dashboard',
+        'POS',
+        'Till',
+        'Orders',
+        'Receivables',
+        'Customers',
+        'Products',
+        'Categories',
+        'Inventory'
+    ]
     const MANAGER = [
         'Dashboard',
         'POS',
         'Till',
         'Orders',
+        'Receivables',
         'Customers',
         'Products',
         'Categories',

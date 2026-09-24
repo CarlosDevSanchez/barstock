@@ -64,6 +64,7 @@ describe('signed in', () => {
             ['/dashboard', true, true, true],
             ['/pos', true, true, true],
             ['/cash', true, true, true],
+            ['/receivables', true, true, true],
             ['/reports', false, true, true],
             ['/expenses', false, true, true],
             ['/suppliers', false, true, true],

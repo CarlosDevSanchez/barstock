@@ -50,6 +50,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [pos-checkout.md](03-modulos/pos-checkout.md) | Punto de venta, cálculo del cobro, concurrencia |
 | [caja-y-jornada.md](03-modulos/caja-y-jornada.md) | Jornada del negocio, cajas, arqueo y autocierre a las 24 h |
 | [cuentas-abiertas.md](03-modulos/cuentas-abiertas.md) | Cuentas compartidas, stock al añadir, pagos parciales, cierre a orden |
+| [cuentas-por-cobrar.md](03-modulos/cuentas-por-cobrar.md) | Diferir una tab a orden pendiente, cobro posterior y castigo |
 | [ordenes-y-reembolsos.md](03-modulos/ordenes-y-reembolsos.md) | Listado, detalle, reembolso idempotente |
 | [productos.md](03-modulos/productos.md) | CRUD de productos |
 | [categorias.md](03-modulos/categorias.md) | CRUD de categorías |
