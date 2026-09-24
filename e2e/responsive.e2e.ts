@@ -96,7 +96,8 @@ test.describe('mobile shell', () => {
             await cartSheet.getByRole('button', { name: 'Checkout' }).click()
             await page.getByRole('button', { name: 'Card' }).click()
             await page.getByRole('button', { name: 'Complete Order' }).click()
-            await expect(page.locator('[data-sonner-toast]').first()).toContainText(/Order ORD-\d{6}-\d{6} completed/)
+            const done = page.getByRole('dialog', { name: 'Sale completed' })
+            await expect(done).toContainText(/ORD-\d{6}-\d{6}/)
         } finally {
             await restoreCurrency()
         }

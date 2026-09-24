@@ -25,6 +25,7 @@ import { productsApi, type ProductListItem } from '@/lib/api/products'
 import { promotionsApi, type PromotionListItem } from '@/lib/api/promotions'
 import { ordersApi, salesApi, type OrderDetail } from '@/lib/api/orders'
 import { tabsApi } from '@/lib/api/tabs'
+import { cashApi } from '@/lib/api/cash'
 import { enqueueSale, type OutboxSaleItem } from '@/lib/offline/outbox'
 import { previewTotals, type PreviewLine } from '@/lib/cart-preview'
 import { allocatePackagePrice } from '@/lib/promotion-allocate'
@@ -78,6 +79,9 @@ export default function POSPage() {
     const tc = useTranslations('common')
     const router = useRouter()
     const { user, settings } = useSession()
+    const desk = useApiQuery(signal => cashApi.current(signal), 'pos-cash-desk')
+    const onATill = desk.data?.sessions.some(session => session.users.some(person => person.id === user.id)) ?? false
+    const cashNotice = !desk.data ? null : !desk.data.day ? t('noBusinessDay') : onATill ? null : t('notResponsible')
     const money = useMoney()
     const decimals = currencyDecimals(settings.currency)
     const online = useOnlineStatus()
@@ -433,6 +437,7 @@ export default function POSPage() {
                     <h1 className="text-3xl font-bold">{t('title')}</h1>
                     <p className="text-muted-foreground">{t('subtitle')}</p>
                 </div>
+                {cashNotice ? <p className="text-sm text-amber-700 dark:text-amber-400">{cashNotice}</p> : null}
 
                 <div className="flex flex-col sm:flex-row gap-3">
                     <div className="relative flex-1">

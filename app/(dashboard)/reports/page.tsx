@@ -17,6 +17,7 @@ import { PageSpinner } from '@/components/page-spinner'
 import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
 import { useMoney, useSession } from '@/components/session-provider'
 import { reportsApi } from '@/lib/api/reports'
+import { DayReport } from '@/components/cash/day-report'
 import { calendarDate, dateInZone } from '@/lib/dates'
 import { useApiQuery } from '@/hooks/use-api-query'
 
@@ -32,6 +33,7 @@ export default function ReportsPage() {
         to: dateInZone(settings.timezone)
     }))
     const [filtersOpen, setFiltersOpen] = useState(false)
+    const [mode, setMode] = useState<'dates' | 'day'>('dates')
     const validRange = range.from !== '' && range.to !== '' && range.from <= range.to
     const rangeSummary =
         range.from && range.to
@@ -81,12 +83,22 @@ export default function ReportsPage() {
             <div className="min-w-0">
                 <h1 className="text-xl font-bold truncate lg:text-3xl">{t('title')}</h1>
                 <p className="text-muted-foreground">{t('subtitle')}</p>
+                <div className="mt-3 flex gap-2">
+                    <Button variant={mode === 'dates' ? 'default' : 'outline'} onClick={() => setMode('dates')}>
+                        {t('byDates')}
+                    </Button>
+                    <Button variant={mode === 'day' ? 'default' : 'outline'} onClick={() => setMode('day')}>
+                        {t('byDay')}
+                    </Button>
+                </div>
             </div>
-            <div className="hidden lg:block">{dateInputs}</div>
-            <Button variant="outline" className="lg:hidden" onClick={() => setFiltersOpen(true)}>
-                <SlidersHorizontal className="mr-2 size-4" />
-                {rangeSummary}
-            </Button>
+            {mode === 'dates' ? <div className="hidden lg:block">{dateInputs}</div> : null}
+            {mode === 'dates' ? (
+                <Button variant="outline" className="lg:hidden" onClick={() => setFiltersOpen(true)}>
+                    <SlidersHorizontal className="mr-2 size-4" />
+                    {rangeSummary}
+                </Button>
+            ) : null}
             <Sheet open={filtersOpen} onOpenChange={setFiltersOpen}>
                 <SheetContent side="bottom" className="rounded-t-2xl">
                     <SheetHeader>
@@ -97,6 +109,15 @@ export default function ReportsPage() {
             </Sheet>
         </div>
     )
+
+    if (mode === 'day') {
+        return (
+            <div className="space-y-6">
+                {header}
+                <DayReport />
+            </div>
+        )
+    }
 
     if (!validRange) {
         return (

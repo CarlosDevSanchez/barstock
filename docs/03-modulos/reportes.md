@@ -30,4 +30,8 @@
 - COGS y markdown de promo usan **precio/costo de catálogo actual**, no el del momento de la venta.
 - El dashboard del cajero **no** muestra COGS/utilidad (solo `/reports`, gerente+).
 
-Relacionados: [Dashboard](dashboard.md), [Promociones](promociones.md), [Ajustes](ajustes.md).
+## Por jornada
+
+El selector «Por fechas / Por jornada» no cambia `sales_report`. «Por jornada» llama a `business_day_report` (gerente+): órdenes `completed` de esa jornada, pagos por método, cajas con diferencia y cuántas ventas quedaron sin caja. El fondo de caja no entra en el ingreso. Ver [caja y jornada](caja-y-jornada.md).
+
+Relacionados: [Dashboard](dashboard.md), [Promociones](promociones.md), [Ajustes](ajustes.md), [Caja y jornada](caja-y-jornada.md).

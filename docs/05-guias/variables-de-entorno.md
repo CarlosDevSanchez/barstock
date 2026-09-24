@@ -8,8 +8,9 @@
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | **Pública** (se incrusta en el bundle del navegador) | URL del proyecto Supabase. En local: `http://127.0.0.1:54321` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Pública** | Clave `anon` (JWT). No es secreta por diseño: la seguridad depende de RLS |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Solo servidor** | Clave `service_role`. **Salta RLS.** Se usa únicamente para invitar usuarios (`auth.admin`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Solo servidor** | Clave `service_role`. **Salta RLS.** Invita usuarios (`auth.admin`) y, en el cron, llama solo a `_auto_close_stale_business_days` |
 | `APP_URL` | Solo servidor | URL pública de la app; base de los enlaces de invitación y de restablecer contraseña |
+| `CRON_SECRET` | Solo servidor, **opcional** | Bearer de `GET /api/cron/tick` (cierra jornadas de más de 24 h). Si falta, la ruta responde 503. Vercel Cron envía `Authorization: Bearer $CRON_SECRET` |
 | `R2_ACCOUNT_ID` | Solo servidor | Cuenta de Cloudflare R2 (imágenes de producto y logo del ticket, Fase 6). **Opcional como grupo** |
 | `R2_ACCESS_KEY_ID` | Solo servidor | Token de API de R2 (Object Read & Write, limitado a `R2_BUCKET`). **Opcional como grupo** |
 | `R2_SECRET_ACCESS_KEY` | Solo servidor | Secreto del token anterior. **Opcional como grupo** |

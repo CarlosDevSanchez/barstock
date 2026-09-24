@@ -114,6 +114,8 @@ export function buildProvisionalOrder(input: ProvisionalOrderInput): OrderDetail
         total: input.totals.total,
         notes: null,
         created_by: null,
+        business_day_id: null,
+        cash_session_id: null,
         created_at: input.occurredAt,
         updated_at: input.occurredAt,
         refunded_at: null,
@@ -136,7 +138,10 @@ export function buildProvisionalOrder(input: ProvisionalOrderInput): OrderDetail
                 payment_method: input.paymentMethod,
                 amount: input.totals.total,
                 reference_number: null,
-                notes: null
+                notes: null,
+                created_by: null,
+                business_day_id: null,
+                cash_session_id: null
             }
         ],
         created_by_name: input.cashierName,

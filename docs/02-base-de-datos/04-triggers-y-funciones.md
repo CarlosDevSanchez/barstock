@@ -83,6 +83,10 @@ Registra un evento de sesión (`login`, `logout`, `invite`, `password_reset`) en
 `auth.uid()`: la función lo lee del JWT y **no acepta un parámetro para forjarlo**. Un `login_failed` no pasa por aquí
 (no hay sesión todavía): el servidor lo inserta con el cliente `service_role`. Ver [Auditoría](../03-modulos/auditoria.md).
 
+## Jornada y cajas (`20261003000001`)
+
+`open_business_day`, `close_business_day`, `adjust_business_day` (admin), `open_cash_session`, `add_cash_movement`, `close_cash_session`, `cash_session_summary`, `business_day_report` (gerente+) y `refresh_business_days`. `_auto_close_stale_business_days` no se concede a `authenticated`: solo a `service_role` (el cron) y la llaman por dentro las funciones de venta y de apertura. `create_sale`, `_close_tab`, `tab_pay` y `tab_pay_split` solo añaden esa llamada y las columnas de jornada/caja. Cada tabla nueva tiene el trigger `audit_row_change`.
+
 ## Ausencias conocidas
 
 - No hay trigger que cree inventario para **variantes** (las variantes no se venden desde el POS todavía, D10).

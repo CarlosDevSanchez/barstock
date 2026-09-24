@@ -3,7 +3,7 @@ import { ensureTestUsers } from '../test/helpers/integration'
 import { navLinks, newSession, signInWith } from './helpers'
 import { TEST_PASSWORD } from '../test/helpers/integration'
 
-const CASHIER_NAV = ['Dashboard', 'POS', 'Orders', 'Customers', 'Products', 'Categories', 'Inventory']
+const CASHIER_NAV = ['Dashboard', 'POS', 'Till', 'Orders', 'Customers', 'Products', 'Categories', 'Inventory']
 
 test('a cashier only sees the till and the catalog and is bounced from restricted pages', async ({ browser }) => {
     const page = await newSession(browser, 'cashier')
@@ -96,6 +96,7 @@ test('an admin sees every section and settings persist across a reload', async (
     expect(await navLinks(page)).toEqual([
         'Dashboard',
         'POS',
+        'Till',
         'Orders',
         'Customers',
         'Products',

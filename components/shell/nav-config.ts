@@ -11,13 +11,15 @@ import {
     FolderTree,
     Gift,
     UserCog,
-    ScrollText
+    ScrollText,
+    Banknote
 } from 'lucide-react'
 import type { UserRole } from '@/lib/auth/roles'
 
 export type NavKey =
     | 'dashboard'
     | 'pos'
+    | 'cash'
     | 'products'
     | 'categories'
     | 'promotions'
@@ -48,6 +50,7 @@ export const navGroups: NavGroup[] = [
         items: [
             { icon: LayoutDashboard, key: 'dashboard', href: '/dashboard', minimumRole: 'cashier' },
             { icon: ShoppingCart, key: 'pos', href: '/pos', minimumRole: 'cashier' },
+            { icon: Banknote, key: 'cash', href: '/cash', minimumRole: 'cashier' },
             { icon: ShoppingBag, key: 'orders', href: '/orders', minimumRole: 'cashier' },
             { icon: Users, key: 'customers', href: '/customers', minimumRole: 'cashier' }
         ]
