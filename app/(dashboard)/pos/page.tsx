@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
@@ -16,6 +16,7 @@ import { productsApi, type ProductListItem } from '@/lib/api/products'
 import { promotionsApi, type PromotionListItem } from '@/lib/api/promotions'
 import { salesApi } from '@/lib/api/orders'
 import { tabsApi } from '@/lib/api/tabs'
+import { enqueueSale, type OutboxSaleItem } from '@/lib/offline/outbox'
 import { previewTotals, type PreviewLine } from '@/lib/cart-preview'
 import { allocatePackagePrice } from '@/lib/promotion-allocate'
 import { useMoney, useSession } from '@/components/session-provider'
@@ -64,11 +65,29 @@ export default function POSPage() {
     const t = useTranslations('pos')
     const tTabs = useTranslations('tabs')
     const router = useRouter()
-    const { settings } = useSession()
+    const { user, settings } = useSession()
     const money = useMoney()
     const decimals = currencyDecimals(settings.currency)
     const online = useOnlineStatus()
     const snapshot = usePosSnapshot()
+    // No known-good server contact within the window (F2's settings.offline_max_hours), or none yet ever: too
+    // stale to trust an offline sale against. See F3, docs/06-roadmap/offline-y-sincronizacion.md. Re-evaluated on
+    // an interval (not on every render, since reading the clock is impure) so it flips on its own while the cart
+    // is left open offline, without needing a user action.
+    const [offlineWindowExpired, setOfflineWindowExpired] = useState(false)
+    const generatedAt = snapshot.data?.generated_at
+    useEffect(() => {
+        const evaluate = () => {
+            setOfflineWindowExpired(
+                !online &&
+                    (!generatedAt ||
+                        Date.now() - new Date(generatedAt).getTime() > settings.offline_max_hours * 3_600_000)
+            )
+        }
+        evaluate()
+        const interval = setInterval(evaluate, 60_000)
+        return () => clearInterval(interval)
+    }, [online, generatedAt, settings.offline_max_hours])
 
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedCategory, setSelectedCategory] = useState(ALL)
@@ -133,8 +152,8 @@ export default function POSPage() {
 
     // Every query below reads live over the network while online, and falls back to the offline snapshot (F1,
     // docs/06-roadmap/offline-y-sincronizacion.md) while not: search and category filtering happen in memory
-    // against whatever snapshot was last persisted (possibly stale, possibly none yet). Checkout stays disabled
-    // offline (OfflineDisabledButton in CartSheet), so nothing here needs to be correct enough to sell from.
+    // against whatever snapshot was last persisted (possibly stale, possibly none yet). Checkout itself queues the
+    // sale instead of calling the server directly while offline (F3) — see handleCheckout below.
     const liveCatalog = useInfiniteApiList<ProductListItem>(
         (page, pageSize, signal) =>
             productsApi.list(
@@ -299,21 +318,48 @@ export default function POSPage() {
         : (snapshot.data?.customers ?? [])
     const canAddToTab = lines.length > 0 && !blocked
 
+    const buildSaleItems = (): OutboxSaleItem[] =>
+        items.map(item =>
+            item.kind === 'product'
+                ? { product_id: item.productId, quantity: item.quantity, discount: item.discount }
+                : { promotion_id: item.promotionId, quantity: item.quantity }
+        )
+
     const handleCheckout = async () => {
         setProcessing(true)
-        // Generated lazily so a retry of the same attempt (checkoutKey already set) reuses it.
+        // Generated lazily so a retry of the same attempt (checkoutKey already set) reuses it. Offline, it
+        // becomes the outbox entry's client_ref (F3): the same key either way, live or queued.
         const key = checkoutKey ?? crypto.randomUUID()
         if (!checkoutKey) setCheckoutKey(key)
         try {
+            if (!online) {
+                if (offlineWindowExpired) throw new Error('errors.offline_window_expired')
+                const entry = await enqueueSale(
+                    key,
+                    user.id,
+                    {
+                        customer_id: selectedCustomer || null,
+                        payment_method: paymentMethod,
+                        discount,
+                        items: buildSaleItems()
+                    },
+                    totals.total
+                )
+                toast.success(
+                    t('orderQueuedOffline', { provisionalNumber: entry.provisional_number, total: money(totals.total) })
+                )
+                clearCart()
+                setSelectedCustomer('')
+                setShowPaymentDialog(false)
+                setShowCart(false)
+                setCheckoutKey(null)
+                return
+            }
             const order = await salesApi.create(
                 {
                     customer_id: selectedCustomer || null,
                     payment_method: paymentMethod,
-                    items: items.map(item =>
-                        item.kind === 'product'
-                            ? { product_id: item.productId, quantity: item.quantity, discount: item.discount }
-                            : { promotion_id: item.promotionId, quantity: item.quantity }
-                    ),
+                    items: buildSaleItems(),
                     discount
                 },
                 key
@@ -455,6 +501,7 @@ export default function POSPage() {
                 selectedCustomer={selectedCustomer}
                 onSelectCustomer={setSelectedCustomer}
                 blocked={blocked}
+                offlineWindowExpired={offlineWindowExpired}
                 showPaymentDialog={showPaymentDialog}
                 onShowPaymentDialog={open => {
                     setShowPaymentDialog(open)

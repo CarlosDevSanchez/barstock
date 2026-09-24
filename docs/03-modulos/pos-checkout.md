@@ -1,6 +1,6 @@
 # Módulo: POS y cobro
 
-> Actualizado con idempotencia (F0), instantánea offline (F1) y recepción de ventas offline (F2) · `app/(dashboard)/pos/page.tsx` + `components/pos/*` · API `POST /sales`, `GET /pos/snapshot` · RPC `create_sale` · Servicio `services/sales.ts`, `services/pos.ts` · Confianza: **[Verificado]** (`sales.test.ts` / `offline-sales.test.ts` / `rpc.test.ts` / `create-sale-promotions.test.ts` / `pos-snapshot.test.ts`, `pos.test.tsx`, `use-pos-snapshot.test.tsx`, `promotion-allocate.test.ts`).
+> Actualizado con idempotencia (F0), instantánea offline (F1), recepción de ventas offline (F2) y cobro sin red (F3) · `app/(dashboard)/pos/page.tsx` + `components/pos/*` · API `POST /sales`, `GET /pos/snapshot` · RPC `create_sale` · Servicio `services/sales.ts`, `services/pos.ts` · Cliente `lib/offline/{outbox,sync}.ts` · Confianza: **[Verificado]** (`sales.test.ts` / `offline-sales.test.ts` / `rpc.test.ts` / `create-sale-promotions.test.ts` / `pos-snapshot.test.ts`, `pos.test.tsx`, `use-pos-snapshot.test.tsx`, `outbox.test.ts`, `sync.test.ts`, `use-outbox-sync.test.tsx`, `promotion-allocate.test.ts`, `e2e/offline.e2e.ts`).
 
 > Sustituye al análisis anterior, donde el cobro eran 5 llamadas sueltas desde el navegador, sin transacción, con totales calculados en el cliente y un descuento de stock que probablemente no funcionaba
 > ([C2](../04-auditoria/hallazgos/C2-checkout-no-atomico.md), ahora **Verificado**). El estado previo queda en el historial de git (commit `54962b9`).
@@ -24,24 +24,36 @@ cabecera `Idempotency-Key`; se conserva mientras el carrito no cambie, así rein
 "Cobrar" dos veces) reutiliza la misma clave. `create_sale` la guarda en `idempotency_keys` y, si la misma clave
 llega dos veces con el mismo `user_id` y el mismo payload, devuelve la orden ya creada en vez de cobrar otra vez; con
 un payload distinto responde 409. Corrige el doble cobro por respuesta perdida (F0 en
-[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md), que además documenta el resto del diseño
-offline, todavía sin implementar).
+[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md), que documenta el resto del diseño offline —
+F0 a F3 ya implementadas, F4 pendiente).
 
 **Navegar sin red:** mientras `useOnlineStatus()` es `false`, la búsqueda y el filtro por categoría del catálogo (y
 las promociones, clientes y líneas del carrito) se leen en memoria de una instantánea (`GET /api/v1/pos/snapshot`,
 `hooks/use-pos-snapshot.ts`, persistida en IndexedDB) en vez de pedirlos al servidor — F1 en
-[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md). Cobrar sigue deshabilitado sin red
-(`OfflineDisabledButton`): la instantánea solo respalda navegar y armar el carrito, nunca el cobro en sí.
+[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md).
 
-**El servidor ya sabe recibir una venta offline (F2), el POS todavía no la manda.** `saleSchema` acepta
-`occurred_at` (hora del dispositivo) y `expected_total` (el total provisional que mostró el POS) opcionales;
-`create_sale` los usa si llegan: recalcula precio/impuestos como siempre (nunca confía en `expected_total`, solo
-anota la diferencia), ajusta `occurred_at` a la ventana `settings.offline_max_hours` (recortándolo si se pasa) y, si
-`occurred_at` no es nulo, **nunca rechaza por falta de stock** — descuenta lo que haya (hasta 0) y anota el faltante.
-Cualquier diferencia queda en `orders.sync_issues` (`occurred_at_clamped`/`price_mismatch`/`stock_shortfall`) para
-que un gerente la revise (F4, sin pantalla todavía). Lo que falta para que el POS realmente venda sin red es la cola
-de escrituras del dispositivo (F3: outbox, motor de sincronización) — hoy `handleCheckout` nunca manda estos campos
-porque cobrar está deshabilitado sin red.
+**Cobrar sin red (F3):** `handleCheckout` ya no depende de estar en línea. Con red, cobra como siempre
+(`salesApi.create`). Sin red, y mientras la instantánea (arriba) siga dentro de la ventana
+`settings.offline_max_hours` (si no, el botón se deshabilita con un aviso — "demasiado tiempo sin conexión"),
+encola la venta en IndexedDB (`lib/offline/outbox.ts`, `enqueueSale`) con el mismo `client_ref` que ya generaba
+para la cabecera `Idempotency-Key`, el total previsto y el payload de la venta; el toast muestra el número
+provisional (`OFF-XXXXXXXX`) y el carrito se vacía igual que en una venta online. Un motor de sincronización
+(`lib/offline/sync.ts`, disparado por `hooks/use-outbox-sync.ts` — montado una vez en `AppShell`, corre al volver
+la conexión y cada 60 s) manda esa cola a `POST /sales` con `occurred_at`/`expected_total`/`Idempotency-Key` en
+cuanto hay red y sesión: ahí es donde `create_sale` calcula precio y stock de verdad (F2, más abajo). El servidor
+recalcula, nunca se pierde una venta por falta de stock (se anota el faltante) y una orden repetida por
+reintento/doble pestaña se resuelve por la misma idempotencia. Cerrar sesión con ventas sin sincronizar las
+conserva y avisa (no las borra). Detalle completo, incluidos los estados de la cola y las pruebas, en F3 de
+[offline y sincronización](../06-roadmap/offline-y-sincronizacion.md).
+
+**Lo que el servidor hace con una venta offline (F2).** `saleSchema` acepta `occurred_at` (hora del dispositivo) y
+`expected_total` (el total provisional que mostró el POS) opcionales; `create_sale` los usa si llegan: recalcula
+precio/impuestos como siempre (nunca confía en `expected_total`, solo anota la diferencia), ajusta `occurred_at` a
+la ventana `settings.offline_max_hours` (recortándolo si se pasa) y, si `occurred_at` no es nulo, **nunca rechaza
+por falta de stock** — descuenta lo que haya (hasta 0) y anota el faltante. Cualquier diferencia queda en
+`orders.sync_issues` (`occurred_at_clamped`/`price_mismatch`/`stock_shortfall`) para que un gerente la revise (F4,
+sin pantalla todavía — hoy la cola solo muestra un toast, sin centro de sincronización ni ticket marcado
+"PROVISIONAL").
 
 **Cuentas abiertas:** el carrito (productos y/o promociones) se puede enviar a una cuenta vía `tab_add_items` (misma expansión de paquetes que `create_sale`). Ver [cuentas-abiertas](cuentas-abiertas.md) y [promociones](promociones.md).
 

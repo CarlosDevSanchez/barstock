@@ -1,6 +1,6 @@
 /**
  * Minimal IndexedDB key-value wrapper: two stores, `snapshot` (the POS catalog read offline, see
- * hooks/use-pos-snapshot.ts) and `outbox` (reserved for the offline write queue, not implemented yet — see F3 in
+ * hooks/use-pos-snapshot.ts) and `outbox` (the offline sale queue, see lib/offline/outbox.ts — F3 in
  * docs/06-roadmap/offline-y-sincronizacion.md). Written by hand instead of adding a dependency for ~50 lines.
  *
  * Every function no-ops (resolves `undefined`/void) when `indexedDB` is unavailable — a private-browsing tab, an
@@ -59,14 +59,32 @@ export async function idbSet<T>(store: StoreName, key: string, value: T): Promis
     }
 }
 
-/** Wipes every store (logout on a shared/kiosk device: see clearOfflineCaches, called alongside this). */
-export async function idbClearAll(): Promise<void> {
+export async function idbGetAll<T>(store: StoreName): Promise<T[]> {
+    if (!available()) return []
+    const db = await openDb()
+    try {
+        return await new Promise<T[]>((resolve, reject) => {
+            const request = db.transaction(store, 'readonly').objectStore(store).getAll()
+            request.onsuccess = () => resolve(request.result as T[])
+            request.onerror = () => reject(request.error)
+        })
+    } finally {
+        db.close()
+    }
+}
+
+/**
+ * Wipes the `snapshot` store only (logout on a shared/kiosk device: see clearOfflineCaches, called alongside this).
+ * Never touches `outbox`: an unsynced sale belongs to the user, not the device, and must survive their logout —
+ * it is sent the next time they sign back in (lib/offline/sync.ts checks `entry.user_id` against the session).
+ */
+export async function idbClearSnapshot(): Promise<void> {
     if (!available()) return
     const db = await openDb()
     try {
         await new Promise<void>((resolve, reject) => {
-            const tx = db.transaction(STORES, 'readwrite')
-            for (const store of STORES) tx.objectStore(store).clear()
+            const tx = db.transaction('snapshot', 'readwrite')
+            tx.objectStore('snapshot').clear()
             tx.oncomplete = () => resolve()
             tx.onerror = () => reject(tx.error)
         })

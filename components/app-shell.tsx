@@ -28,6 +28,7 @@ import { BottomNav } from '@/components/shell/bottom-nav'
 import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 import { SessionProvider, type SessionUser } from '@/components/session-provider'
 import { BarstockIcon } from '@/components/branding/barstock-mark'
+import { useOutboxSync } from '@/hooks/use-outbox-sync'
 import { ChevronRight } from 'lucide-react'
 
 interface AppShellProps {
@@ -84,6 +85,9 @@ function SidebarNav({ user }: { user: SessionUser }) {
 }
 
 export function AppShell({ user, settings, children, defaultSidebarOpen = true }: AppShellProps) {
+    // Keeps sending queued offline sales (F3) no matter which page is open; nothing here needs its return value.
+    useOutboxSync()
+
     return (
         <SessionProvider value={{ user, settings }}>
             <SidebarProvider defaultOpen={defaultSidebarOpen} className="print:block">

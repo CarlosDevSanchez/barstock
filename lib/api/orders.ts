@@ -15,7 +15,13 @@ export const salesApi = {
      * `idempotencyKey` lets the caller retry a checkout attempt (network drop, a lost response) without risking a
      * duplicate charge: the server returns the same order for a replay of the same key. See create_sale (F0,
      * docs/06-roadmap/offline-y-sincronizacion.md).
+     *
+     * `redirectOnUnauthorized: false` is used by the offline sync engine (lib/offline/sync.ts): a 401 there pauses
+     * that one queued sale instead of navigating the whole tab to /login.
      */
-    create: (body: SaleInput, idempotencyKey?: string) =>
-        apiPost<OrderDetail>('sales', body, idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined)
+    create: (body: SaleInput, idempotencyKey?: string, options?: { redirectOnUnauthorized?: boolean }) =>
+        apiPost<OrderDetail>('sales', body, {
+            headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined,
+            redirectOnUnauthorized: options?.redirectOnUnauthorized
+        })
 }

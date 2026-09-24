@@ -41,6 +41,9 @@
     "inactive": "Inactive",
     "signOut": "Sign out",
     "signOutFailed": "Could not sign out. Try again.",
+    "logoutPendingTitle": "Unsynced sales on this device",
+    "logoutPendingDescription": "{count, plural, one {There is # offline sale} other {There are # offline sales}} still waiting to sync. They stay saved and will send automatically once you sign back in and are online — signing out now will not lose them.",
+    "logoutPendingConfirm": "Sign out anyway",
     "themeLight": "Light",
     "themeDark": "Dark",
     "language": "Language",
@@ -118,13 +121,15 @@
   },
   "errors": {
     "generic": "Something went wrong",
-    "network_offline": "You are offline. Check your connection and try again."
+    "network_offline": "You are offline. Check your connection and try again.",
+    "offline_window_expired": "This till has been offline too long to keep ringing up sales. Reconnect to keep selling."
   },
   "connection": {
     "offlineBadge": "Offline",
     "offlineToast": "You are offline: you are seeing saved data, and actions that change data are disabled.",
     "backOnline": "Back online",
-    "offlineActionDisabled": "Not available offline"
+    "offlineActionDisabled": "Not available offline",
+    "offlineWindowExpired": "Too long offline: reconnect to keep selling."
   },
   "pwa": {
     "updateAvailable": "A new version is available",
@@ -205,6 +210,7 @@
     "processing": "Processing...",
     "completeOrder": "Complete Order",
     "orderCompleted": "Order {orderNumber} completed: {total}",
+    "orderQueuedOffline": "Sale {provisionalNumber} queued ({total}): it will sync automatically once you are back online.",
     "viewOrder": "View order",
     "processFailed": "Failed to process order",
     "promotions": "Promotions",

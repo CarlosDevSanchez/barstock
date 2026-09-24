@@ -41,6 +41,9 @@
     "inactive": "Inactivo",
     "signOut": "Cerrar sesión",
     "signOutFailed": "No se pudo cerrar sesión. Inténtalo de nuevo.",
+    "logoutPendingTitle": "Ventas sin sincronizar en este dispositivo",
+    "logoutPendingDescription": "{count, plural, one {Hay # venta offline} other {Hay # ventas offline}} pendientes de sincronizar. Quedan guardadas y se enviarán solas cuando vuelvas a entrar con conexión — cerrar sesión ahora no las pierde.",
+    "logoutPendingConfirm": "Cerrar sesión de todas formas",
     "themeLight": "Claro",
     "themeDark": "Oscuro",
     "language": "Idioma",
@@ -118,12 +121,14 @@
   },
   "errors": {
     "generic": "Algo salió mal",
-    "network_offline": "Estás sin conexión. Comprueba tu red e inténtalo de nuevo."
+    "network_offline": "Estás sin conexión. Comprueba tu red e inténtalo de nuevo.",
+    "offline_window_expired": "Esta caja lleva demasiado tiempo sin conexión para seguir cobrando. Reconéctate para seguir vendiendo."
   },
   "connection": {
     "offlineBadge": "Sin conexión",
     "offlineToast": "Sin conexión: ves datos guardados, las acciones que modifican datos están deshabilitadas.",
     "backOnline": "Conexión restablecida",
+    "offlineWindowExpired": "Demasiado tiempo sin conexión: reconéctate para seguir vendiendo.",
     "offlineActionDisabled": "No disponible sin conexión"
   },
   "pwa": {
@@ -205,6 +210,7 @@
     "processing": "Procesando...",
     "completeOrder": "Completar orden",
     "orderCompleted": "Orden {orderNumber} completada: {total}",
+    "orderQueuedOffline": "Venta {provisionalNumber} en cola ({total}): se sincronizará sola en cuanto vuelva la conexión.",
     "viewOrder": "Ver orden",
     "processFailed": "No se pudo procesar la orden",
     "promotions": "Promociones",

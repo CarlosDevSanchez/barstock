@@ -25,6 +25,14 @@ interface RequestOptions {
     query?: Query
     signal?: AbortSignal
     headers?: Record<string, string>
+    /** Default true. The offline sync engine (lib/offline/sync.ts) passes false: a 401 there means "pause this
+     * entry and try again once there is a session again", not "send the whole tab to /login". */
+    redirectOnUnauthorized?: boolean
+}
+
+export interface ApiCallOptions {
+    headers?: Record<string, string>
+    redirectOnUnauthorized?: boolean
 }
 
 const BASE = '/api/v1/'
@@ -77,7 +85,7 @@ export function isStale(value: unknown): boolean {
 async function request(
     method: string,
     path: string,
-    { body, formData, query, signal, headers }: RequestOptions = {}
+    { body, formData, query, signal, headers, redirectOnUnauthorized = true }: RequestOptions = {}
 ): Promise<{ payload: unknown; fromCache: boolean }> {
     let response: Response
     try {
@@ -100,7 +108,7 @@ async function request(
     if (response.status === 204) return { payload: undefined, fromCache }
     const payload = await readJson(response)
     if (!response.ok) {
-        if (response.status === 401) handleUnauthorized(path)
+        if (response.status === 401 && redirectOnUnauthorized) handleUnauthorized(path)
         throw toApiError(response.status, payload)
     }
     return { payload, fromCache }
@@ -112,8 +120,13 @@ function markIfStale<T>(value: T, fromCache: boolean): T {
 }
 
 /** GET a single resource: returns `data` from the `{ data }` envelope. */
-export async function apiGet<T>(path: string, query?: Query, signal?: AbortSignal): Promise<T> {
-    const { payload, fromCache } = await request('GET', path, { query, signal })
+export async function apiGet<T>(
+    path: string,
+    query?: Query,
+    signal?: AbortSignal,
+    options?: ApiCallOptions
+): Promise<T> {
+    const { payload, fromCache } = await request('GET', path, { query, signal, ...options })
     return markIfStale((payload as Single<T>).data, fromCache)
 }
 
@@ -127,8 +140,8 @@ export async function apiList<T, S = undefined>(
     return markIfStale(payload as Paginated<T, S>, fromCache)
 }
 
-export async function apiPost<T = void>(path: string, body?: unknown, headers?: Record<string, string>): Promise<T> {
-    const { payload } = await request('POST', path, { body, headers })
+export async function apiPost<T = void>(path: string, body?: unknown, options?: ApiCallOptions): Promise<T> {
+    const { payload } = await request('POST', path, { body, ...options })
     return (payload as Single<T> | undefined)?.data as T
 }
 

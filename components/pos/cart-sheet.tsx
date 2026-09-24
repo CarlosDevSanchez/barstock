@@ -1,5 +1,6 @@
 'use client'
 
+import type { ComponentProps } from 'react'
 import { Trash2, Plus, Minus, ShoppingCart, CreditCard, DollarSign, Smartphone } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -17,6 +18,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { moneyStep } from '@/lib/money'
@@ -63,6 +65,10 @@ interface CartSheetProps {
     selectedCustomer: string
     onSelectCustomer: (customerId: string) => void
     blocked: boolean
+    /** Offline for longer than settings.offline_max_hours (or the offline catalog snapshot never loaded): too
+     * stale to trust an offline sale against. Checkout itself still works offline otherwise (F3) — this is the
+     * one case it stays disabled. */
+    offlineWindowExpired: boolean
     showPaymentDialog: boolean
     onShowPaymentDialog: (show: boolean) => void
     paymentMethod: PaymentMethod
@@ -75,6 +81,31 @@ interface CartSheetProps {
     onSelectTab: (tabId: string) => void
     onAddToTab: () => void
     canAddToTab: boolean
+}
+
+/**
+ * Checkout works offline too (F3): unlike the other write actions here (`OfflineDisabledButton`, still
+ * network-only), it only disables once the till has been offline longer than `settings.offline_max_hours`
+ * (`offlineWindowExpired`, computed in `app/(dashboard)/pos/page.tsx`).
+ */
+function CheckoutButton({
+    offlineWindowExpired,
+    disabled,
+    ...props
+}: ComponentProps<typeof Button> & { offlineWindowExpired: boolean }) {
+    const t = useTranslations('connection')
+    if (!offlineWindowExpired) return <Button disabled={disabled} {...props} />
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                {/* A disabled button swallows pointer events, so the tooltip needs this wrapper to still receive them. */}
+                <span className="block w-full">
+                    <Button disabled {...props} className={`pointer-events-none ${props.className ?? ''}`} />
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>{t('offlineWindowExpired')}</TooltipContent>
+        </Tooltip>
+    )
 }
 
 /** The cart, as a Sheet that opens over the content instead of a fixed side column. Same behaviour as before:
@@ -94,6 +125,7 @@ export function CartSheet({
     selectedCustomer,
     onSelectCustomer,
     blocked,
+    offlineWindowExpired,
     showPaymentDialog,
     onShowPaymentDialog,
     paymentMethod,
@@ -309,7 +341,8 @@ export function CartSheet({
                                         </div>
                                         <p className="text-xs text-muted-foreground">{t('estimateHint')}</p>
 
-                                        <OfflineDisabledButton
+                                        <CheckoutButton
+                                            offlineWindowExpired={offlineWindowExpired}
                                             className="w-full"
                                             size="lg"
                                             onClick={() => onShowPaymentDialog(true)}
@@ -317,7 +350,7 @@ export function CartSheet({
                                         >
                                             <CreditCard className="mr-2 h-5 w-5" />
                                             {t('checkout')}
-                                        </OfflineDisabledButton>
+                                        </CheckoutButton>
                                         <OfflineDisabledButton
                                             className="w-full"
                                             variant="outline"
@@ -366,9 +399,13 @@ export function CartSheet({
                         <Button variant="outline" disabled={processing} onClick={() => onShowPaymentDialog(false)}>
                             {tc('cancel')}
                         </Button>
-                        <OfflineDisabledButton onClick={onCheckout} disabled={processing}>
+                        <CheckoutButton
+                            offlineWindowExpired={offlineWindowExpired}
+                            onClick={onCheckout}
+                            disabled={processing}
+                        >
                             {processing ? t('processing') : t('completeOrder')}
-                        </OfflineDisabledButton>
+                        </CheckoutButton>
                     </DialogFooter>
                 </DialogContent>
             </Dialog>

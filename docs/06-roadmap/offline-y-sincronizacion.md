@@ -1,21 +1,15 @@
-# Plan: cola offline y sincronización (no implementado)
+# Plan: cola offline y sincronización
 
-> Estado: la cola de escrituras del **dispositivo** sigue sin código (F3/F4); F0 (idempotencia de `create_sale`), F1
-> (instantánea del catálogo del POS) y F2 (el servidor ya sabe recibir una venta offline) están **implementadas**. Lo
-> que falta es lo que manda esos datos desde el cliente — hoy cobrar sigue deshabilitado sin red. Complementa
-> [PWA y modo offline](../01-arquitectura/09-pwa-offline.md), que sí está implementado (lectura offline, avisos de
-> conexión, instalación, instantánea del POS). Referencia: D16 en [decisiones-pendientes](decisiones-pendientes.md).
+> Estado: F0 (idempotencia de `create_sale`), F1 (instantánea del catálogo del POS), F2 (el servidor recibe una
+> venta offline) y F3 (outbox + motor de sincronización del cliente) están **implementadas**: **cobrar ya funciona
+> sin red**. Falta F4 (la UI: ticket provisional con su número, centro de sincronización con contador y lista, y la
+> pantalla de revisión de gerente para `sync_issues`) — funcionalmente completo hoy, solo con feedback mínimo
+> (un toast). Complementa [PWA y modo offline](../01-arquitectura/09-pwa-offline.md). Referencia: D16 en
+> [decisiones-pendientes](decisiones-pendientes.md).
 >
 > **Decisiones tomadas (2026-09-22):** alcance v1 = solo ventas nuevas del POS (cuentas abiertas, ajustes de
 > inventario y reembolsos siguen deshabilitados sin red); sin stock al sincronizar → se registra la venta y se marca
 > para revisión, nunca se rechaza; ventana offline configurable (`settings.offline_max_hours`, 12 h por defecto).
-
-## Por qué todavía no hay cola de escrituras
-
-Encolar ventas, pagos de cuentas y ajustes de inventario sin red es un cambio grande: toca la BD (idempotencia), el
-cliente (outbox persistente), la sesión (qué pasa si expira sin red) y trae decisiones de negocio sin resolver (¿se
-permiten ventas offline? ¿solo en efectivo?). Se documenta aquí el diseño para no perder el análisis, pero no se
-implementa hasta que el negocio responda las preguntas de la sección 10.
 
 ## 1. Idempotencia primero (hace falta incluso sin offline) — ✅ Corregido para `create_sale`
 
@@ -49,15 +43,16 @@ con una instantánea explícita, sin esperar al resto de la cola:
 - `GET /api/v1/pos/snapshot` (`lib/server/services/pos.ts`) devuelve de una vez los productos y promociones activos,
   las categorías y los clientes activos, sin paginar (tope 2000 filas por tabla), en la misma forma que `/products` y
   `/promotions`.
-- `lib/offline/db.ts`: envoltorio mínimo de IndexedDB con dos stores, `snapshot` (en uso) y `outbox` (reservado para
-  cuando exista la cola de escrituras). No-op si `indexedDB` no existe.
+- `lib/offline/db.ts`: envoltorio mínimo de IndexedDB con dos stores, `snapshot` y `outbox` (§4). No-op si
+  `indexedDB` no existe.
 - `hooks/use-pos-snapshot.ts`: pide la instantánea al montar el POS, cada 5 minutos y al volver la conexión; la
   persiste en IndexedDB. Una petición fallida (sin red) conserva lo último cargado en vez de vaciarlo.
 - `app/(dashboard)/pos/page.tsx` usa la instantánea solo mientras `useOnlineStatus()` es `false`: búsqueda y filtro
-  por categoría en memoria, en vez de `useInfiniteApiList` contra el servidor. Cobrar sigue deshabilitado sin red
-  (`OfflineDisabledButton`): esto solo respalda navegar y armar el carrito, nunca el cálculo final de precio/stock.
-- El logout borra la instantánea (`idbClearAll`), igual que las demás cachés: es un dispositivo compartido y los
-  clientes incluyen email/teléfono.
+  por categoría en memoria, en vez de `useInfiniteApiList` contra el servidor. También decide si cobrar sigue
+  permitido sin red: `snapshot.data.generated_at` es el último contacto confirmado con el servidor, y si ha pasado
+  más de `settings.offline_max_hours` desde entonces (o nunca hubo instantánea), cobrar se deshabilita (§3).
+- El logout borra la instantánea (`idbClearSnapshot`), igual que las demás cachés: es un dispositivo compartido y
+  los clientes incluyen email/teléfono. La cola de ventas (`outbox`, §4) **no** se borra: ver §7.
 
 Ver [PWA y modo offline](../01-arquitectura/09-pwa-offline.md) y [pos-checkout](../03-modulos/pos-checkout.md).
 
@@ -80,82 +75,122 @@ Sin ellos el comportamiento es exactamente el de antes (venta online). Con `p_oc
 - Reportes (`dashboard_summary`, `sales_report`, `top_selling_products`) agrupan/filtran por
   `coalesce(orders.occurred_at, orders.created_at)`, así una venta sincronizada horas o días después sigue cayendo en
   el día real en que ocurrió. El listado `/orders` (`?from&to`) no se tocó: sigue usando `created_at`.
-- API: `saleSchema` acepta `occurred_at`/`expected_total`; `lib/server/services/sales.ts` los pasa a la RPC. El POS
-  **todavía no los manda** (eso es F3/F4): hoy solo se puede probar vía `POST /sales` directamente o RPC. Ver
-  [pos-checkout](../03-modulos/pos-checkout.md).
+- API: `saleSchema` acepta `occurred_at`/`expected_total`; `lib/server/services/sales.ts` los pasa a la RPC. Desde F3
+  el POS los manda de verdad, vía la cola (§4). Ver [pos-checkout](../03-modulos/pos-checkout.md).
 
 Pruebas: `test/integration/offline-sales.test.ts` (ventana, recorte, `price_mismatch`, `stock_shortfall`, producto
 inactivo, `client_ref`, agrupación de reportes) y `test/integration/admin.test.ts` (`offline_max_hours`: validación,
 solo-admin, defecto).
 
-## 4. Outbox en IndexedDB
+## 4. Outbox y motor de sincronización — ✅ Implementada
 
-- Cada entrada: acción, payload, `user_id`, hora del cliente (`client_occurred_at`), `client_ref` (generado en el
-  cliente, ver §1).
-- Estados: `pendiente → sincronizando → sincronizada | con diferencias | rechazada`.
-- El envío es FIFO **por dispositivo** (dos cajas offline a la vez no se coordinan entre sí; cada una sincroniza su
-  propia cola cuando recupera red).
-- El store `outbox` de `lib/offline/db.ts` (§2) ya existe en el esquema de IndexedDB; falta la lógica que lo llena y
-  la vacía.
+`lib/offline/outbox.ts` (datos) + `lib/offline/sync.ts` (envío), store `outbox` de `lib/offline/db.ts` (§2):
 
-## 5. Disparadores de la sincronización
+- Cada entrada (`OutboxEntry`): `client_ref` (la misma clave de idempotencia que genera el POS por intento de
+  cobro, ver §1 — también sirve de clave del store), `user_id`, `created_at` del dispositivo (se manda como
+  `occurred_at`, §3), `payload` (cliente, método, descuento, ítems — la misma forma que ya validaba `saleSchema`),
+  `expected_total`, `provisional_number` (`OFF-XXXXXXXX`, derivado del `client_ref`), `state`, `attempts`,
+  `next_attempt_at` (backoff) y `last_error`.
+- Estados: `pending → syncing → synced | synced_with_issues | rejected | paused_auth`. `synced`/`synced_with_issues`
+  (según si la orden trajo `sync_issues`) y `rejected` son terminales; `pending`/`syncing`/`paused_auth` se
+  reintentan. Encolar dos veces con el mismo `client_ref` (un doble clic) sobrescribe la misma fila, nunca duplica.
+- `runSync()` corre dentro de `navigator.locks.request('barstock-outbox', …)` cuando el navegador lo soporta
+  (Safari/iOS actuales sí); si no, corre igual — la idempotencia protege ante una carrera de todas formas, tal como
+  estaba previsto aquí.
+- Antes de mandar nada, pide `GET /api/v1/me` (con `redirectOnUnauthorized: false`, §7); sin sesión, no toca la cola.
+  Solo se envían las entradas cuyo `user_id` coincide con esa sesión — las de otro usuario quedan en cola para
+  cuando ese usuario vuelva a entrar.
+- Envío FIFO (por `created_at`, una fila a la vez, dentro de la misma pestaña/lock): `POST /sales` con
+  `Idempotency-Key: client_ref` y `occurred_at`/`expected_total` (§3).
+  - 2xx sin `sync_issues` → `synced`; con `sync_issues` → `synced_with_issues`.
+  - 401 → `paused_auth` y el resto de la cola se deja para el próximo intento (no tiene sentido seguir sin sesión).
+  - 4xx de negocio (validación, producto/promoción ya no disponible) → `rejected`, pero se sigue con la siguiente
+    entrada.
+  - Sin red, 429 o 5xx → sigue `pending` con backoff exponencial (`attempts`, tope 30 min) y se corta el resto de
+    la cola para este intento.
+- `lib/api/client.ts`: `apiGet`/`apiPost` aceptan `{ redirectOnUnauthorized }` (defecto `true`); la sincronización
+  pasa `false` para que un 401 en segundo plano no mande la pestaña entera a `/login`.
 
-El evento `online` (`hooks/use-online-status.ts` ya existe y puede disparar esto), el arranque de la app, un botón
-manual en el centro de sincronización (§9), y Background Sync API donde el navegador lo soporte (degradar
-silenciosamente donde no: Safari/iOS no lo soporta hoy).
+## 5. Disparadores de la sincronización — ✅ Implementados
+
+`hooks/use-outbox-sync.ts`, montado una vez en `components/app-shell.tsx` (corre sin importar en qué página esté el
+cajero): al montar, en cada evento `online`, y cada 60 s (barato cuando la cola está vacía — sale antes de pedir la
+sesión). El botón manual del centro de sincronización queda para F4. Background Sync API sigue descartada: el
+service worker (`public/sw.js`) está escrito a mano, y duplicar ahí la lógica de sesión/401 no compensa frente a un
+intervalo de 60 s en la pestaña abierta.
 
 ## 6. Reglas por acción
 
-- **Ventas.** El precio y el total mostrados offline son **provisionales** (la última foto de precio/stock vista de
-  la instantánea, §2). El servidor recalcula al sincronizar (§3, ya implementado): el total del servidor manda
+- **Ventas.** — ✅ Implementada. El precio y el total mostrados offline son **provisionales** (la última foto de
+  precio/stock vista de la instantánea, §2). El servidor recalcula al sincronizar (§3): el total del servidor manda
   siempre, una diferencia queda anotada (`sync_issues.price_mismatch`) en vez de bloquear la venta, y la falta de
   stock **nunca** la rechaza (se registra el faltante, `sync_issues.stock_shortfall` — decisión tomada 2026-09-22,
-  ver la cabecera del documento). Solo un producto/promoción inactivo o borrado la rechaza de verdad. Falta la parte
-  de UI: un aviso o pantalla de revisión para esas diferencias (F4) sigue sin construir. El número de orden
-  (`order_number`, hoy una secuencia) se asigna **al sincronizar**, no al vender: el ticket offline es provisional y
-  lo dice explícitamente.
-- **Cuentas.** Solo se puede operar sobre cuentas ya vistas en caché. Dos dispositivos añadiendo a la misma cuenta
-  offline es un conflicto real: la resolución (último gana, o unir líneas) es una decisión de negocio pendiente. El
-  stock se descuenta en el servidor al sincronizar, nunca en el cliente.
-- **Ajustes de inventario.** Son **deltas** (`+5`, `-2`), no valores absolutos: conmutan sin conflicto entre sí y son
-  el caso más simple de la cola.
+  ver la cabecera del documento). Solo un producto/promoción inactivo o borrado la rechaza de verdad (`rejected` en
+  la cola, §4). El número de orden (`order_number`, una secuencia) se asigna **al sincronizar**, no al vender: antes
+  de eso el POS solo conoce el `provisional_number` (`OFF-XXXXXXXX`) — mostrarlo en el ticket impreso (marcado
+  "PROVISIONAL") y en una pantalla de revisión para `sync_issues` es F4, todavía sin construir; hoy solo hay un
+  toast al encolar.
+- **Cuentas.** Fuera de alcance v1 (decisión 2026-09-22, ver la cabecera): siguen deshabilitadas sin red
+  (`OfflineDisabledButton`). Si se necesitan más adelante: solo se podría operar sobre cuentas ya vistas en caché, y
+  dos dispositivos añadiendo a la misma cuenta offline es un conflicto real sin resolver (último gana, o unir
+  líneas).
+- **Ajustes de inventario.** Fuera de alcance v1, igual que cuentas. Seguirían deshabilitados sin red; son
+  **deltas** (`+5`, `-2`), lo que los haría el caso más simple de encolar si se añaden después.
 
-## 7. Sesión
+## 7. Sesión — ✅ Implementada
 
-- Si la sesión expira mientras el dispositivo está sin red, la cola se conserva en IndexedDB y solo se reintenta
-  sincronizar cuando vuelve a haber sesión **del mismo usuario** (comparar `user_id` de la entrada contra la sesión
-  activa antes de reenviar).
-- Un `401` durante la sincronización debe **pausar** la cola, no navegar a `/login`. Hoy `handleUnauthorized`
-  (`lib/api/client.ts`) hace `window.location.assign('/login?...')` en cualquier 401 fuera de `auth/*`: la sincronización
-  en segundo plano necesita una ruta que no dispare esa redirección (por ejemplo, un cliente de sincronización
-  separado que solo marque la cola como "pausada" y muestre un aviso, en vez de navegar).
+- Si la sesión expira mientras el dispositivo está sin red, la cola se conserva en IndexedDB
+  (`idbClearSnapshot`, llamada al cerrar sesión, deliberadamente **no** toca el store `outbox`) y solo se reintenta
+  sincronizar cuando vuelve a haber sesión **del mismo usuario** (`entry.user_id` contra `GET /me`, §4).
+- Un `401` durante la sincronización **pausa** esa entrada (`paused_auth`) sin navegar: `lib/api/client.ts` acepta
+  `{ redirectOnUnauthorized: false }` y el motor de sincronización siempre lo pasa, así un 401 en segundo plano
+  nunca dispara `handleUnauthorized` (que mandaría la pestaña entera a `/login`, perdiendo el carrito en curso).
+- Cerrar sesión con entradas sin sincronizar muestra un `ConfirmDialog` (`components/shell/account-menu.tsx`)
+  explicando que se conservan y se envían solas al volver a entrar; no bloquea el cierre de sesión.
 
 ## 8. Auditoría
 
-Las acciones sincronizadas se registran igual que cualquier otra escritura (ver [auditoría](../03-modulos/auditoria.md)),
-con `changes`/metadata incluyendo `client_occurred_at` para poder reconstruir cuándo ocurrió realmente la acción en el
-dispositivo, no solo cuándo llegó al servidor.
+Las acciones sincronizadas se registran igual que cualquier otra escritura (ver [auditoría](../03-modulos/auditoria.md)):
+el trigger genérico usa `auth.uid()` de la sesión que sincroniza, y `orders.occurred_at`/`source`/`sync_issues`
+llegan a `changes` sin trabajo aparte, ya que son columnas normales de `orders`.
 
-## 9. Centro de sincronización en la UI
+## 9. Centro de sincronización en la UI — F4, sin construir
 
 - Un contador de pendientes visible en el header (junto al badge de conexión, `components/connection-status.tsx`).
-- Una lista de entradas **rechazadas** con opción de reintentar o descartar cada una.
+  `useOutboxSync()` ya expone `pendingCount`; falta pintarlo.
+- Una lista de entradas con su estado (`pending`/`syncing`/`rejected`/`paused_auth`/…) y las acciones "reintentar" y
+  "descartar" (esta última necesita una función de borrado que `lib/offline/outbox.ts` todavía no expone).
+- Marcar el ticket impreso como "PROVISIONAL" mientras no tiene `order_number` real, y mostrar el
+  `provisional_number` en el toast/recibo en vez de solo en la notificación de éxito.
+- Filtro "con incidencias de sincronización" en `/orders` (`sync_issues is not null and reviewed_at is null`) y la
+  acción "marcar revisada" para un gerente (`reviewed_by`/`reviewed_at`, ya existen en `orders` desde F2).
 
-## 10. Decisiones de negocio pendientes (bloquean la implementación)
+## 10. Decisiones de negocio
 
-1. ¿Se permiten ventas offline en absoluto, o el POS debe negarse a cobrar sin red? (Asumido que sí para poder
-   construir F2; la decisión formal con el negocio sigue pendiente — el POS no las manda todavía, ver §3)
-2. Si se permiten, ¿solo en efectivo (sin verificación de tarjeta posible offline)?
+1. ¿Se permiten ventas offline en absoluto, o el POS debe negarse a cobrar sin red? **Implementado que sí** (F3);
+   la decisión formal con el negocio, más allá de la técnica, sigue sin registrarse aquí.
+2. Si se permiten, ¿solo en efectivo (sin verificación de tarjeta posible offline)? No se restringió: los tres
+   métodos de pago (`cash`/`card`/`ewallet`) se pueden encolar — el datáfono es externo y no lo valida la app de
+   todas formas (ver H3 en [decisiones-pendientes](decisiones-pendientes.md)).
 3. ~~¿Cuánto tiempo máximo puede una caja operar sin conexión antes de bloquearse?~~ **Decidido (2026-09-22):**
    configurable, `settings.offline_max_hours`, 12 h por defecto (§3).
 4. ~~¿Qué pasa con una venta rechazada al sincronizar (stock insuficiente) si el producto ya se entregó al cliente?~~
    **Decidido (2026-09-22):** no se rechaza; se registra con el faltante anotado para que un gerente la revise (§3,
    §6; la pantalla de revisión es F4, sin construir).
 
-## 11. Pruebas necesarias cuando esto se implemente
+## 11. Pruebas
 
-- Concurrencia e idempotencia de la cola: la misma clave enviada dos veces **a la vez** (dos pestañas, o un reintento
-  automático que se solapa con uno manual) debe producir un solo efecto. Para `create_sale` ya cubierto en
-  `test/integration/sales.test.ts` (clave repetida en paralelo, con payload distinto, tras un fallo, sin clave).
-- E2E de ida y vuelta offline → online: encolar una venta sin red, recuperar la red, comprobar que se sincroniza una
-  sola vez y que el número de orden final es el que asignó el servidor.
+- Concurrencia e idempotencia de `create_sale`: la misma clave enviada dos veces **a la vez** produce un solo
+  efecto — `test/integration/sales.test.ts` (en paralelo, con payload distinto, tras un fallo, sin clave).
+- Ventas offline (ventana, recorte, `price_mismatch`, `stock_shortfall`, producto inactivo, `client_ref`,
+  agrupación de reportes por `occurred_at`): `test/integration/offline-sales.test.ts`.
+- `offline_max_hours` (validación, solo-admin, defecto): `test/integration/admin.test.ts`.
+- Outbox (estados, filtrado FIFO, conteo, `client_ref` idempotente): `lib/offline/outbox.test.ts`.
+- Motor de sincronización (éxito, `sync_issues` → `synced_with_issues`, 401 → `paused_auth` y corta la cola, 4xx →
+  `rejected` y sigue, red/5xx → backoff y corta la cola, usuario distinto se salta, backoff no vencido se salta):
+  `lib/offline/sync.test.ts`.
+- Disparadores del hook (montaje, evento `online`, un fallo conserva el contador anterior):
+  `test/components/use-outbox-sync.test.tsx`.
+- Checkout offline en el POS (cola en vez de red, botón bloqueado si expiró la ventana): `test/components/pos.test.tsx`.
+- E2E de ida y vuelta offline → online (`e2e/offline.e2e.ts`): cobrar sin red, comprobar que el stock no se mueve
+  todavía, recuperar la red y comprobar que sincroniza sola (el stock baja).

@@ -9,7 +9,13 @@ void mock.module('next/navigation', () => ({
     useRouter: () => ({ push: () => {}, refresh: () => {} }),
     usePathname: () => '/dashboard'
 }))
+class MockApiError extends Error {}
 void mock.module('@/lib/api/client', () => ({
+    ApiError: MockApiError,
+    apiGet: async () => {
+        throw new Error('no session in this test')
+    },
+    apiList: async () => ({ data: [], page: 1, pageSize: 0, total: 0 }),
     apiPost: async () => undefined,
     apiPatch: async () => undefined,
     errorMessage: (error: unknown, fallback = 'Something went wrong') =>

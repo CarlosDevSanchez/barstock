@@ -65,12 +65,15 @@ void mock.module('next/navigation', () => ({
 const { default: POSPage } = await import('@/app/(dashboard)/pos/page')
 const { SessionProvider } = await import('@/components/session-provider')
 const { useCartStore } = await import('@/stores/cart')
+const { TooltipProvider } = await import('@/components/ui/tooltip')
 
 const renderPos = () =>
     render(
         <IntlProvider>
             <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
-                <POSPage />
+                <TooltipProvider>
+                    <POSPage />
+                </TooltipProvider>
             </SessionProvider>
         </IntlProvider>
     )
@@ -341,5 +344,54 @@ describe('POS cart', () => {
         // The 300ms debounce (useDebouncedValue) plus this suite's own overhead can outrun the default 1s timeout.
         await waitFor(() => expect(screen.queryByText('Wireless Mouse')).toBeNull(), { timeout: 3000 })
         expect(screen.getByText('USB-C Cable')).toBeTruthy()
+    })
+
+    test('checkout queues the sale offline instead of calling the server, and still empties the cart', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        await waitFor(() => expect(snapshot).toHaveBeenCalled())
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+
+        act(() => {
+            setOnline(false)
+            window.dispatchEvent(new Event('offline'))
+        })
+
+        openCart()
+        const checkoutButton = await screen.findByRole('button', { name: /Checkout/ })
+        expect((checkoutButton as HTMLButtonElement).disabled).toBe(false) // the offline window hasn't expired
+        fireEvent.click(checkoutButton)
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Complete Order' }))
+
+        await waitFor(() => expect(useCartStore.getState().items).toEqual([]))
+        expect(createSale).not.toHaveBeenCalled()
+    })
+
+    test('checkout is blocked once the offline window has expired, with an explanation', async () => {
+        snapshot.mockImplementationOnce(async () => ({
+            generated_at: new Date(Date.now() - 13 * 3_600_000).toISOString(), // settings.offline_max_hours is 12
+            products: catalog,
+            promotions: [],
+            categories: [],
+            customers: []
+        }))
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        await waitFor(() => expect(snapshot).toHaveBeenCalled())
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+
+        act(() => {
+            setOnline(false)
+            window.dispatchEvent(new Event('offline'))
+        })
+        openCart()
+
+        await waitFor(() =>
+            expect((screen.getByRole('button', { name: /Checkout/ }) as HTMLButtonElement).disabled).toBe(true)
+        )
+        expect(createSale).not.toHaveBeenCalled()
     })
 })
