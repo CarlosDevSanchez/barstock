@@ -27,7 +27,7 @@ import { Form } from '@/components/ui/form'
 import { TextField } from '@/components/form-fields'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
-import { ReceiptTicket } from '@/components/orders/receipt-ticket'
+import { PrintableReceipt } from '@/components/orders/printable-receipt'
 import { useMoney, useSession } from '@/components/session-provider'
 import { ApiError, errorMessage } from '@/lib/api/client'
 import { ordersApi, type OrderDetail } from '@/lib/api/orders'
@@ -487,7 +487,7 @@ export default function OrderDetailPage() {
                 </Card>
             </div>
 
-            <ReceiptTicket order={order} settings={settings} />
+            <PrintableReceipt order={order} settings={settings} />
 
             {refunding && (
                 <RefundDialog

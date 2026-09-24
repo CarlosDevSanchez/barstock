@@ -25,6 +25,7 @@ async function syncEntry(entry: OutboxEntry): Promise<boolean> {
             {
                 customer_id: entry.payload.customer_id,
                 payment_method: entry.payload.payment_method,
+                ...(entry.payload.payments ? { payments: entry.payload.payments } : {}),
                 discount: entry.payload.discount,
                 items: entry.payload.items,
                 occurred_at: entry.created_at,

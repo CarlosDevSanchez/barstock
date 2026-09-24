@@ -104,8 +104,24 @@ export async function getProduct(supabase: AppSupabaseClient, id: string): Promi
 
 export async function createProduct(supabase: AppSupabaseClient, input: ProductCreate): Promise<Tables<'products'>> {
     await assertMoneyScale(supabase, { cost_price: input.cost_price, selling_price: input.selling_price })
-    const { data, error } = await supabase.from('products').insert(input).select().single()
+    const { low_stock_threshold: threshold, ...row } = input
+    const { data, error } = await supabase.from('products').insert(row).select().single()
     assertNoError(error)
+    if (threshold !== undefined) {
+        const { data: inventory, error: inventoryError } = await supabase
+            .from('inventory')
+            .select('id')
+            .eq('product_id', data.id)
+            .is('variant_id', null)
+            .maybeSingle()
+        assertNoError(inventoryError)
+        if (!inventory) throw notFound('Inventory not found')
+        const { error: thresholdError } = await supabase.rpc('set_low_stock_threshold', {
+            p_inventory_id: inventory.id,
+            p_threshold: threshold
+        })
+        assertNoError(thresholdError)
+    }
     return data
 }
 

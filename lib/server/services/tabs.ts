@@ -7,6 +7,7 @@ import type {
     AddTabMembersInput,
     OpenTabInput,
     PayTabInput,
+    PayTabSplitInput,
     RemoveTabItemInput,
     SetTabDiscountInput,
     TabsQuery,
@@ -153,6 +154,25 @@ export async function payTab(supabase: AppSupabaseClient, id: string, input: Pay
         p_member_id: (input.member_id ?? null) as string,
         p_method: input.payment_method,
         p_amount: input.amount
+    })
+    assertNoError(error)
+    return getTab(supabase, id)
+}
+
+export async function payTabSplit(
+    supabase: AppSupabaseClient,
+    id: string,
+    input: PayTabSplitInput
+): Promise<TabDetail> {
+    const amounts: Record<string, number> = {}
+    input.payments.forEach((payment, index) => {
+        amounts[`payments.${index}.amount`] = payment.amount
+    })
+    await assertMoneyScale(supabase, amounts)
+    const { error } = await supabase.rpc('tab_pay_split', {
+        p_tab_id: id,
+        p_member_id: (input.member_id ?? null) as string,
+        p_payments: input.payments
     })
     assertNoError(error)
     return getTab(supabase, id)

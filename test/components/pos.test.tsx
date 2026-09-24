@@ -40,11 +40,36 @@ const list = mock(async (query: Record<string, unknown>) => {
     }
     return page(items)
 })
-const createSale = mock(async (_body: unknown, _idempotencyKey?: string) => ({
+const completedOrder = {
     id: 'order-1',
     order_number: 'ORD-260921-000001',
-    total: 80.27
-}))
+    customer_id: null,
+    status: 'completed' as const,
+    subtotal: 72.97,
+    discount: 0,
+    tax: 7.3,
+    total: 80.27,
+    notes: null,
+    tab_id: null,
+    created_by: 'user-1',
+    created_at: '2026-09-21T15:30:00Z',
+    updated_at: '2026-09-21T15:30:00Z',
+    refunded_at: null,
+    refunded_by: null,
+    refund_reason: null,
+    client_ref: null,
+    occurred_at: null,
+    source: 'online' as const,
+    sync_issues: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    customer: null,
+    created_by_name: 'Jane Cashier',
+    tab: null,
+    items: [],
+    payments: [{ id: 'pay-1', payment_method: 'card' as const, amount: 80.27 }]
+}
+const createSale = mock(async (_body: unknown, _idempotencyKey?: string) => completedOrder)
 const push = mock(() => {})
 const snapshot = mock(async () => ({
     generated_at: new Date().toISOString(),
@@ -61,7 +86,10 @@ void mock.module('@/lib/api/promotions', () => ({
 }))
 void mock.module('@/lib/api/categories', () => ({ categoriesApi: { list: async () => page([]) } }))
 void mock.module('@/lib/api/customers', () => ({ customersApi: { list: async () => page([]) } }))
-void mock.module('@/lib/api/orders', () => ({ salesApi: { create: createSale } }))
+void mock.module('@/lib/api/orders', () => ({
+    salesApi: { create: createSale },
+    ordersApi: { get: async () => completedOrder }
+}))
 void mock.module('@/lib/api/tabs', () => ({
     tabsApi: {
         list: async () => page([]),
@@ -437,5 +465,59 @@ describe('POS cart', () => {
             expect((screen.getByRole('button', { name: /Checkout/ }) as HTMLButtonElement).disabled).toBe(true)
         )
         expect(createSale).not.toHaveBeenCalled()
+    })
+
+    test('split payment shows the gap and disables checkout until the amounts match', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+        openCart()
+        fireEvent.click(await screen.findByRole('button', { name: /Checkout/ }))
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Split payment' }))
+
+        const first = within(dialog).getByRole('spinbutton', { name: 'Payment Method Amount' })
+        const second = within(dialog).getByRole('spinbutton', { name: 'Second payment Amount' })
+        fireEvent.change(first, { target: { value: '10' } })
+        await waitFor(() => expect((second as HTMLInputElement).value).toBe('22.99'))
+        expect((within(dialog).getByRole('button', { name: 'Complete Order' }) as HTMLButtonElement).disabled).toBe(
+            false
+        )
+
+        fireEvent.change(second, { target: { value: '1' } })
+        expect(within(dialog).getByText(/Short/)).toBeTruthy()
+        expect((within(dialog).getByRole('button', { name: 'Complete Order' }) as HTMLButtonElement).disabled).toBe(
+            true
+        )
+
+        fireEvent.change(second, { target: { value: '100' } })
+        expect(within(dialog).getByText(/Over by/)).toBeTruthy()
+
+        fireEvent.change(within(dialog).getByLabelText('Received'), { target: { value: '50' } })
+        expect(within(dialog).getByText('Change').parentElement?.textContent).toMatch(/40/)
+    })
+
+    test('a completed sale offers print, the order and a new sale', async () => {
+        const print = mock(() => {})
+        window.print = print
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+        openCart()
+        fireEvent.click(await screen.findByRole('button', { name: /Checkout/ }))
+        fireEvent.click(
+            within(await screen.findByRole('dialog', { name: 'Complete Payment' })).getByRole('button', {
+                name: 'Complete Order'
+            })
+        )
+
+        const done = await screen.findByRole('dialog', { name: 'Sale completed' })
+        expect(within(done).getByText('ORD-260921-000001', { exact: false })).toBeTruthy()
+        fireEvent.click(within(done).getByRole('button', { name: 'Print' }))
+        expect(print).toHaveBeenCalled()
+        fireEvent.click(within(done).getByRole('button', { name: 'New sale' }))
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Sale completed' })).toBeNull())
     })
 })

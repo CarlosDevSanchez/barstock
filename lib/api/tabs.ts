@@ -4,6 +4,7 @@ import type {
     AddTabMembersInput,
     OpenTabInput,
     PayTabInput,
+    PayTabSplitInput,
     RemoveTabItemInput,
     SetTabDiscountInput,
     VoidTabInput
@@ -22,5 +23,6 @@ export const tabsApi = {
         apiDelete<TabDetail>(`tabs/${id}/items/${itemId}`, body),
     setDiscount: (id: string, body: SetTabDiscountInput) => apiPost<TabDetail>(`tabs/${id}/discount`, body),
     pay: (id: string, body: PayTabInput) => apiPost<TabDetail>(`tabs/${id}/payments`, body),
+    paySplit: (id: string, body: PayTabSplitInput) => apiPost<TabDetail>(`tabs/${id}/payments`, body),
     void: (id: string, body: VoidTabInput) => apiPost<TabDetail>(`tabs/${id}/void`, body)
 }

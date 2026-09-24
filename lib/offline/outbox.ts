@@ -23,6 +23,8 @@ export type OutboxSaleItem =
 export interface OutboxSalePayload {
     customer_id: string | null
     payment_method: PaymentMethod
+    /** Present when the cashier split the sale across two methods. Absent on entries queued before split payments. */
+    payments?: Array<{ method: PaymentMethod; amount: number }>
     discount: number
     items: OutboxSaleItem[]
 }

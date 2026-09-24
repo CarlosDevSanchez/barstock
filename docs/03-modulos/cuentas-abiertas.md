@@ -42,9 +42,10 @@ Todas bloquean la fila de la cuenta (`SELECT … FOR UPDATE`) y exigen `status =
 | `tab_remove_item(tab_id, item_id, quantity, reason)` | **gerente+** | Reduce o quita la línea, repone stock; falla si el total resultante quedaría por debajo de lo ya pagado |
 | `tab_set_discount(tab_id, discount)` | cajero | Solo si no hay pagos |
 | `tab_pay(tab_id, member_id, method, amount)` | cajero | Rechaza un monto mayor al saldo; **cierra la cuenta sola** cuando el saldo llega a 0 |
+| `tab_pay_split(tab_id, member_id, payments jsonb)` | cajero | Igual, con 1 o 2 pagos en una transacción. Si la suma supera el saldo, no inserta ninguno |
 | `void_tab(tab_id, reason)` | **gerente+** | Solo sin pagos; repone todo el stock |
 
-## Cierre (`_close_tab`, interna — la llama `tab_pay`)
+## Cierre (`_close_tab`, interna — la llaman `tab_pay` y `tab_pay_split`)
 Cuando el saldo llega a 0: inserta una `orders` normal (`status='completed'`, `tab_id` apuntando a la cuenta), copia `tab_items` → `order_items` **sin volver a tocar el stock** (ya se descontó al añadir), copia `tab_payments` → `payments`
 (varias filas — el esquema ya lo permitía) y marca la cuenta `closed` con su `order_id`. A partir de ahí es una orden como cualquier otra: aparece en [órdenes](ordenes-y-reembolsos.md) con un aviso "Cuenta TAB-xxx",
 el trigger de clientes actualiza `total_spent`/`loyalty_points`, y **`refund_order` funciona sin cambios** (repone stock desde `order_items`). El dashboard, los reportes y el Top 5 ([dashboard](dashboard.md)) incluyen la venta automáticamente.
@@ -58,7 +59,7 @@ el trigger de clientes actualiza `total_spent`/`loyalty_points`, y **`refund_ord
 - **`Sheet` del carrito** con dos pestañas: *Carrito* y *Cuentas*. En *Carrito*, además de *Checkout*, el botón **"Añadir a cuenta"** abre un diálogo para elegir una cuenta abierta o crear una nueva (etiqueta,
   cliente opcional, personas separadas por coma) y envía las líneas con `tab_add_items`.
 - **Detalle de una cuenta** (`tab-detail-sheet.tsx`): ítems (con botón "Quitar" solo para gerente+), personas, resumen (subtotal/impuesto/descuento/total/pagado/saldo), pagos hechos, y el cobro:
-  - **"Cobrar saldo completo"** en un solo pago.
+  - **"Cobrar saldo completo"** en un solo pago, o **dividido** en dos métodos (`tab_pay_split`). Al cerrar la cuenta, el POS abre el mismo diálogo «Venta completada» que una venta directa.
   - **"Partes iguales":** se eligen las personas y `lib/tab-split.ts` reparte el saldo en unidades mínimas de la moneda (el resto va a las primeras partes, uno por uno, así la suma es siempre exacta); cada parte
     tiene su propio botón *Cobrar*.
   - **"Montos libres":** un campo por persona con lo que falta calculado en vivo (`lib/tab-split.ts#validateCustom`).
