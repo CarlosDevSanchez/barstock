@@ -1,10 +1,10 @@
 import { describe, expect, test } from 'bun:test'
-import { idbClearSnapshot, idbGet, idbGetAll, idbSet } from './db'
+import { idbClearSnapshot, idbGet, idbGetAll, idbSet } from '@/lib/offline/db'
 
-// Runs in its OWN process (see test:unit / test:coverage path-ignore). outbox.test.ts and sync.test.ts call
-// mock.module('@/lib/offline/db', …); that mock is process-global, so sharing a process with them makes this
-// file exercise the in-memory fake (and whatever outbox rows they left) instead of the real no-indexedDB
-// degradation path — order-dependent, and the order on CI (sync → db) is not the order on a Mac (db → sync).
+// Lives under test/offline/ (not lib/) so `bun test lib stores` never co-loads it with outbox.test.ts /
+// sync.test.ts. Those files call mock.module('@/lib/offline/db', …); that mock is process-global, so sharing
+// a process makes this suite exercise the in-memory fake (and leftover outbox rows) instead of the real
+// no-indexedDB degradation path. File discovery order also differs across OSes (CI Linux: sync → db).
 describe('offline db (no indexedDB available)', () => {
     test('idbGet resolves undefined instead of throwing', async () => {
         expect(await idbGet('snapshot', 'anything')).toBeUndefined()

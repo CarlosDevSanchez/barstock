@@ -6,7 +6,7 @@
 
 | Nivel | Dónde | Herramienta | Necesita BD | Qué cubre |
 |---|---|---|---|---|
-| Unitarias | `lib/**/*.test.ts`, `stores/*.test.ts` | `bun test` | No | Esquemas zod (`''` → `null`, dinero, límites, asignación masiva), `formatMoney`, `previewTotals`, `dateInZone`, roles, validación de entorno, mapeo de errores, `route()` (CSRF, 401/403/422, errores), cliente `fetch`, carrito |
+| Unitarias | `lib/**/*.test.ts`, `stores/*.test.ts`, `test/offline/*.test.ts` | `bun test` | No | Esquemas zod (`''` → `null`, dinero, límites, asignación masiva), `formatMoney`, `previewTotals`, `dateInZone`, roles, validación de entorno, mapeo de errores, `route()` (CSRF, 401/403/422, errores), cliente `fetch`, carrito, degradado offline sin `indexedDB` |
 | Componentes | `test/components/*.test.tsx` | `bun test` + happy-dom + Testing Library | No | Carrito del POS, formulario de producto (errores de validación y normalización), navegación por rol, confirmación de borrado |
 | API (integración) | `test/integration/{auth,catalog,sales,admin,proxy}.test.ts` | `bun test` | **Sí** (Supabase local) | Cada Route Handler invocado con un `Request` real y la cookie de sesión de un login real, por rol: 401 sin sesión, 403 por rol, 422 por validación, respuesta correcta; `proxy.ts`; flujo de invitación y recuperación con el correo real de Mailpit |
 | Seguridad / RLS | `test/integration/rls.test.ts` | `bun test` + supabase-js | **Sí** | Clientes autenticados como cajero, gerente, admin, inactivo y anónimo **sin código de la app por medio** (como un atacante con la clave anónima): escalada de rol, escrituras directas revocadas, matriz de roles, visibilidad de órdenes, trigger de alta, `CHECK`s |
@@ -55,10 +55,12 @@ Con `CI=true`, Playwright no reutiliza un servidor existente y arranca `bun run 
   handler real `auth/login` (cookies reales de `@supabase/ssr`).
 - **Por qué procesos separados.** `mock.module` de Bun es **global al proceso** y persiste entre archivos: el mock de `@/lib/server/supabase` de
   `http.test.ts` rompería las pruebas de integración que usan el cliente real. Además Testing Library captura `document` al importarse, así que
-  cada archivo de componentes necesita su propio proceso (`test:components` los lanza uno a uno). Misma razón: `lib/offline/db.test.ts` corre
-  solo (`test:unit` / `test:coverage` lo excluyen del batch y lo lanzan después) — si comparte proceso con `outbox.test.ts`/`sync.test.ts`, el
-  `mock.module('@/lib/offline/db')` de esos archivos sustituye el módulo real y la suite deja de probar el degradado sin `indexedDB` (falla
-  cuando el orden es sync → db, como en CI Linux). Consecuencia: no se usa `coverageThreshold` de `bunfig.toml` (juzgaría cada proceso por separado).
+  cada archivo de componentes necesita su propio proceso (`test:components` los lanza uno a uno). Misma razón: la suite del degradado sin
+  `indexedDB` vive en `test/offline/` (fuera de `lib/`), lanzada en un segundo `bun test` tras el batch `lib stores` — si compartiera proceso con
+  `outbox.test.ts`/`sync.test.ts`, su `mock.module('@/lib/offline/db')` sustituiría el módulo real (falla cuando el orden es sync → db, como en
+  CI Linux). Consecuencia: no se usa `coverageThreshold` de `bunfig.toml` (juzgaría cada proceso por separado).
+- **Bun en CI.** `supabase/setup-cli` reinstala Bun según su propio `.bun-version` y lo pone delante en `PATH`; el workflow vuelve a pinnear
+  1.4.1 justo después para que `test:coverage` / e2e no corran con una versión distinta a `packageManager`.
 - **Cobertura** (`scripts/coverage-check.ts`): fusiona los informes lcov de unitarias e integración y exige **≥ 80 % de líneas** en `lib/server/**` y
   `lib/validation/**`; un archivo que ninguna prueba carga cuenta como fallo (no desaparece del informe). Hoy: `lib/server` 96,8 %, `lib/validation` 99,1 %.
 - **Nomenclatura E2E**: `*.e2e.ts`, no `*.spec.ts`, porque `bun test` recoge los `.spec.` y los ejecutaría como unitarios.
