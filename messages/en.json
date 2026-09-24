@@ -143,6 +143,8 @@
     "discardReasonLabel": "Reason",
     "discardReasonPlaceholder": "Why this sale should not be sent",
     "discardLogFailed": "Could not record this. Check the connection and try again — a discard always needs to be logged.",
+    "discardAlreadySynced": "This sale already reached the server — nothing was discarded. Check its review status in Orders.",
+    "discardInProgress": "This sale is being sent right now — nothing was discarded. Check back in a moment.",
     "state": {
       "pending": "Waiting to sync",
       "syncing": "Syncing…",

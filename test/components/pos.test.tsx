@@ -324,6 +324,33 @@ describe('POS cart', () => {
         expect(firstKey).toBe(secondKey)
     })
 
+    test('closing and reopening the payment dialog after a failed attempt still reuses the same key: a lost response cannot be double-charged by "cancel, try again"', async () => {
+        createSale.mockImplementationOnce(async () => {
+            throw new Error('network_offline')
+        })
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+        openCart()
+        fireEvent.click(await screen.findByRole('button', { name: /Checkout/ }))
+        const firstDialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        fireEvent.click(within(firstDialog).getByRole('button', { name: 'Complete Order' }))
+        await waitFor(() => expect(createSale).toHaveBeenCalledTimes(1))
+
+        // Cancel the failed attempt's dialog, then reopen it (the cart itself was never touched).
+        fireEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Complete Payment' })).toBeNull())
+        fireEvent.click(screen.getByRole('button', { name: /Checkout/ }))
+        const secondDialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        fireEvent.click(within(secondDialog).getByRole('button', { name: 'Complete Order' }))
+        await waitFor(() => expect(createSale).toHaveBeenCalledTimes(2))
+
+        const [firstKey] = createSale.mock.calls[0]?.slice(1) ?? []
+        const [secondKey] = createSale.mock.calls[1]?.slice(1) ?? []
+        expect(firstKey).toBe(secondKey)
+    })
+
     test('browsing keeps working offline from the last snapshot, search and category filter included', async () => {
         renderPos()
         await screen.findByText('Wireless Mouse')

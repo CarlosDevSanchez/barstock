@@ -143,6 +143,8 @@
     "discardReasonLabel": "Motivo",
     "discardReasonPlaceholder": "Por qué esta venta no debe enviarse",
     "discardLogFailed": "No se pudo registrar. Comprueba la conexión e inténtalo de nuevo — descartar siempre debe quedar registrado.",
+    "discardAlreadySynced": "Esta venta ya llegó al servidor — no se descartó nada. Revisa su estado en Órdenes.",
+    "discardInProgress": "Esta venta se está enviando en este momento — no se descartó nada. Vuelve a intentarlo en un momento.",
     "state": {
       "pending": "Esperando sincronizar",
       "syncing": "Sincronizando…",

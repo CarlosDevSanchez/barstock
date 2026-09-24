@@ -1171,8 +1171,10 @@ export type Database = {
       }
       log_outbox_discard: {
         Args: {
+          p_client_ref: string
           p_expected_total: number
-          p_payment_method: string
+          p_owner_user_id: string
+          p_payment_method: Database["public"]["Enums"]["payment_method"]
           p_provisional_number: string
           p_reason: string
         }

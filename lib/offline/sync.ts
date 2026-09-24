@@ -1,9 +1,9 @@
 import { apiGet, ApiError } from '@/lib/api/client'
 import { salesApi, type OrderDetail } from '@/lib/api/orders'
 import type { SessionUser } from '@/components/session-provider'
+import { withOutboxLock } from './lock'
 import { retryableOutboxEntries, updateOutboxEntry, type OutboxEntry } from './outbox'
 
-const LOCK_NAME = 'barstock-outbox'
 const BASE_BACKOFF_MS = 60_000
 const MAX_BACKOFF_MS = 30 * 60_000
 
@@ -93,15 +93,11 @@ async function syncOutbox(): Promise<void> {
 }
 
 /**
- * Runs the outbox once. Serialized across tabs with the Web Locks API (FIFO: a second call queues behind the
- * first instead of racing it) where the browser supports it; falls back to running inline otherwise — safe either
- * way, since every send carries an idempotency key. Call this from `hooks/use-outbox-sync.ts`, not directly.
+ * Runs the outbox once. Serialized (FIFO: a second call queues behind the first instead of racing it) with any
+ * other outbox access — another tab's sync, or a discard (§`lib/offline/lock.ts`) — via the Web Locks API where the
+ * browser supports it; falls back to running inline otherwise — safe either way, since every send carries an
+ * idempotency key. Call this from `hooks/use-outbox-sync.ts`, not directly.
  */
 export async function runSync(): Promise<void> {
-    if (typeof navigator === 'undefined') return
-    if (navigator.locks?.request) {
-        await navigator.locks.request(LOCK_NAME, syncOutbox)
-    } else {
-        await syncOutbox()
-    }
+    await withOutboxLock(syncOutbox)
 }

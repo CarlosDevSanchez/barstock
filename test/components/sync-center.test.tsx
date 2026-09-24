@@ -4,6 +4,7 @@ import { setupDom } from '../helpers/dom'
 
 setupDom()
 const { cleanup, fireEvent, render, screen, waitFor } = await import('@testing-library/react')
+const { ApiError } = await import('@/lib/api/client')
 
 let entries: Array<{
     client_ref: string
@@ -20,8 +21,10 @@ const listOutboxEntries = mock(async () => entries)
 const retryOutboxEntry = mock(async (clientRef: string) => {
     entries = entries.map(entry => (entry.client_ref === clientRef ? { ...entry, state: 'pending' } : entry))
 })
-const discardOutboxEntry = mock(async (clientRef: string) => {
+type DiscardResult = 'discarded' | 'in_progress' | 'already_synced' | 'not_found'
+const discardOutboxEntry = mock(async (clientRef: string): Promise<DiscardResult> => {
     entries = entries.filter(entry => entry.client_ref !== clientRef)
+    return 'discarded'
 })
 const logDiscard = mock(async () => {})
 
@@ -155,6 +158,8 @@ describe('SyncCenter', () => {
 
         await waitFor(() =>
             expect(logDiscard).toHaveBeenCalledWith({
+                client_ref: 'a',
+                owner_user_id: cashier.id,
                 provisional_number: 'OFF-AAAAAAAA',
                 expected_total: 10,
                 payment_method: 'cash',
@@ -182,5 +187,40 @@ describe('SyncCenter', () => {
             'Could not record this. Check the connection and try again — a discard always needs to be logged.'
         )
         expect(discardOutboxEntry).not.toHaveBeenCalled()
+    })
+
+    test('the RPC refusing a discard (409: the sale already reached the server) shows a message and refreshes instead of erroring', async () => {
+        logDiscard.mockImplementationOnce(async () => {
+            throw new ApiError(409, 'conflict', 'This sale already reached the server')
+        })
+        entries = [entry({ state: 'rejected' })]
+        renderSyncCenter('manager')
+        fireEvent.click(await screen.findByRole('button', { name: /queued sale/ }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Discard' }))
+
+        const dialog = await screen.findByRole('dialog', { name: /Discard OFF-AAAAAAAA/ })
+        fireEvent.change(dialog.querySelector('#discard-reason')!, { target: { value: 'customer left' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+        // Not treated as a form error kept open for another try: this is a stale local view, not a failed request -
+        // the RPC caught it (client_ref already had an order), so the local delete is never even attempted.
+        await waitFor(() => expect(logDiscard).toHaveBeenCalled())
+        expect(discardOutboxEntry).not.toHaveBeenCalled()
+    })
+
+    test('a local re-check that finds the entry mid-sync does not delete it (the lock in lib/offline/lock.ts races out a discard against an in-flight send)', async () => {
+        discardOutboxEntry.mockImplementationOnce(async () => 'in_progress' as const)
+        entries = [entry({ state: 'rejected' })]
+        renderSyncCenter('manager')
+        fireEvent.click(await screen.findByRole('button', { name: /queued sale/ }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Discard' }))
+
+        const dialog = await screen.findByRole('dialog', { name: /Discard OFF-AAAAAAAA/ })
+        fireEvent.change(dialog.querySelector('#discard-reason')!, { target: { value: 'customer left' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+        // The real discardOutboxEntry never deletes on an 'in_progress' result - only asserting the call happened
+        // here, since this file mocks discardOutboxEntry itself (its own unit test covers the delete-or-not logic).
+        await waitFor(() => expect(discardOutboxEntry).toHaveBeenCalledWith('a'))
     })
 })

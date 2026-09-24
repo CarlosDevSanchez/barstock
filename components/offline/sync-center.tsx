@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react'
 import { useTranslations } from 'next-intl'
 import { PackageOpen } from 'lucide-react'
+import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import {
@@ -18,6 +19,7 @@ import { Label } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { useMoney, useSession } from '@/components/session-provider'
 import { roleAtLeast } from '@/lib/auth/roles'
+import { ApiError } from '@/lib/api/client'
 import { outboxApi } from '@/lib/api/outbox'
 import { discardOutboxEntry, listOutboxEntries, retryOutboxEntry, type OutboxEntry } from '@/lib/offline/outbox'
 
@@ -53,20 +55,32 @@ function DiscardDialog({ entry, onClose, onDiscarded }: DiscardDialogProps) {
         // Logged before the local delete: discarding forgoes money already collected offline, and the sale never
         // reached the server (there is no order to attach the record to) - this audit entry is the only trace it
         // leaves. Requires a network round trip on purpose: a discard nobody can look back on later is not safe to
-        // allow silently offline.
+        // allow silently offline. The RPC itself refuses (409) if an order already exists for this client_ref —
+        // the sale actually reached the server, so discarding it would falsely claim it never did.
         try {
             await outboxApi.logDiscard({
+                client_ref: entry.client_ref,
+                owner_user_id: entry.user_id,
                 provisional_number: entry.provisional_number,
                 expected_total: entry.expected_total,
                 payment_method: entry.payload.payment_method,
                 reason: reason.trim()
             })
-        } catch {
+        } catch (caught) {
             setSubmitting(false)
+            if (caught instanceof ApiError && caught.status === 409) {
+                toast.error(t('discardAlreadySynced'))
+                onDiscarded() // not a local failure: refresh the list, this entry is about to leave it anyway
+                return
+            }
             setError(true)
             return
         }
-        await discardOutboxEntry(entry.client_ref)
+        // Re-checked fresh under the outbox lock (lib/offline/lock.ts): the entry may have started, or finished,
+        // syncing in the moment between the click that opened this dialog and this call.
+        const result = await discardOutboxEntry(entry.client_ref)
+        if (result === 'in_progress') toast.error(t('discardInProgress'))
+        else if (result === 'already_synced') toast.error(t('discardAlreadySynced'))
         onDiscarded()
     }
 

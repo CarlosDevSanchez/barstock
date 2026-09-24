@@ -55,6 +55,24 @@ async function pinOfflineMaxHours(hours: number): Promise<() => Promise<void>> {
 
 const hoursAgo = (h: number) => new Date(Date.now() - h * 3_600_000).toISOString()
 
+async function createPromotion(opts: {
+    name?: string
+    package_price: number
+    items: Array<{ product_id: string; quantity: number }>
+}) {
+    const { data: promo, error } = await adminClient()
+        .from('promotions')
+        .insert({ name: opts.name ?? uniq('Bucket'), package_price: opts.package_price, is_active: true })
+        .select()
+        .single()
+    if (error) throw error
+    const { error: itemsError } = await adminClient()
+        .from('promotion_items')
+        .insert(opts.items.map(item => ({ promotion_id: promo.id, ...item })))
+    if (itemsError) throw itemsError
+    return promo
+}
+
 const sale = (body: unknown) => cashier.post(createSale, 'sales', { body })
 
 beforeAll(async () => {
@@ -134,6 +152,36 @@ describe('offline sales (create_sale: p_occurred_at / p_expected_total)', () => 
         expect(retry.id).toBe(online.id)
         expect(retry.source).toBe('online') // the original commit, not a second offline one
         expect(await stockOf(product.id)).toBe(4) // deducted once, not twice
+    })
+
+    test('a retry of an already-committed sale succeeds even if its customer was deactivated in the meantime: the idempotency check runs before the customer check', async () => {
+        const customer = await createCustomer()
+        const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 5 })
+        const key = crypto.randomUUID()
+        const body = {
+            payment_method: 'cash' as const,
+            customer_id: customer.id,
+            items: [{ product_id: product.id, quantity: 1 }]
+        }
+
+        const online = dataOf<Order>(
+            await cashier.post(createSale, 'sales', { body, headers: { 'Idempotency-Key': key } })
+        )
+        expect(online.source).toBe('online')
+
+        const { error } = await adminClient().from('customers').update({ is_active: false }).eq('id', customer.id)
+        if (error) throw error
+
+        // If the customer check ran before the idempotency check (the bug this guards against), this would fail
+        // with "Customer not available" instead of returning the order that already exists.
+        const retry = dataOf<Order>(
+            await cashier.post(createSale, 'sales', {
+                body: { ...body, occurred_at: hoursAgo(1), expected_total: 10 },
+                headers: { 'Idempotency-Key': key }
+            })
+        )
+        expect(retry.id).toBe(online.id)
+        expect(await stockOf(product.id)).toBe(4) // still deducted once
     })
 
     test('occurred_at older than offline_max_hours is clamped, and the clamp is recorded', async () => {
@@ -245,7 +293,7 @@ describe('offline sales (create_sale: p_occurred_at / p_expected_total)', () => 
         )
         expect(order.total).toBe(10)
         expect(order.items[0]).toMatchObject({ product_id: product.id, quantity: 1 })
-        expect(order.sync_issues).toMatchObject({ stale_pricing: true })
+        expect(order.sync_issues).toMatchObject({ stale_pricing: { products: [product.id] } })
     })
 
     test('a product that never existed is still rejected offline: nothing to fall back to', async () => {
@@ -273,7 +321,7 @@ describe('offline sales (create_sale: p_occurred_at / p_expected_total)', () => 
             })
         )
         expect(order.customer_id).toBeNull()
-        expect(order.sync_issues).toMatchObject({ customer_unavailable: true })
+        expect(order.sync_issues).toMatchObject({ customer_unavailable: { requested: customer.id } })
     })
 
     test('a discount that no longer fits the price is clamped offline instead of rejecting the sale', async () => {
@@ -287,6 +335,73 @@ describe('offline sales (create_sale: p_occurred_at / p_expected_total)', () => 
         )
         expect(order.total).toBe(0)
         expect(order.sync_issues).toMatchObject({ discount_clamped: true })
+    })
+
+    test('a discount that only exceeds the order total (not any single line) is clamped there instead', async () => {
+        // Two lines, each individually fine, but a big order-level discount pushes the total negative.
+        const productA = await createProduct({ selling_price: 10, tax_rate: 0, stock: 5 })
+        const productB = await createProduct({ selling_price: 10, tax_rate: 0, stock: 5 })
+        const order = dataOf<Order>(
+            await sale({
+                payment_method: 'cash',
+                occurred_at: hoursAgo(1),
+                discount: 25, // subtotal 20, discount 25: negative unless clamped at the order level
+                items: [
+                    { product_id: productA.id, quantity: 1 },
+                    { product_id: productB.id, quantity: 1 }
+                ]
+            })
+        )
+        expect(order.total).toBe(0)
+        expect(order.sync_issues).toMatchObject({ discount_clamped: true })
+    })
+
+    test('an inactive promotion is still sold offline, priced from its last known package price', async () => {
+        const beer = await createProduct({ name: uniq('Beer'), selling_price: 8, tax_rate: 0, stock: 10 })
+        const chips = await createProduct({ name: uniq('Chips'), selling_price: 5, tax_rate: 0, stock: 10 })
+        const promotion = await createPromotion({
+            package_price: 10,
+            items: [
+                { product_id: beer.id, quantity: 1 },
+                { product_id: chips.id, quantity: 1 }
+            ]
+        })
+        await adminClient().from('promotions').update({ is_active: false }).eq('id', promotion.id)
+
+        const order = dataOf<Order>(
+            await sale({
+                payment_method: 'cash',
+                occurred_at: hoursAgo(1),
+                items: [{ promotion_id: promotion.id, quantity: 1 }]
+            })
+        )
+        expect(order.total).toBe(10)
+        expect(order.sync_issues).toMatchObject({ stale_pricing: { promotions: [promotion.id] } })
+    })
+
+    test('an active promotion with one deactivated component is still sold, and the component is named as stale', async () => {
+        const beer = await createProduct({ name: uniq('Beer'), selling_price: 8, tax_rate: 0, stock: 10 })
+        const chips = await createProduct({ name: uniq('Chips'), selling_price: 5, tax_rate: 0, stock: 10 })
+        const promotion = await createPromotion({
+            package_price: 10,
+            items: [
+                { product_id: beer.id, quantity: 1 },
+                { product_id: chips.id, quantity: 1 }
+            ]
+        })
+        await adminClient().from('products').update({ is_active: false }).eq('id', chips.id)
+
+        const order = dataOf<Order>(
+            await sale({
+                payment_method: 'cash',
+                occurred_at: hoursAgo(1),
+                items: [{ promotion_id: promotion.id, quantity: 1 }]
+            })
+        )
+        expect(order.total).toBe(10)
+        expect(order.items).toHaveLength(2)
+        expect(order.sync_issues).toMatchObject({ stale_pricing: { products: [chips.id] } })
+        expect(order.sync_issues).not.toMatchObject({ stale_pricing: { promotions: expect.anything() } })
     })
 
     test('refunding an offline sale with a stock shortfall restores only what was actually taken, not the full line quantity', async () => {

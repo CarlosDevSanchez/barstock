@@ -59,9 +59,10 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
     }
 
     // Unsynced offline sales (F3) stay queued through a logout, but the cashier should know they are there before
-    // walking away from this device.
+    // walking away from this device. Own entries only: a different user's leftovers on a shared device are not
+    // this cashier's to know about (and the sync center itself hides them the same way — F4).
     const handleLogoutClick = async () => {
-        const pending = await pendingOutboxCount()
+        const pending = await pendingOutboxCount(user.id)
         if (pending > 0) {
             setPendingLogoutWarning(pending)
             return

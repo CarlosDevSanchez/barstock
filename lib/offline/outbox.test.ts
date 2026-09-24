@@ -12,8 +12,14 @@ void mock.module('@/lib/offline/db', () => ({
     }
 }))
 
-const { enqueueSale, listOutboxEntries, retryableOutboxEntries, pendingOutboxCount, updateOutboxEntry } =
-    await import('./outbox')
+const {
+    discardOutboxEntry,
+    enqueueSale,
+    listOutboxEntries,
+    retryableOutboxEntries,
+    pendingOutboxCount,
+    updateOutboxEntry
+} = await import('./outbox')
 
 const payload = {
     customer_id: null,
@@ -70,5 +76,39 @@ describe('outbox', () => {
 
         await updateOutboxEntry('does-not-exist', { state: 'rejected' })
         expect((await listOutboxEntries()).some(e => e.client_ref === 'does-not-exist')).toBe(false)
+    })
+
+    describe('discardOutboxEntry', () => {
+        // The one thing the sync center gets wrong if this ever regresses: a manager discarding an entry the
+        // instant it starts (or finishes) sending, silencing a sale that actually reached the server. Re-reads
+        // the entry's own state fresh rather than trusting whatever a caller (the sync-center component) last saw.
+        test('a rejected/pending/paused_auth entry is removed and reports "discarded"', async () => {
+            for (const state of ['rejected', 'pending', 'paused_auth'] as const) {
+                const entry = await enqueueSale(crypto.randomUUID(), 'user-5', payload, 10)
+                await updateOutboxEntry(entry.client_ref, { state })
+                expect(await discardOutboxEntry(entry.client_ref)).toBe('discarded')
+                expect((await listOutboxEntries()).some(e => e.client_ref === entry.client_ref)).toBe(false)
+            }
+        })
+
+        test('a syncing entry is left alone and reports "in_progress"', async () => {
+            const entry = await enqueueSale(crypto.randomUUID(), 'user-5', payload, 10)
+            await updateOutboxEntry(entry.client_ref, { state: 'syncing' })
+            expect(await discardOutboxEntry(entry.client_ref)).toBe('in_progress')
+            expect((await listOutboxEntries()).some(e => e.client_ref === entry.client_ref)).toBe(true)
+        })
+
+        test('a synced/synced_with_issues entry is left alone and reports "already_synced"', async () => {
+            for (const state of ['synced', 'synced_with_issues'] as const) {
+                const entry = await enqueueSale(crypto.randomUUID(), 'user-5', payload, 10)
+                await updateOutboxEntry(entry.client_ref, { state })
+                expect(await discardOutboxEntry(entry.client_ref)).toBe('already_synced')
+                expect((await listOutboxEntries()).some(e => e.client_ref === entry.client_ref)).toBe(true)
+            }
+        })
+
+        test('an unknown client_ref reports "not_found"', async () => {
+            expect(await discardOutboxEntry('does-not-exist')).toBe('not_found')
+        })
     })
 })

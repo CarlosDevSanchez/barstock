@@ -43,8 +43,10 @@ interface SyncIssues {
     occurred_at_clamped?: { requested: string; used: string }
     price_mismatch?: { expected: number; actual: number }
     stock_shortfall?: Array<{ product_id: string; missing: number }>
-    customer_unavailable?: boolean
-    stale_pricing?: boolean
+    /** The customer id that was requested but no longer active when this synced (kept for a manager to see who it
+     * actually was; the order itself was recorded walk-in). */
+    customer_unavailable?: { requested: string | null }
+    stale_pricing?: { products?: string[]; promotions?: string[] }
     discount_clamped?: boolean
     offline_sale?: boolean
 }
@@ -167,6 +169,8 @@ export default function OrderDetailPage() {
     const canRefund = order.status === 'completed' && canManage
     const syncIssues = parseSyncIssues(order.sync_issues)
     const productName = (productId: string) => order.items.find(item => item.product_id === productId)?.product.name
+    const promotionName = (promotionId: string) =>
+        order.items.find(item => item.promotion?.id === promotionId)?.promotion?.name
 
     return (
         <div className="space-y-6">
@@ -346,7 +350,19 @@ export default function OrderDetailPage() {
                                 </div>
                             )}
                             {syncIssues.customer_unavailable && <p className="text-sm">{t('syncIssueCustomer')}</p>}
-                            {syncIssues.stale_pricing && <p className="text-sm">{t('syncIssueStalePricing')}</p>}
+                            {syncIssues.stale_pricing && (
+                                <div className="text-sm">
+                                    <p>{t('syncIssueStalePricing')}</p>
+                                    <ul className="list-disc pl-5">
+                                        {syncIssues.stale_pricing.products?.map(id => (
+                                            <li key={id}>{productName(id) ?? id}</li>
+                                        ))}
+                                        {syncIssues.stale_pricing.promotions?.map(id => (
+                                            <li key={id}>{promotionName(id) ?? id}</li>
+                                        ))}
+                                    </ul>
+                                </div>
+                            )}
                             {syncIssues.discount_clamped && <p className="text-sm">{t('syncIssueDiscountClamped')}</p>}
                             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                                 {order.reviewed_at ? (

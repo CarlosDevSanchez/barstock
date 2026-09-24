@@ -105,9 +105,12 @@ export default function POSPage() {
     // One pending tile at a time (product, Top 5, or promo): qty is local draft until Confirm.
     const [pendingId, setPendingId] = useState<string | null>(null)
     const [pendingQty, setPendingQty] = useState(1)
-    // One key per checkout attempt: pressing "Cobrar" again before a reply arrives reuses it, so a retry cannot
-    // charge twice. A fresh attempt (dialog reopened) gets a fresh key.
-    const [checkoutKey, setCheckoutKey] = useState<string | null>(null)
+    // One key per checkout attempt: pressing "Cobrar" again before a reply arrives — including after closing and
+    // reopening the payment dialog — reuses it, so a retry can never charge twice. Tied to a signature of the cart
+    // it was generated for (below), not just "was one generated at all": fixed after an adversarial review, where
+    // closing the dialog used to null this out unconditionally, so a lost response followed by "cancel, try again"
+    // got a fresh key and could double-charge. Editing the cart (a genuinely different sale) still gets a fresh key.
+    const [checkoutAttempt, setCheckoutAttempt] = useState<{ key: string; cartSignature: string } | null>(null)
     // Last offline sale queued (F4): printable via the hidden ticket below, marked PROVISIONAL until it syncs.
     const [provisionalReceipt, setProvisionalReceipt] = useState<OrderDetail | null>(null)
     const search = useDebouncedValue(searchQuery)
@@ -331,10 +334,12 @@ export default function POSPage() {
 
     const handleCheckout = async () => {
         setProcessing(true)
-        // Generated lazily so a retry of the same attempt (checkoutKey already set) reuses it. Offline, it
-        // becomes the outbox entry's client_ref (F3): the same key either way, live or queued.
-        const key = checkoutKey ?? crypto.randomUUID()
-        if (!checkoutKey) setCheckoutKey(key)
+        // Generated lazily, and reused across a retry of the same cart (closing/reopening the payment dialog
+        // included) — but a fresh key once the cart itself changes, since that is a different sale. Offline, this
+        // key becomes the outbox entry's client_ref (F3): the same key either way, live or queued.
+        const cartSignature = JSON.stringify({ items, discount, selectedCustomer })
+        const key = checkoutAttempt?.cartSignature === cartSignature ? checkoutAttempt.key : crypto.randomUUID()
+        if (checkoutAttempt?.key !== key) setCheckoutAttempt({ key, cartSignature })
         try {
             if (!online) {
                 if (offlineWindowExpired) throw new Error('errors.offline_window_expired')
@@ -372,7 +377,7 @@ export default function POSPage() {
                 setSelectedCustomer('')
                 setShowPaymentDialog(false)
                 setShowCart(false)
-                setCheckoutKey(null)
+                setCheckoutAttempt(null)
                 return
             }
             const order = await salesApi.create(
@@ -391,7 +396,7 @@ export default function POSPage() {
             setSelectedCustomer('')
             setShowPaymentDialog(false)
             setShowCart(false)
-            setCheckoutKey(null)
+            setCheckoutAttempt(null)
             catalog.reload()
             activePromos.reload()
             setTopReloadSignal(count => count + 1)
@@ -524,11 +529,7 @@ export default function POSPage() {
                     blocked={blocked}
                     offlineWindowExpired={offlineWindowExpired}
                     showPaymentDialog={showPaymentDialog}
-                    onShowPaymentDialog={open => {
-                        setShowPaymentDialog(open)
-                        // Cancelling (or the dialog closing after success, already cleared) starts the next attempt fresh.
-                        if (!open) setCheckoutKey(null)
-                    }}
+                    onShowPaymentDialog={setShowPaymentDialog}
                     paymentMethod={paymentMethod}
                     onPaymentMethodChange={setPaymentMethod}
                     processing={processing}

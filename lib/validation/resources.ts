@@ -154,7 +154,14 @@ export const refundSchema = z.object({ reason: z.string().trim().min(3, 'validat
 // A manager's decision to discard a queued (never-synced) offline sale: logged to the audit trail, not the order
 // itself (there is none - it never reached the server). See lib/offline/outbox.ts, components/offline/sync-center.tsx.
 export const outboxDiscardSchema = z.object({
-    provisional_number: z.string().trim().min(1).max(40),
+    // The same value as the outbox entry's client_ref: lets the RPC refuse a discard for a sale that actually
+    // reached the server (an order already exists with this client_ref) instead of logging a false "never
+    // arrived" claim. See lib/offline/outbox.ts, components/offline/sync-center.tsx.
+    client_ref: z.guid(),
+    // Whoever queued the sale (may differ from the manager discarding it, on a shared device) — recorded in the
+    // audit entry so it says who actually collected the money, not just who chose to discard it.
+    owner_user_id: z.guid(),
+    provisional_number: z.string().regex(/^OFF-[0-9A-F]{8}$/, 'validation.invalid'),
     expected_total: money,
     payment_method: z.enum(PAYMENT_METHODS),
     reason: z.string().trim().min(3, 'validation.reasonRequired').max(500)

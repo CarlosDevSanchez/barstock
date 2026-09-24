@@ -34,15 +34,18 @@ export async function listAudit(
 }
 
 /**
- * A manager discarding a queued (never-synced) offline sale from the sync center: the sale never reached the
- * server, so there is no order to attach the record to - this is the only trace it leaves. RPC-gated to manager+
- * (`log_outbox_discard`, mirrors `refund_order`'s role check).
+ * A manager discarding a queued offline sale from the sync center (F4): the RPC (`log_outbox_discard`) is the one
+ * that decides whether this is safe — it refuses (BS409) if an order already exists with this `client_ref`, since
+ * that means the sale actually reached the server and discarding it would falsely claim it never did. RPC-gated to
+ * manager+, same as `refund_order`.
  */
 export async function logOutboxDiscard(supabase: AppSupabaseClient, input: OutboxDiscardInput): Promise<void> {
     const { error } = await supabase.rpc('log_outbox_discard', {
+        p_client_ref: input.client_ref,
         p_provisional_number: input.provisional_number,
         p_expected_total: input.expected_total,
         p_payment_method: input.payment_method,
+        p_owner_user_id: input.owner_user_id,
         p_reason: input.reason
     })
     assertNoError(error)

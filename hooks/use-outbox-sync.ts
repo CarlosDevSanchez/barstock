@@ -21,7 +21,7 @@ export function useOutboxSync(): OutboxSyncState {
 
     // useEffectEvent: only the work itself, so callers set state in a `.then` callback, not synchronously in an
     // effect body (mirrors hooks/use-pos-snapshot.ts).
-    const sync = useEffectEvent(() => runSync().then(pendingOutboxCount))
+    const sync = useEffectEvent(() => runSync().then(() => pendingOutboxCount()))
 
     useEffect(() => {
         let cancelled = false
@@ -58,7 +58,7 @@ export function useOutboxSync(): OutboxSyncState {
     // Not routed through `sync` (a useEffectEvent): those can only be called from an effect, not a plain handler.
     const syncNow = () => {
         runSync()
-            .then(pendingOutboxCount)
+            .then(() => pendingOutboxCount())
             .then(setPendingCount, () => {})
     }
 
