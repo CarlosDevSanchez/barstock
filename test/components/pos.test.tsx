@@ -26,7 +26,19 @@ const catalog = [mouse, cable, gone]
 
 const list = mock(async (query: Record<string, unknown>) => {
     const ids = typeof query.ids === 'string' ? query.ids.split(',') : null
-    return page(ids ? catalog.filter(item => ids.includes(item.id)) : catalog)
+    let items = ids ? catalog.filter(item => ids.includes(item.id)) : catalog
+    // Live search sends `q`; without this the online path ignores the needle and the offline-browsing
+    // assertion waits on debounce alone — on a slow CI runner that can burn the whole 5s test budget.
+    if (typeof query.q === 'string' && query.q.trim()) {
+        const needle = query.q.trim().toLowerCase()
+        items = items.filter(
+            item =>
+                item.name.toLowerCase().includes(needle) ||
+                item.sku.toLowerCase().includes(needle) ||
+                (item.barcode?.toLowerCase().includes(needle) ?? false)
+        )
+    }
+    return page(items)
 })
 const createSale = mock(async (_body: unknown, _idempotencyKey?: string) => ({
     id: 'order-1',
@@ -98,6 +110,7 @@ beforeEach(() => {
     useCartStore.getState().clearCart()
     list.mockClear()
     createSale.mockClear()
+    snapshot.mockClear()
     setOnline(true)
 })
 afterEach(cleanup)
@@ -368,8 +381,12 @@ describe('POS cart', () => {
         fireEvent.change(screen.getByPlaceholderText('Search by name, SKU, or barcode...'), {
             target: { value: 'cable' }
         })
-        // The 300ms debounce (useDebouncedValue) plus this suite's own overhead can outrun the default 1s timeout.
-        await waitFor(() => expect(screen.queryByText('Wireless Mouse')).toBeNull(), { timeout: 3000 })
+        // useDebouncedValue defaults to 300ms; wait past it once instead of polling up to 3s (that alone
+        // burned most of bun's 5s per-test budget on CI).
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 350))
+        })
+        expect(screen.queryByText('Wireless Mouse')).toBeNull()
         expect(screen.getByText('USB-C Cable')).toBeTruthy()
     })
 
