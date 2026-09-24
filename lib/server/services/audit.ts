@@ -2,7 +2,7 @@ import 'server-only'
 import { assertNoError } from '@/lib/server/errors'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import { pageRange } from '@/lib/validation/common'
-import type { AuditQuery } from '@/lib/validation/resources'
+import type { AuditQuery, OutboxDiscardInput } from '@/lib/validation/resources'
 import type { Tables } from '@/types/database'
 import type { Page } from './_shared'
 
@@ -31,4 +31,19 @@ export async function listAudit(
     const { data, count, error } = await query.range(from, to)
     assertNoError(error)
     return { rows: data, total: count ?? 0 }
+}
+
+/**
+ * A manager discarding a queued (never-synced) offline sale from the sync center: the sale never reached the
+ * server, so there is no order to attach the record to - this is the only trace it leaves. RPC-gated to manager+
+ * (`log_outbox_discard`, mirrors `refund_order`'s role check).
+ */
+export async function logOutboxDiscard(supabase: AppSupabaseClient, input: OutboxDiscardInput): Promise<void> {
+    const { error } = await supabase.rpc('log_outbox_discard', {
+        p_provisional_number: input.provisional_number,
+        p_expected_total: input.expected_total,
+        p_payment_method: input.payment_method,
+        p_reason: input.reason
+    })
+    assertNoError(error)
 }

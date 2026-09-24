@@ -54,12 +54,18 @@ anota el faltante) y una orden repetida por reintento/doble pestaña se resuelve
 sesión con ventas sin sincronizar las conserva y avisa (no las borra). Detalle completo, incluidos los estados de
 la cola y las pruebas, en F3 de [offline y sincronización](../06-roadmap/offline-y-sincronizacion.md).
 
-**Lo que el servidor hace con una venta offline (F2).** `saleSchema` acepta `occurred_at` (hora del dispositivo) y
-`expected_total` (el total provisional que mostró el POS) opcionales; `create_sale` los usa si llegan: recalcula
-precio/impuestos como siempre (nunca confía en `expected_total`, solo anota la diferencia), ajusta `occurred_at` a
-la ventana `settings.offline_max_hours` (recortándolo si se pasa) y, si `occurred_at` no es nulo, **nunca rechaza
-por falta de stock** — descuenta lo que haya (hasta 0) y anota el faltante. Cualquier diferencia queda en
-`orders.sync_issues` (`occurred_at_clamped`/`price_mismatch`/`stock_shortfall`).
+**Lo que el servidor hace con una venta offline (F2, endurecido en la revisión adversarial de F4).** `saleSchema`
+acepta `occurred_at` (hora del dispositivo) y `expected_total` (el total provisional que mostró el POS) opcionales;
+`create_sale` los usa si llegan: recalcula precio/impuestos como siempre (nunca confía en `expected_total`, solo
+anota la diferencia), ajusta `occurred_at` a la ventana `settings.offline_max_hours` (recortándolo si se pasa) y, si
+`occurred_at` no es nulo, **nunca rechaza la venta** por falta de stock, cliente/producto/promoción desactivados
+mientras la caja estaba offline, o un descuento que ya no cabe tras recalcular — descuenta lo que haya (hasta 0),
+registra la venta de mostrador o precia con el último valor conocido, o recorta el descuento, según el caso.
+Cualquier diferencia queda en `orders.sync_issues`, que **siempre** incluye `offline_sale: true` para que un
+gerente revise al menos una vez cada venta offline, incluso sin otra incidencia. Detalle completo, incluidos los
+tres hallazgos altos corregidos (idempotencia tras un intento online perdido, visibilidad/auditoría al descartar en
+el centro de sincronización, y estos rechazos que ya no ocurren), en
+[offline y sincronización §3.1](../06-roadmap/offline-y-sincronizacion.md).
 
 **Ticket provisional y centro de sincronización (F4).** El ticket impreso desde el toast de checkout offline
 (`lib/receipt-preview.ts`, `buildProvisionalOrder`) muestra un sello "PROVISIONAL — pending sync" hasta que la

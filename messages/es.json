@@ -142,6 +142,7 @@
     "discardDescription": "Esto quita la venta en cola de este dispositivo para siempre. Nunca llegó al servidor, así que no hay nada que deshacer ahí — si el dinero ya se cobró, regístrala de nuevo.",
     "discardReasonLabel": "Motivo",
     "discardReasonPlaceholder": "Por qué esta venta no debe enviarse",
+    "discardLogFailed": "No se pudo registrar. Comprueba la conexión e inténtalo de nuevo — descartar siempre debe quedar registrado.",
     "state": {
       "pending": "Esperando sincronizar",
       "syncing": "Sincronizando…",
@@ -505,6 +506,9 @@
     "syncIssuePriceMismatch": "El total que mostró el dispositivo ({expected}) difería del calculado por el servidor ({actual}); se cobró el del servidor.",
     "syncIssueStockShortfall": "Se vendió más de lo que había en stock en ese momento:",
     "syncIssueStockShortfallLine": "{name}: faltaron {missing}",
+    "syncIssueCustomer": "El cliente seleccionado ya no estaba activo al sincronizar; se registró como venta de mostrador.",
+    "syncIssueStalePricing": "Un producto o promoción de esta orden estaba inactivo al sincronizar; se usó su último precio conocido.",
+    "syncIssueDiscountClamped": "El descuento ya no cabía en el precio recalculado y se recortó para evitar un total negativo.",
     "markReviewed": "Marcar revisada",
     "reviewing": "Marcando revisada…",
     "reviewedOn": "Revisada el {date}",
@@ -715,7 +719,8 @@
       "login_failed": "Inicio de sesión fallido",
       "logout": "Cierre de sesión",
       "invite": "Invitó a un usuario",
-      "password_reset": "Restableció la contraseña"
+      "password_reset": "Restableció la contraseña",
+      "discard": "Descartó una venta offline en cola"
     }
   },
   "tabs": {

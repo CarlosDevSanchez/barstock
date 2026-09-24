@@ -151,6 +151,14 @@ export const saleSchema = z.object({
     expected_total: money.optional()
 })
 export const refundSchema = z.object({ reason: z.string().trim().min(3, 'validation.reasonRequired').max(500) })
+// A manager's decision to discard a queued (never-synced) offline sale: logged to the audit trail, not the order
+// itself (there is none - it never reached the server). See lib/offline/outbox.ts, components/offline/sync-center.tsx.
+export const outboxDiscardSchema = z.object({
+    provisional_number: z.string().trim().min(1).max(40),
+    expected_total: money,
+    payment_method: z.enum(PAYMENT_METHODS),
+    reason: z.string().trim().min(3, 'validation.reasonRequired').max(500)
+})
 
 // ---- Users (admin only)
 export const inviteUserSchema = z.object({
@@ -244,7 +252,8 @@ export const AUDIT_ACTIONS = [
     'login_failed',
     'logout',
     'invite',
-    'password_reset'
+    'password_reset',
+    'discard'
 ] as const
 export const auditQuerySchema = paginationSchema.omit({ q: true }).extend({
     actor_id: optionalUuid,
@@ -267,6 +276,7 @@ export type CustomerUpdate = z.output<typeof customerUpdateSchema>
 export type SupplierCreate = z.output<typeof supplierCreateSchema>
 export type SupplierUpdate = z.output<typeof supplierUpdateSchema>
 export type SaleInput = z.output<typeof saleSchema>
+export type OutboxDiscardInput = z.output<typeof outboxDiscardSchema>
 export type InviteUserInput = z.output<typeof inviteUserSchema>
 export type UpdateUserInput = z.output<typeof updateUserSchema>
 export type ProductsQuery = z.output<typeof productsQuerySchema>

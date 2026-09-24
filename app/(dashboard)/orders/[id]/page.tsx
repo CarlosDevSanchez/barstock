@@ -37,11 +37,16 @@ import { refundSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 
 /** Shape `create_sale` writes to `orders.sync_issues` (F2/F4, docs/06-roadmap/offline-y-sincronizacion.md). Every
- * field is optional: only the differences that actually happened are present. */
+ * field is optional: only the differences that actually happened are present. `offline_sale` is always present on
+ * an offline order (a mandatory review flag, even with nothing else off — see the migration for why). */
 interface SyncIssues {
     occurred_at_clamped?: { requested: string; used: string }
     price_mismatch?: { expected: number; actual: number }
     stock_shortfall?: Array<{ product_id: string; missing: number }>
+    customer_unavailable?: boolean
+    stale_pricing?: boolean
+    discount_clamped?: boolean
+    offline_sale?: boolean
 }
 
 function parseSyncIssues(value: OrderDetail['sync_issues']): SyncIssues | null {
@@ -340,6 +345,9 @@ export default function OrderDetailPage() {
                                     </ul>
                                 </div>
                             )}
+                            {syncIssues.customer_unavailable && <p className="text-sm">{t('syncIssueCustomer')}</p>}
+                            {syncIssues.stale_pricing && <p className="text-sm">{t('syncIssueStalePricing')}</p>}
+                            {syncIssues.discount_clamped && <p className="text-sm">{t('syncIssueDiscountClamped')}</p>}
                             <div className="flex flex-wrap items-center justify-between gap-3 pt-1">
                                 {order.reviewed_at ? (
                                     <p className="text-sm text-muted-foreground">

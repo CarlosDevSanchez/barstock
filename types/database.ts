@@ -311,6 +311,7 @@ export type Database = {
           product_id: string
           promotion_id: string | null
           quantity: number
+          stock_taken: number | null
           tax: number
           tax_rate: number | null
           total: number
@@ -325,6 +326,7 @@ export type Database = {
           product_id: string
           promotion_id?: string | null
           quantity: number
+          stock_taken?: number | null
           tax?: number
           tax_rate?: number | null
           total: number
@@ -339,6 +341,7 @@ export type Database = {
           product_id?: string
           promotion_id?: string | null
           quantity?: number
+          stock_taken?: number | null
           tax?: number
           tax_rate?: number | null
           total?: number
@@ -1164,6 +1167,15 @@ export type Database = {
       }
       log_auth_event: {
         Args: { p_action: string; p_metadata?: Json }
+        Returns: undefined
+      }
+      log_outbox_discard: {
+        Args: {
+          p_expected_total: number
+          p_payment_method: string
+          p_provisional_number: string
+          p_reason: string
+        }
         Returns: undefined
       }
       mark_order_reviewed: { Args: { p_order_id: string }; Returns: undefined }

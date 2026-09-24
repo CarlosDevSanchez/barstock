@@ -41,7 +41,10 @@ Botón **Refund** (solo si la orden está `completed` y el rol es gerente+) → 
 2. **Idempotente**: si ya está `refunded`, no hace nada y responde 200 (un reintento tras un corte de red no repone dos veces).
 3. Solo reembolsa `completed`; otros estados → 422.
 4. Marca `refunded`, `refunded_at`, `refunded_by`, `refund_reason`.
-5. Repone el stock de **cada línea** y registra un movimiento `return` con el motivo.
+5. Repone el stock de **cada línea** (`coalesce(order_items.stock_taken, quantity)` — una venta offline con
+   `stock_shortfall` solo repone lo que de verdad se descontó, nunca la cantidad completa de la línea; las filas
+   anteriores a la migración `20260930000001_offline_hardening.sql` no tienen `stock_taken` y siguen usando
+   `quantity`, igual que antes) y registra un movimiento `return` con el motivo.
 6. El trigger de clientes recalcula `total_spent` y `loyalty_points` (el reembolso los resta).
 
 Verificado, incluido **30 rondas × 8 reembolsos simultáneos** (sin el `FOR UPDATE` la prueba falla con stock duplicado).

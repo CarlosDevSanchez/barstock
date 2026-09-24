@@ -142,6 +142,7 @@
     "discardDescription": "This removes the queued sale from this device for good. It was never sent to the server, so there is nothing to undo there — if the money was already collected, ring it up again.",
     "discardReasonLabel": "Reason",
     "discardReasonPlaceholder": "Why this sale should not be sent",
+    "discardLogFailed": "Could not record this. Check the connection and try again — a discard always needs to be logged.",
     "state": {
       "pending": "Waiting to sync",
       "syncing": "Syncing…",
@@ -505,6 +506,9 @@
     "syncIssuePriceMismatch": "The total shown on the device ({expected}) differed from the server's ({actual}); the server's total is what was charged.",
     "syncIssueStockShortfall": "Sold more than was in stock at the time:",
     "syncIssueStockShortfallLine": "{name}: {missing} short",
+    "syncIssueCustomer": "The selected customer was no longer active when this synced; recorded as walk-in.",
+    "syncIssueStalePricing": "A product or promotion on this order was inactive when this synced; priced from its last known value.",
+    "syncIssueDiscountClamped": "The discount no longer fit the recalculated price and was capped to avoid a negative total.",
     "markReviewed": "Mark reviewed",
     "reviewing": "Marking reviewed…",
     "reviewedOn": "Reviewed on {date}",
@@ -715,7 +719,8 @@
       "login_failed": "Failed sign-in",
       "logout": "Signed out",
       "invite": "Invited a user",
-      "password_reset": "Reset password"
+      "password_reset": "Reset password",
+      "discard": "Discarded a queued offline sale"
     }
   },
   "tabs": {

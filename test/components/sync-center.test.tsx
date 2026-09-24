@@ -11,6 +11,9 @@ let entries: Array<{
     state: string
     expected_total: number
     last_error?: string
+    user_id: string
+    created_at: string
+    payload: { payment_method: string }
 }> = []
 
 const listOutboxEntries = mock(async () => entries)
@@ -20,26 +23,43 @@ const retryOutboxEntry = mock(async (clientRef: string) => {
 const discardOutboxEntry = mock(async (clientRef: string) => {
     entries = entries.filter(entry => entry.client_ref !== clientRef)
 })
+const logDiscard = mock(async () => {})
 
 void mock.module('@/lib/offline/outbox', () => ({ listOutboxEntries, retryOutboxEntry, discardOutboxEntry }))
+void mock.module('@/lib/api/outbox', () => ({ outboxApi: { logDiscard } }))
 
 const { SyncCenter } = await import('@/components/offline/sync-center')
 const { SessionProvider } = await import('@/components/session-provider')
 
-const renderSyncCenter = (pendingCount = 0, onSyncNow = () => {}) =>
+const cashier = userWithRole('cashier')
+const manager = userWithRole('manager')
+
+const renderSyncCenter = (role: 'cashier' | 'manager' = 'cashier', pendingCount = 0, onSyncNow = () => {}) =>
     render(
         <IntlProvider>
-            <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
+            <SessionProvider value={{ user: role === 'manager' ? manager : cashier, settings }}>
                 <SyncCenter pendingCount={pendingCount} onSyncNow={onSyncNow} />
             </SessionProvider>
         </IntlProvider>
     )
+
+const entry = (overrides: Partial<(typeof entries)[number]> = {}): (typeof entries)[number] => ({
+    client_ref: 'a',
+    provisional_number: 'OFF-AAAAAAAA',
+    state: 'pending',
+    expected_total: 10,
+    user_id: cashier.id,
+    created_at: '2026-09-24T10:00:00Z',
+    payload: { payment_method: 'cash' },
+    ...overrides
+})
 
 beforeEach(() => {
     entries = []
     listOutboxEntries.mockClear()
     retryOutboxEntry.mockClear()
     discardOutboxEntry.mockClear()
+    logDiscard.mockClear()
 })
 afterEach(cleanup)
 
@@ -51,14 +71,14 @@ describe('SyncCenter', () => {
     })
 
     test('a synced entry does not count: still hidden', async () => {
-        entries = [{ client_ref: 'a', provisional_number: 'OFF-AAAAAAAA', state: 'synced', expected_total: 10 }]
+        entries = [entry({ state: 'synced' })]
         renderSyncCenter()
         await waitFor(() => expect(listOutboxEntries).toHaveBeenCalled())
         expect(screen.queryByRole('button', { name: /queued sale/ })).toBeNull()
     })
 
     test('shows the button with a count, and opens the sheet with the entry', async () => {
-        entries = [{ client_ref: 'a', provisional_number: 'OFF-AAAAAAAA', state: 'pending', expected_total: 12.5 }]
+        entries = [entry({ expected_total: 12.5 })]
         renderSyncCenter()
         const button = await screen.findByRole('button', { name: '1 queued sale' })
         fireEvent.click(button)
@@ -67,17 +87,9 @@ describe('SyncCenter', () => {
     })
 
     test('retry calls retryOutboxEntry and the sync trigger for a rejected entry', async () => {
-        entries = [
-            {
-                client_ref: 'a',
-                provisional_number: 'OFF-AAAAAAAA',
-                state: 'rejected',
-                expected_total: 10,
-                last_error: 'Product not available'
-            }
-        ]
+        entries = [entry({ state: 'rejected', last_error: 'Product not available' })]
         const onSyncNow = mock(() => {})
-        renderSyncCenter(0, onSyncNow)
+        renderSyncCenter('cashier', 0, onSyncNow)
         fireEvent.click(await screen.findByRole('button', { name: /queued sale/ }))
         expect(screen.getByText('Product not available')).toBeTruthy()
         fireEvent.click(screen.getByRole('button', { name: 'Retry' }))
@@ -86,16 +98,50 @@ describe('SyncCenter', () => {
     })
 
     test('a pending entry has no retry button (nothing to retry yet)', async () => {
-        entries = [{ client_ref: 'a', provisional_number: 'OFF-AAAAAAAA', state: 'pending', expected_total: 10 }]
+        entries = [entry()]
         renderSyncCenter()
         fireEvent.click(await screen.findByRole('button', { name: /queued sale/ }))
         await screen.findByText('OFF-AAAAAAAA')
         expect(screen.queryByRole('button', { name: 'Retry' })).toBeNull()
     })
 
-    test('discard requires a reason, then removes the entry from the list', async () => {
-        entries = [{ client_ref: 'a', provisional_number: 'OFF-AAAAAAAA', state: 'rejected', expected_total: 10 }]
-        renderSyncCenter()
+    test('a cashier only sees their own queue on a shared device', async () => {
+        entries = [
+            entry({ client_ref: 'mine', user_id: cashier.id }),
+            entry({ client_ref: 'theirs', user_id: 'user-other' })
+        ]
+        renderSyncCenter('cashier')
+        expect(await screen.findByRole('button', { name: '1 queued sale' })).toBeTruthy()
+    })
+
+    test('a manager sees every queued sale on the device, not just their own', async () => {
+        entries = [
+            entry({ client_ref: 'mine', user_id: manager.id }),
+            entry({ client_ref: 'theirs', user_id: 'user-other' })
+        ]
+        renderSyncCenter('manager')
+        expect(await screen.findByRole('button', { name: '2 queued sales' })).toBeTruthy()
+    })
+
+    test('a cashier has no discard button (manager-only, RPC-gated)', async () => {
+        entries = [entry({ state: 'rejected' })]
+        renderSyncCenter('cashier')
+        fireEvent.click(await screen.findByRole('button', { name: /queued sale/ }))
+        await screen.findByText('OFF-AAAAAAAA')
+        expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
+    })
+
+    test('a syncing entry has no discard button, even for a manager (avoids racing an in-flight send)', async () => {
+        entries = [entry({ state: 'syncing' })]
+        renderSyncCenter('manager')
+        fireEvent.click(await screen.findByRole('button', { name: /queued sale/ }))
+        await screen.findByText('OFF-AAAAAAAA')
+        expect(screen.queryByRole('button', { name: 'Discard' })).toBeNull()
+    })
+
+    test('a manager discarding logs it first, then removes the entry from the list', async () => {
+        entries = [entry({ state: 'rejected' })]
+        renderSyncCenter('manager')
         fireEvent.click(await screen.findByRole('button', { name: /queued sale/ }))
         fireEvent.click(await screen.findByRole('button', { name: 'Discard' }))
 
@@ -107,7 +153,34 @@ describe('SyncCenter', () => {
         expect((confirmButton() as HTMLButtonElement).disabled).toBe(false)
         fireEvent.click(confirmButton())
 
+        await waitFor(() =>
+            expect(logDiscard).toHaveBeenCalledWith({
+                provisional_number: 'OFF-AAAAAAAA',
+                expected_total: 10,
+                payment_method: 'cash',
+                reason: 'customer left'
+            })
+        )
         await waitFor(() => expect(discardOutboxEntry).toHaveBeenCalledWith('a'))
         await waitFor(() => expect(screen.queryByText('OFF-AAAAAAAA')).toBeNull())
+    })
+
+    test('a failed audit log call blocks the discard: the entry stays, nothing local is deleted', async () => {
+        logDiscard.mockImplementationOnce(async () => {
+            throw new Error('network error')
+        })
+        entries = [entry({ state: 'rejected' })]
+        renderSyncCenter('manager')
+        fireEvent.click(await screen.findByRole('button', { name: /queued sale/ }))
+        fireEvent.click(await screen.findByRole('button', { name: 'Discard' }))
+
+        const dialog = await screen.findByRole('dialog', { name: /Discard OFF-AAAAAAAA/ })
+        fireEvent.change(dialog.querySelector('#discard-reason')!, { target: { value: 'customer left' } })
+        fireEvent.click(screen.getByRole('button', { name: 'Discard' }))
+
+        await screen.findByText(
+            'Could not record this. Check the connection and try again — a discard always needs to be logged.'
+        )
+        expect(discardOutboxEntry).not.toHaveBeenCalled()
     })
 })

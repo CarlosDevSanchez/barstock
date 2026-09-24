@@ -58,8 +58,9 @@ Ver [PWA y modo offline](../01-arquitectura/09-pwa-offline.md) y [pos-checkout](
 
 ## 3. Servidor: recibir una venta offline — ✅ Implementada
 
-`create_sale` acepta `p_occurred_at`/`p_expected_total` (ambos opcionales; migración `20260928000001_offline_sales.sql`).
-Sin ellos el comportamiento es exactamente el de antes (venta online). Con `p_occurred_at`:
+`create_sale` acepta `p_occurred_at`/`p_expected_total` (ambos opcionales; migración `20260928000001_offline_sales.sql`,
+endurecida en `20260930000001_offline_hardening.sql` tras una revisión adversarial — ver §3.1). Sin ellos el
+comportamiento es exactamente el de antes (venta online). Con `p_occurred_at`:
 
 - **Ventana:** se recorta a `[now() − settings.offline_max_hours, now()]` (defecto 12 h, solo admin); si se recorta,
   `orders.sync_issues.occurred_at_clamped` guarda lo pedido y lo usado.
@@ -68,8 +69,16 @@ Sin ellos el comportamiento es exactamente el de antes (venta online). Con `p_oc
   siempre el total del servidor.
 - **Stock:** con `p_occurred_at` no nulo, la venta **nunca se rechaza por falta de stock** (a diferencia del camino
   online, que sigue rechazando igual que siempre): descuenta lo que haya hasta 0 (el `CHECK ≥ 0` se mantiene) y anota
-  `orders.sync_issues.stock_shortfall: [{product_id, missing}]`. Un producto/promoción inactivo o borrado sigue
-  rechazando la venta entera (no hay precio con qué calcular) — mismo mensaje que en el camino online.
+  `orders.sync_issues.stock_shortfall: [{product_id, missing}]`.
+- **Cliente, producto o promoción desactivados mientras la caja estaba offline** ya no rechazan la venta (el dinero
+  ya cambió de manos): el cliente se registra como venta de mostrador (`sync_issues.customer_unavailable`) y el
+  producto/promoción se precia con su **último valor conocido** (`sync_issues.stale_pricing`) — productos y
+  promociones son de baja lógica únicamente (`deleted_at`, nunca `DELETE`), así la fila con su precio siempre existe.
+  Solo un `product_id`/`promotion_id` que nunca existió sigue rechazando la venta entera (no hay fila de la que
+  partir) — mismo mensaje que en el camino online.
+- **Descuento que ya no cabe** (el precio bajó mientras la caja estaba offline, y el descuento aplicado en el
+  momento de la venta supera la línea o el total recalculado): se recorta en vez de rechazar la venta
+  (`sync_issues.discount_clamped`).
 - **`orders.client_ref`** guarda la misma clave que la idempotencia (§1), para que el dispositivo pueda enlazar su
   ticket provisional con la orden ya sincronizada.
 - Reportes (`dashboard_summary`, `sales_report`, `top_selling_products`) agrupan/filtran por
@@ -78,9 +87,49 @@ Sin ellos el comportamiento es exactamente el de antes (venta online). Con `p_oc
 - API: `saleSchema` acepta `occurred_at`/`expected_total`; `lib/server/services/sales.ts` los pasa a la RPC. Desde F3
   el POS los manda de verdad, vía la cola (§4). Ver [pos-checkout](../03-modulos/pos-checkout.md).
 
-Pruebas: `test/integration/offline-sales.test.ts` (ventana, recorte, `price_mismatch`, `stock_shortfall`, producto
-inactivo, `client_ref`, agrupación de reportes) y `test/integration/admin.test.ts` (`offline_max_hours`: validación,
-solo-admin, defecto).
+Pruebas: `test/integration/offline-sales.test.ts` (ventana, recorte, `price_mismatch`, `stock_shortfall`, cliente
+desactivado, producto/promoción inactivos, descuento recortado, idempotencia tras un intento online perdido,
+`client_ref`, agrupación de reportes, reembolso con `stock_taken`) y `test/integration/admin.test.ts`
+(`offline_max_hours`: validación, solo-admin, defecto).
+
+### 3.1 Endurecimiento tras revisión adversarial (2026-09-24, migración `20260930000001_offline_hardening.sql`)
+
+Una ronda de revisión adversarial (Opus 5.5) sobre F0-F4 encontró tres problemas altos y tres medios, todos
+corregidos en esta migración:
+
+1. **Doble cobro si se pierde la respuesta online.** El hash de idempotencia incluía `occurred_at`/`expected_total`:
+   una venta que hizo `COMMIT` online pero cuya respuesta se perdió, reencolada offline con la misma
+   `Idempotency-Key`, generaba un hash distinto (ahora sí llevaba `occurred_at`) → `BS409` para siempre, y la UI
+   invitaba a "volver a registrarla" → venta duplicada. **Corregido:** el hash ya no incluye `occurred_at`/
+   `expected_total` (pueden diferir legítimamente entre el intento perdido y su reenvío offline de la misma venta),
+   y la comprobación de idempotencia corre **antes** que cualquier validación dependiente de estado (cliente,
+   producto), así un reintento de una venta ya cobrada nunca falla por algo que cambió después de cobrarla.
+2. **Descartar en el centro de sincronización sin rastro.** Cualquiera en el dispositivo podía descartar, sin dejar
+   registro, ventas en cola de otro cajero (incluso mientras se estaban enviando) — una vía de robo de caja
+   invisible en una caja compartida. **Corregido:** la lista del centro de sincronización solo muestra las propias
+   entradas de un cajero (un gerente ve todas, ya que es quien puede actuar); "Descartar" solo lo puede hacer
+   gerente+ (mismo nivel que `refund_order`), nunca sobre una entrada `syncing`, y queda registrado en la auditoría
+   **antes** de borrarse localmente (`log_outbox_discard`, §9.2) — exige red a propósito: un descarte que nadie
+   pueda revisar después no es seguro permitirlo en silencio sin conexión.
+3. **`create_sale` rechazaba varias rutas que F2 prometía nunca rechazar** (cliente desactivado, producto/promoción
+   inactivos, descuento que ya no cabe): una entrada quedaba `rejected` para siempre sin salida real. Corregido
+   arriba (§3): venta de mostrador, precio de último valor conocido, descuento recortado.
+4. **Todo pedido offline queda marcado para revisión** (`sync_issues.offline_sale: true`), incluso sin ninguna otra
+   incidencia: `occurred_at` es un parámetro que el cliente controla y es alcanzable desde el `POST /sales` normal
+   (no solo desde la cola offline real), así que es la única forma de garantizar que un gerente mire, al menos una
+   vez, cada venta que usó la indulgencia offline (nunca rechazar por stock, solo anotar diferencia de precio). Esto
+   cambia la promesa original del documento ("una venta offline sin incidencias no necesita revisión") — decisión
+   de seguridad deliberada, no un descuido; ver D16 en [decisiones-pendientes](decisiones-pendientes.md).
+5. **Un reembolso reponía más stock del que realmente se descontó.** Una venta offline con `stock_shortfall` solo
+   descuenta lo que había (`v_taken`), pero `refund_order` reponía la cantidad completa de la línea, fabricando
+   stock que nunca existió. Corregido con `order_items.stock_taken` (nuevo, nulo en filas anteriores a esta
+   migración — `refund_order` usa `coalesce(stock_taken, quantity)` para ellas, mismo comportamiento que antes).
+
+No corregido en esta pasada, documentado como límite aceptado: el bloqueo de `orders` que provocaría aplicar
+`20260928000001_offline_sales.sql` (índice único + `CHECK` en el mismo `ALTER`) contra una base con datos reales —
+la tabla no tiene datos de producción todavía (§1 de `AGENTS.md`); el crecimiento sin retención de `idempotency_keys`
+(§1); y una ventana estrecha donde un cambio de sesión a mitad de una tanda de sincronización podría atribuir una
+venta al usuario que entró después, en vez de a quien la cobró.
 
 ## 4. Outbox y motor de sincronización — ✅ Implementada
 
@@ -169,16 +218,18 @@ llegan a `changes` sin trabajo aparte, ya que son columnas normales de `orders`.
   (`listOutboxEntries`, `lib/offline/outbox.ts`): número provisional, estado, total esperado, y el último error si
   lo hay.
 - Acciones por entrada: "Retry" (`retryOutboxEntry`, solo para `rejected`/`paused_auth` — vuelve a `pending` sin
-  arrastrar el backoff) y "Discard" (`discardOutboxEntry`, con un `ConfirmDialog` que exige un motivo de al menos 3
-  caracteres antes de habilitar el botón; el motivo no se guarda en ningún lado — no hay orden con la que asociarlo,
-  ver §4). Ambas disparan el evento `barstock:outbox-changed` (§5) para que el contador se actualice al instante.
+  arrastrar el backoff) y "Discard" (§9.2). Ambas disparan el evento `barstock:outbox-changed` (§5) para que el
+  contador se actualice al instante.
+- **Visibilidad por rol (§3.1, hallazgo 2):** un cajero solo ve las entradas de la cola que él mismo encoló
+  (`entry.user_id === user.id`); un gerente+ ve todas las del dispositivo, ya que es el único que puede actuar sobre
+  ellas ("Discard").
 - El ticket impreso muestra "PROVISIONAL — pending sync" mientras la venta no tiene `order_number` real
   (`ReceiptTicketProps.provisional`, `components/orders/receipt-ticket.tsx`); el toast de checkout offline incluye
   un botón "Print ticket" que imprime esa vista provisional (`lib/receipt-preview.ts` construye la orden a partir
   del carrito, sin tocar el servidor).
 - Filtro "con incidencias de sincronización" en `/orders` (`?needs_review=true` → `sync_issues is not null and
   reviewed_at is null`, solo visible para gerente+) y la acción "Mark reviewed" en el detalle de la orden
-  (`app/(dashboard)/orders/[id]/page.tsx`), que llama a la nueva RPC `mark_order_reviewed` (§3.1) vía
+  (`app/(dashboard)/orders/[id]/page.tsx`), que llama a la RPC `mark_order_reviewed` (§9.1) vía
   `PATCH /api/v1/orders/[id]/review` — necesaria porque los privilegios de tabla de `orders` están revocados y toda
   escritura pasa por una RPC `SECURITY DEFINER` (regla dura 1).
 
@@ -188,6 +239,17 @@ Migración `20260929000001_order_review.sql`. Gerente+; recibe `p_order_id`, blo
 `P0002` si no existe la orden o un error genérico si `sync_issues` es `null` (no tiene sentido revisar una orden sin
 incidencias), y si no, actualiza `reviewed_by`/`reviewed_at`. Es **intencionalmente idempotente** — volver a marcar
 una orden ya revisada solo refresca quién y cuándo, igual que `refund_order` — no un descuido.
+
+### 9.2 Descartar una entrada de la cola: gerente+, con auditoría (§3.1, hallazgo 2)
+
+"Discard" (`components/offline/sync-center.tsx`, `DiscardDialog`) solo aparece para gerente+ y nunca sobre una
+entrada `syncing` (evita competir con un envío en curso). Requiere un motivo de al menos 3 caracteres y, antes de
+borrar nada localmente, llama a `PATCH /api/v1/outbox/discard-log` → RPC `log_outbox_discard`
+(`20260930000001_offline_hardening.sql`; gerente+, mismo nivel que `refund_order`), que escribe una fila en
+`audit_log` (`action = 'discard'`, `entity = 'outbox'`, `entity_id` = el número provisional — no hay orden real con
+la que asociarlo, la venta nunca llegó al servidor) con el total esperado, el método de pago y el motivo. Si esa
+llamada falla (sin red, por ejemplo), el descarte se cancela y la entrada sigue en la cola — un descarte sin rastro
+en ningún lado no es seguro permitirlo. Recién entonces `discardOutboxEntry` borra la entrada de IndexedDB.
 
 ## 10. Decisiones de negocio
 
@@ -206,8 +268,9 @@ una orden ya revisada solo refresca quién y cuándo, igual que `refund_order` �
 
 - Concurrencia e idempotencia de `create_sale`: la misma clave enviada dos veces **a la vez** produce un solo
   efecto — `test/integration/sales.test.ts` (en paralelo, con payload distinto, tras un fallo, sin clave).
-- Ventas offline (ventana, recorte, `price_mismatch`, `stock_shortfall`, producto inactivo, `client_ref`,
-  agrupación de reportes por `occurred_at`): `test/integration/offline-sales.test.ts`.
+- Ventas offline (ventana, recorte, `price_mismatch`, `stock_shortfall`, cliente desactivado, producto/promoción
+  inactivos, descuento recortado, idempotencia tras un intento online perdido, `client_ref`, agrupación de reportes
+  por `occurred_at`, reembolso con `stock_taken`): `test/integration/offline-sales.test.ts`.
 - `offline_max_hours` (validación, solo-admin, defecto): `test/integration/admin.test.ts`.
 - Outbox (estados, filtrado FIFO, conteo, `client_ref` idempotente): `lib/offline/outbox.test.ts`.
 - Motor de sincronización (éxito, `sync_issues` → `synced_with_issues`, 401 → `paused_auth` y corta la cola, 4xx →
@@ -218,7 +281,8 @@ una orden ya revisada solo refresca quién y cuándo, igual que `refund_order` �
 - Checkout offline en el POS (cola en vez de red, botón bloqueado si expiró la ventana): `test/components/pos.test.tsx`.
 - Ticket provisional (`buildProvisionalOrder`: línea simple, expansión de promoción, línea sin resolver, cliente/
   cajero, un solo pago): `lib/receipt-preview.test.ts`; sello "PROVISIONAL" en el ticket: `test/components/receipt-ticket.test.tsx`.
-- Centro de sincronización (oculto sin nada pendiente, contador y lista, retry, discard con motivo obligatorio):
+- Centro de sincronización (oculto sin nada pendiente, contador y lista, retry, visibilidad por rol en un
+  dispositivo compartido, discard gerente+ con auditoría obligatoria y bloqueado si falla el registro):
   `test/components/sync-center.test.tsx`.
 - Revisión de gerente (`mark_order_reviewed`: solo gerente+, error sin `sync_issues`, idempotente, filtro
   `needs_review`): `test/integration/offline-sales.test.ts`.

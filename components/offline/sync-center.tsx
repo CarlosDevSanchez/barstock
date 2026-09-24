@@ -16,7 +16,9 @@ import {
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { useMoney } from '@/components/session-provider'
+import { useMoney, useSession } from '@/components/session-provider'
+import { roleAtLeast } from '@/lib/auth/roles'
+import { outboxApi } from '@/lib/api/outbox'
 import { discardOutboxEntry, listOutboxEntries, retryOutboxEntry, type OutboxEntry } from '@/lib/offline/outbox'
 
 /** Needs the cashier's attention one way or another; `synced`/`synced_with_issues` are done and drop off the list. */
@@ -42,10 +44,28 @@ function DiscardDialog({ entry, onClose, onDiscarded }: DiscardDialogProps) {
     const tc = useTranslations('common')
     const [reason, setReason] = useState('')
     const [submitting, setSubmitting] = useState(false)
+    const [error, setError] = useState(false)
     const canSubmit = reason.trim().length >= 3
 
     const handleDiscard = async () => {
         setSubmitting(true)
+        setError(false)
+        // Logged before the local delete: discarding forgoes money already collected offline, and the sale never
+        // reached the server (there is no order to attach the record to) - this audit entry is the only trace it
+        // leaves. Requires a network round trip on purpose: a discard nobody can look back on later is not safe to
+        // allow silently offline.
+        try {
+            await outboxApi.logDiscard({
+                provisional_number: entry.provisional_number,
+                expected_total: entry.expected_total,
+                payment_method: entry.payload.payment_method,
+                reason: reason.trim()
+            })
+        } catch {
+            setSubmitting(false)
+            setError(true)
+            return
+        }
         await discardOutboxEntry(entry.client_ref)
         onDiscarded()
     }
@@ -66,6 +86,7 @@ function DiscardDialog({ entry, onClose, onDiscarded }: DiscardDialogProps) {
                         placeholder={t('discardReasonPlaceholder')}
                         autoFocus
                     />
+                    {error && <p className="text-xs text-destructive">{t('discardLogFailed')}</p>}
                 </div>
                 <DialogFooter>
                     <Button type="button" variant="outline" disabled={submitting} onClick={onClose}>
@@ -93,12 +114,16 @@ interface SyncCenterProps {
 
 /**
  * Header button + Sheet listing the offline sale queue (F4): a provisional ticket per entry, its state, and
- * "retry"/"discard" for the ones that need a human. `synced`/`synced_with_issues` entries are done and are not
- * shown here — see the order itself (and, for issues, the manager review filter in /orders).
+ * "retry" for the ones that need it. `synced`/`synced_with_issues` entries are done and are not shown here — see
+ * the order itself (and, for issues, the manager review filter in /orders). A cashier only sees their own queue; a
+ * manager sees everyone's on the device and is the only one who can "discard" one (an audit-logged, RPC-gated
+ * decision that forgoes money already collected offline — see log_outbox_discard).
  */
 export function SyncCenter({ pendingCount, onSyncNow }: SyncCenterProps) {
     const t = useTranslations('sync')
     const money = useMoney()
+    const { user } = useSession()
+    const canManage = roleAtLeast(user.role, 'manager')
     const [open, setOpen] = useState(false)
     const [entries, setEntries] = useState<OutboxEntry[]>([])
     const [discarding, setDiscarding] = useState<OutboxEntry | null>(null)
@@ -114,7 +139,9 @@ export function SyncCenter({ pendingCount, onSyncNow }: SyncCenterProps) {
     }, [pendingCount, open])
 
     const attention = entries
-        .filter(entry => ATTENTION_STATES.has(entry.state))
+        // On a shared device, a cashier only sees their own queue - not another cashier's who logged out with
+        // sales still pending. A manager sees everyone's, since they are the one who can act on it (§Discard).
+        .filter(entry => ATTENTION_STATES.has(entry.state) && (canManage || entry.user_id === user.id))
         .sort((a, b) => b.created_at.localeCompare(a.created_at))
 
     if (attention.length === 0) return null
@@ -164,14 +191,16 @@ export function SyncCenter({ pendingCount, onSyncNow }: SyncCenterProps) {
                                             {t('retry')}
                                         </Button>
                                     )}
-                                    <Button
-                                        size="sm"
-                                        variant="ghost"
-                                        className="text-destructive hover:text-destructive"
-                                        onClick={() => setDiscarding(entry)}
-                                    >
-                                        {t('discard')}
-                                    </Button>
+                                    {canManage && entry.state !== 'syncing' && (
+                                        <Button
+                                            size="sm"
+                                            variant="ghost"
+                                            className="text-destructive hover:text-destructive"
+                                            onClick={() => setDiscarding(entry)}
+                                        >
+                                            {t('discard')}
+                                        </Button>
+                                    )}
                                 </div>
                             </div>
                         ))}
