@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { splitEqual, validateCustom } from './tab-split'
+import { cashChange, paymentGap, splitEqual, splitRemainder, validateCustom } from './tab-split'
 
 describe('splitEqual', () => {
     test('divides evenly when it divides evenly', () => {
@@ -52,5 +52,18 @@ describe('validateCustom', () => {
             remaining: 0,
             valid: true
         })
+    })
+})
+
+describe('split payment amounts', () => {
+    test('remainder, gap and change stay exact in minor units', () => {
+        expect(splitRemainder(10, 3, 0)).toBe(7)
+        expect(splitRemainder(10, 3.33, 2)).toBe(6.67)
+        expect(splitRemainder(10, 12, 0)).toBe(0)
+        expect(paymentGap(10, [3, 6], 0)).toBe(1)
+        expect(paymentGap(10, [6, 6], 0)).toBe(-2)
+        expect(paymentGap(10, [3.33, 6.67], 2)).toBe(0)
+        expect(cashChange(50, 32.5, 2)).toBe(17.5)
+        expect(cashChange(10, 32.5, 2)).toBe(0)
     })
 })

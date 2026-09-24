@@ -60,7 +60,8 @@ const emptyValues = (defaultTaxPercent: string) => ({
     category_id: '',
     cost_price: '',
     selling_price: '',
-    tax_rate: defaultTaxPercent
+    tax_rate: defaultTaxPercent,
+    low_stock_threshold: ''
 })
 
 function valuesFor(product: ProductListItem | null, defaultTaxPercent: string) {
@@ -73,7 +74,8 @@ function valuesFor(product: ProductListItem | null, defaultTaxPercent: string) {
         category_id: product.category_id ?? '',
         cost_price: String(product.cost_price),
         selling_price: String(product.selling_price),
-        tax_rate: String(Math.round(product.tax_rate * 10_000) / 100)
+        tax_rate: String(Math.round(product.tax_rate * 10_000) / 100),
+        low_stock_threshold: ''
     }
 }
 
@@ -233,6 +235,16 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                                 step={priceStep}
                                 min="0"
                             />
+                            {!product && (
+                                <TextField
+                                    name="low_stock_threshold"
+                                    label={t('lowStockThreshold')}
+                                    description={t('lowStockThresholdHint')}
+                                    type="number"
+                                    step="1"
+                                    min="0"
+                                />
+                            )}
                         </div>
                         <DialogFooter className="mt-4">
                             <Button type="button" variant="outline" onClick={onClose}>

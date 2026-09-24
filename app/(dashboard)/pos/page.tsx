@@ -6,6 +6,15 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Search } from 'lucide-react'
 import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from '@/components/ui/dialog'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { currencyDecimals } from '@/lib/money'
 import type { Paginated } from '@/lib/api/types'
@@ -14,7 +23,7 @@ import { errorMessage } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
 import { promotionsApi, type PromotionListItem } from '@/lib/api/promotions'
-import { salesApi, type OrderDetail } from '@/lib/api/orders'
+import { ordersApi, salesApi, type OrderDetail } from '@/lib/api/orders'
 import { tabsApi } from '@/lib/api/tabs'
 import { enqueueSale, type OutboxSaleItem } from '@/lib/offline/outbox'
 import { previewTotals, type PreviewLine } from '@/lib/cart-preview'
@@ -30,11 +39,11 @@ import { useOnlineStatus } from '@/hooks/use-online-status'
 import { usePosSnapshot } from '@/hooks/use-pos-snapshot'
 import { AddToTabDialog } from '@/components/pos/add-to-tab-dialog'
 import { CartBubble } from '@/components/pos/cart-bubble'
-import { CartSheet, type CartLineView } from '@/components/pos/cart-sheet'
+import { CartSheet, type CartLineView, type CheckoutPayment } from '@/components/pos/cart-sheet'
 import { OpenTabDialog } from '@/components/pos/open-tab-dialog'
 import { ProductGrid } from '@/components/pos/product-grid'
 import { PromotionsStrip, promoPendingKey } from '@/components/pos/promotions-strip'
-import { ReceiptTicket } from '@/components/orders/receipt-ticket'
+import { PrintableReceipt } from '@/components/orders/printable-receipt'
 import { TabDetailSheet } from '@/components/pos/tab-detail-sheet'
 import { TopProducts } from '@/components/pos/top-products'
 
@@ -66,6 +75,7 @@ function snapshotQuery<T>(rows: T[], reload: () => void): ApiQuery<Paginated<T>>
 export default function POSPage() {
     const t = useTranslations('pos')
     const tTabs = useTranslations('tabs')
+    const tc = useTranslations('common')
     const router = useRouter()
     const { user, settings } = useSession()
     const money = useMoney()
@@ -113,6 +123,7 @@ export default function POSPage() {
     const [checkoutAttempt, setCheckoutAttempt] = useState<{ key: string; cartSignature: string } | null>(null)
     // Last offline sale queued (F4): printable via the hidden ticket below, marked PROVISIONAL until it syncs.
     const [provisionalReceipt, setProvisionalReceipt] = useState<OrderDetail | null>(null)
+    const [completedSale, setCompletedSale] = useState<OrderDetail | null>(null)
     const search = useDebouncedValue(searchQuery)
 
     const items = useCartStore(state => state.items)
@@ -332,7 +343,7 @@ export default function POSPage() {
                 : { promotion_id: item.promotionId, quantity: item.quantity }
         )
 
-    const handleCheckout = async () => {
+    const handleCheckout = async (payment: CheckoutPayment) => {
         setProcessing(true)
         // Generated lazily, and reused across a retry of the same cart (closing/reopening the payment dialog
         // included) — but a fresh key once the cart itself changes, since that is a different sale. Offline, this
@@ -348,7 +359,8 @@ export default function POSPage() {
                     user.id,
                     {
                         customer_id: selectedCustomer || null,
-                        payment_method: paymentMethod,
+                        payment_method: payment.payment_method,
+                        ...(payment.payments ? { payments: payment.payments } : {}),
                         discount,
                         items: buildSaleItems()
                     },
@@ -359,7 +371,7 @@ export default function POSPage() {
                         provisionalNumber: entry.provisional_number,
                         occurredAt: entry.created_at,
                         customerName: activeCustomers.find(customer => customer.id === selectedCustomer)?.name ?? null,
-                        paymentMethod,
+                        paymentMethod: payment.payment_method,
                         cashierName: user.fullName || user.email,
                         lines,
                         totals,
@@ -383,20 +395,19 @@ export default function POSPage() {
             const order = await salesApi.create(
                 {
                     customer_id: selectedCustomer || null,
-                    payment_method: paymentMethod,
+                    payment_method: payment.payment_method,
+                    ...(payment.payments ? { payments: payment.payments } : {}),
                     items: buildSaleItems(),
                     discount
                 },
                 key
             )
-            toast.success(t('orderCompleted', { orderNumber: order.order_number, total: money(order.total) }), {
-                action: { label: t('viewOrder'), onClick: () => router.push(`/orders/${order.id}`) }
-            })
             clearCart()
             setSelectedCustomer('')
             setShowPaymentDialog(false)
             setShowCart(false)
             setCheckoutAttempt(null)
+            setCompletedSale(order)
             catalog.reload()
             activePromos.reload()
             setTopReloadSignal(count => count + 1)
@@ -578,10 +589,69 @@ export default function POSPage() {
                         openTabs.reload()
                         catalog.reload()
                     }}
+                    onOrderClosed={orderId => {
+                        setSelectedTabId(null)
+                        void ordersApi
+                            .get(orderId)
+                            .then(setCompletedSale)
+                            .catch((error: unknown) => toast.error(errorMessage(error, t('processFailed'))))
+                    }}
                 />
             </div>
 
-            {provisionalReceipt && <ReceiptTicket order={provisionalReceipt} settings={settings} provisional />}
+            <Dialog open={completedSale !== null} onOpenChange={open => !open && setCompletedSale(null)}>
+                <DialogContent className="sm:max-w-md">
+                    <DialogHeader>
+                        <DialogTitle>{t('saleCompleted')}</DialogTitle>
+                        <DialogDescription>
+                            {completedSale
+                                ? t('saleCompletedHint', {
+                                      orderNumber: completedSale.order_number,
+                                      total: money(completedSale.total)
+                                  })
+                                : null}
+                        </DialogDescription>
+                    </DialogHeader>
+                    {completedSale && (completedSale.payments ?? []).length > 0 && (
+                        <ul className="space-y-1 text-sm">
+                            {(completedSale.payments ?? []).map(payment => (
+                                <li key={payment.id} className="flex justify-between">
+                                    <span>
+                                        {payment.payment_method === 'cash' ||
+                                        payment.payment_method === 'card' ||
+                                        payment.payment_method === 'ewallet'
+                                            ? tc(`payment.${payment.payment_method}`)
+                                            : payment.payment_method}
+                                    </span>
+                                    <span>{money(payment.amount)}</span>
+                                </li>
+                            ))}
+                        </ul>
+                    )}
+                    <DialogFooter>
+                        <Button type="button" variant="outline" onClick={() => window.print()}>
+                            {t('print')}
+                        </Button>
+                        <Button
+                            type="button"
+                            variant="outline"
+                            onClick={() => {
+                                if (completedSale) router.push(`/orders/${completedSale.id}`)
+                            }}
+                        >
+                            {t('viewOrder')}
+                        </Button>
+                        <Button type="button" onClick={() => setCompletedSale(null)}>
+                            {t('newSale')}
+                        </Button>
+                    </DialogFooter>
+                </DialogContent>
+            </Dialog>
+
+            {completedSale && <PrintableReceipt order={completedSale} settings={settings} />}
+            {provisionalReceipt && !completedSale && (
+                <PrintableReceipt order={provisionalReceipt} settings={settings} provisional />
+            )}
         </>
     )
 }

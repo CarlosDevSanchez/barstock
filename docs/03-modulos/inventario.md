@@ -6,7 +6,7 @@
 | Rol | Ver | Ajustar stock |
 |---|---|---|
 | cajero | ✅ | ❌ |
-| gerente, admin | ✅ | ✅ (`adjust_inventory`) |
+| gerente, admin | ✅ | ✅ (`adjust_inventory`, `set_low_stock_threshold`) |
 
 ## Cómo cambia el stock (la única vía)
 El stock **no se puede escribir directamente** (privilegios `INSERT/UPDATE/DELETE` revocados sobre `inventory` e `inventory_transactions`, incluso al admin). Cambia solo por:
@@ -25,13 +25,13 @@ Reglas: nunca negativo (`CHECK` + `UPDATE … WHERE quantity + delta >= 0`); un 
 - Sección **Paquetes vendibles** (solo lectura): promociones activas con `available = floor(min(stock_i / qty_i))` y receta+stock por componente. Tabla con **altura máxima + scroll** (no alarga toda la página si hay muchas promos). No se ajusta stock de paquetes aquí — se ajusta el de cada producto. Ver [Promociones](promociones.md).
 - Lista paginada con búsqueda por nombre/SKU y filtro "Low stock only". **Stock bajo = `quantity <= low_stock_threshold`** de **cada fila** (antes: `< 10` fijo y topado en 5).
 - Gerente/admin: botón de ajuste → diálogo con **cambio (unidades, + o −)** y **motivo**; el `toast` confirma la nueva cantidad o explica el rechazo ("would make the stock negative").
+- Gerente/admin: lápiz junto al umbral → `PATCH /api/v1/inventory/{id}` (`set_low_stock_threshold`, entero ≥ 0). El alta de producto puede enviar un umbral inicial; si no, queda el de Ajustes. Ajustes dice «Valor por defecto para productos nuevos».
 
 ## Datos
 `inventory(product_id, variant_id, quantity, low_stock_threshold, location, last_restocked_at)`. Índice único parcial para (`product_id`, sin variante). Cada producto nuevo recibe su fila (cantidad 0, umbral = `settings.low_stock_threshold` o 10).
 `last_restocked_at` se actualiza en los ajustes positivos.
 
 ## Límites conocidos
-- El **umbral** por artículo no se puede editar desde la UI ni la API (solo se toma de Ajustes al crear el producto).
 - `location` no tiene UI. Las variantes tienen fila de inventario pero no se venden ni se crean desde la UI.
 - Sin historial de movimientos en pantalla (la tabla existe y la lee gerente+ por RLS, sin endpoint).
 - El resumen y el filtro de stock bajo operan sobre hasta 1000 filas (tope de PostgREST).

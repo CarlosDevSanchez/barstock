@@ -22,8 +22,8 @@ La página orquesta estado, queries y `handleCheckout` sobre componentes en `com
 ## Flujo (venta directa)
 1. El cajero busca o filtra y pulsa un producto **o una promo**: estado pendiente en la página (una tarjeta a la vez); confirma cantidad.
 2. El carrito guarda líneas discriminadas (`kind: 'product' | 'promotion'`); `GET /products?ids=…` y `GET /promotions?ids=…` alimentan la vista previa (reparto de precio vía `allocatePackagePrice`, espejo de la RPC).
-3. *Checkout* → método de pago → `POST /api/v1/sales` con ítems `{ product_id, quantity, discount? }` **o** `{ promotion_id, quantity }`.
-4. `create_sale` expande paquetes, fija `unit_price` asignado (no el de catálogo), baja stock por componente y devuelve la orden. El toast muestra ese total.
+3. *Checkout* → un método, o «Dividir pago» (dos métodos y montos que deben sumar el total de la vista previa). Si hay efectivo, «Recibido» y «Cambio» son solo visuales: no se envían. `POST /api/v1/sales` lleva ítems `{ product_id, quantity, discount? }` **o** `{ promotion_id, quantity }`, y `payment_method` **o** `payments` (1 o 2).
+4. `create_sale` expande paquetes, fija `unit_price` asignado (no el de catálogo), baja stock por componente y devuelve la orden. En línea se abre «Venta completada» (imprimir, ver orden, nueva venta). Sin red sigue el toast y el ticket provisional.
 5. Si falla, el carrito se conserva y se refresca el stock.
 
 **Idempotencia del cobro:** la página genera un UUID por intento de cobro (al abrir el diálogo de pago) y lo manda en la

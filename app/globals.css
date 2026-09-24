@@ -154,6 +154,14 @@
     body {
         background: white;
     }
+
+    body > *:not(#print-root) {
+        display: none !important;
+    }
+
+    #print-root {
+        display: block !important;
+    }
 }
 
 .product-image-back {

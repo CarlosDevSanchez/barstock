@@ -29,6 +29,30 @@ export interface CustomSplitCheck {
     valid: boolean
 }
 
+/**
+ * What the second payment should be so two amounts add up to `total`. Never negative: a first amount above the
+ * total yields 0 and `paymentGap` reports the excess.
+ */
+export function splitRemainder(total: number, first: number, decimals: number): number {
+    const rest = toMinorUnits(total, decimals) - toMinorUnits(first, decimals)
+    return fromMinorUnits(Math.max(0, rest), decimals)
+}
+
+/**
+ * `total` minus the sum of `amounts`, in minor units. Positive means the payments are short; negative means they
+ * overshoot. Zero means they match the total exactly.
+ */
+export function paymentGap(total: number, amounts: number[], decimals: number): number {
+    const sum = amounts.reduce((totalMinor, amount) => totalMinor + toMinorUnits(amount, decimals), 0)
+    return fromMinorUnits(toMinorUnits(total, decimals) - sum, decimals)
+}
+
+/** Cash handed back. Visual only: never sent to the server. Short cash shows 0. */
+export function cashChange(received: number, cashDue: number, decimals: number): number {
+    const delta = toMinorUnits(received, decimals) - toMinorUnits(cashDue, decimals)
+    return fromMinorUnits(Math.max(0, delta), decimals)
+}
+
 /** Validates a "free amounts" split: the shares must not add up to more than the balance. */
 export function validateCustom(amounts: number[], balance: number, decimals: number): CustomSplitCheck {
     const balanceMinor = toMinorUnits(balance, decimals)

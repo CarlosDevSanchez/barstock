@@ -16,7 +16,7 @@
 | Top productos (10) | Por **ingresos de línea** (`Σ order_items.total`, incluye impuesto); también `cogs` y `gross_profit` por SKU. Promos cuentan como **componentes** a precio asignado |
 | Top promociones (10) | Paquetes estimados (`min(qty/receta)` por orden), órdenes e ingresos de línea de combo |
 | Top clientes (5) | Nº de órdenes y gasto (`Σ orders.total`) **dentro del rango** |
-| Métodos de pago | Órdenes y monto por método |
+| Métodos de pago | Órdenes distintas y monto por método (`count(distinct order_id)`; un pago dividido no cuenta dos veces el mismo método) |
 
 ## Reglas
 - **Se excluyen los reembolsos.**

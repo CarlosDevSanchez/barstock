@@ -17,6 +17,14 @@ import {
     taxRate
 } from './common'
 
+/** `money` allows 0; a payment line must be strictly positive. */
+const positiveMoney = money.refine(value => value > 0, 'validation.minZero')
+
+const lowStockThresholdNumber = numberField()
+    .int('validation.wholeNumber')
+    .min(0, 'validation.minZero')
+    .max(100_000, 'validation.tooLarge')
+
 // Only columns a client may write appear here: ids, timestamps, totals, loyalty and role are server-owned,
 // and zod strips unknown keys (mass-assignment protection). Optional columns rely on DB defaults, so the
 // *Update schemas are plain `.partial()` (zod defaults would silently reset fields on PATCH).
@@ -46,9 +54,11 @@ export const productCreateSchema = z.object({
     tax_rate: taxRate.optional(),
     // image_url is legacy (unused, kept in the DB) and image_key is server-generated (never client-writable): see
     // app/api/v1/products/[id]/image/route.ts and lib/server/storage.ts.
-    is_active: z.boolean().optional()
+    is_active: z.boolean().optional(),
+    // Optional initial threshold. Absent means the settings default (create_inventory_for_product). Not a products column.
+    low_stock_threshold: z.preprocess(toNumber, lowStockThresholdNumber.optional())
 })
-export const productUpdateSchema = productCreateSchema.partial()
+export const productUpdateSchema = productCreateSchema.omit({ low_stock_threshold: true }).partial()
 
 /** One product line inside a fixed-price package. Unique product_id per promotion (enforced here + DB UNIQUE). */
 export const promotionItemSchema = z.object({
@@ -97,6 +107,10 @@ export const supplierCreateSchema = z.object({
 export const supplierUpdateSchema = supplierCreateSchema.partial()
 
 // ---- Inventory
+export const inventoryThresholdSchema = z.object({
+    low_stock_threshold: z.preprocess(toNumber, lowStockThresholdNumber)
+})
+
 export const inventoryAdjustSchema = z.object({
     // A number input delivers a string: convert it (and never treat '' as 0).
     delta: z.preprocess(
@@ -139,17 +153,28 @@ export const saleItemSchema = z
             ...(value.discount !== undefined ? { discount: value.discount } : {})
         }
     })
-export const saleSchema = z.object({
-    customer_id: nullableUuid,
-    items: z.array(saleItemSchema).min(1, 'validation.cartEmpty').max(100),
-    payment_method: z.enum(PAYMENT_METHODS),
-    discount: money.optional(),
-    // Offline sales only (F2, docs/06-roadmap/offline-y-sincronizacion.md): when the device rang this up without a
-    // network connection. `occurred_at` is the device's clock at the time; `expected_total` is the provisional total
-    // it showed — the server always recalculates and only records the difference (`sync_issues.price_mismatch`).
-    occurred_at: z.iso.datetime().optional(),
-    expected_total: money.optional()
+const salePaymentSchema = z.object({
+    method: z.enum(PAYMENT_METHODS),
+    amount: positiveMoney
 })
+
+export const saleSchema = z
+    .object({
+        customer_id: nullableUuid,
+        items: z.array(saleItemSchema).min(1, 'validation.cartEmpty').max(100),
+        payment_method: z.enum(PAYMENT_METHODS).optional(),
+        payments: z.array(salePaymentSchema).min(1).max(2).optional(),
+        discount: money.optional(),
+        // Offline sales only (F2, docs/06-roadmap/offline-y-sincronizacion.md): when the device rang this up without a
+        // network connection. `occurred_at` is the device's clock at the time; `expected_total` is the provisional total
+        // it showed — the server always recalculates and only records the difference (`sync_issues.price_mismatch`).
+        occurred_at: z.iso.datetime().optional(),
+        expected_total: money.optional()
+    })
+    .refine(value => value.payments !== undefined || value.payment_method !== undefined, {
+        message: 'validation.required',
+        path: ['payment_method']
+    })
 export const refundSchema = z.object({ reason: z.string().trim().min(3, 'validation.reasonRequired').max(500) })
 // A manager's decision to discard a queued (never-synced) offline sale: logged to the audit trail, not the order
 // itself (there is none - it never reached the server). See lib/offline/outbox.ts, components/offline/sync-center.tsx.

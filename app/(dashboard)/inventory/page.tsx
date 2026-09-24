@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, Gift, PackagePlus, TrendingUp, Warehouse } from 'lucide-react'
+import { AlertTriangle, Gift, PackagePlus, Pencil, TrendingUp, Warehouse } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -34,13 +34,15 @@ import { errorMessage } from '@/lib/api/client'
 import { inventoryApi, type InventoryListItem } from '@/lib/api/inventory'
 import { promotionsApi } from '@/lib/api/promotions'
 import { roleAtLeast } from '@/lib/auth/roles'
-import { inventoryAdjustSchema } from '@/lib/validation/resources'
+import { inventoryAdjustSchema, inventoryThresholdSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePagination } from '@/hooks/use-pagination'
 
 type AdjustInput = z.input<typeof inventoryAdjustSchema>
 type AdjustOutput = z.output<typeof inventoryAdjustSchema>
+type ThresholdInput = z.input<typeof inventoryThresholdSchema>
+type ThresholdOutput = z.output<typeof inventoryThresholdSchema>
 
 interface AdjustDialogProps {
     item: InventoryListItem
@@ -105,6 +107,56 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     )
 }
 
+function ThresholdDialog({ item, onClose, onSaved }: AdjustDialogProps) {
+    const t = useTranslations('inventory')
+    const tc = useTranslations('common')
+    const form = useForm<ThresholdInput, unknown, ThresholdOutput>({
+        resolver: zodResolver(inventoryThresholdSchema),
+        defaultValues: { low_stock_threshold: String(item.low_stock_threshold) }
+    })
+    const submitting = form.formState.isSubmitting
+
+    const onSubmit = form.handleSubmit(async values => {
+        try {
+            await inventoryApi.setThreshold(item.id, values)
+            toast.success(t('thresholdSaved'))
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('thresholdFailed')))
+        }
+    })
+
+    return (
+        <Dialog open onOpenChange={open => !open && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>{t('thresholdTitle')}</DialogTitle>
+                    <DialogDescription>{item.product.name}</DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={onSubmit} noValidate className="space-y-4">
+                        <TextField
+                            name="low_stock_threshold"
+                            label={t('minThreshold')}
+                            type="number"
+                            min="0"
+                            step="1"
+                        />
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                {tc('cancel')}
+                            </Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting ? tc('saving') : tc('save')}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
 export default function InventoryPage() {
     const t = useTranslations('inventory')
     const tc = useTranslations('common')
@@ -116,6 +168,7 @@ export default function InventoryPage() {
     const [lowOnly, setLowOnly] = useState(false)
     const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const [adjusting, setAdjusting] = useState<InventoryListItem | null>(null)
+    const [thresholdItem, setThresholdItem] = useState<InventoryListItem | null>(null)
     const search = useDebouncedValue(searchQuery)
 
     const inventory = useApiQuery(
@@ -316,7 +369,24 @@ export default function InventoryPage() {
                                                             {item.quantity}
                                                         </span>
                                                     </TableCell>
-                                                    <TableCell>{item.low_stock_threshold}</TableCell>
+                                                    <TableCell>
+                                                        <span className="inline-flex items-center gap-1">
+                                                            {item.low_stock_threshold}
+                                                            {canAdjust && (
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    className="h-7 w-7"
+                                                                    aria-label={t('editThresholdAria', {
+                                                                        name: item.product.name
+                                                                    })}
+                                                                    onClick={() => setThresholdItem(item)}
+                                                                >
+                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            )}
+                                                        </span>
+                                                    </TableCell>
                                                     <TableCell>
                                                         <Badge variant={isLowStock ? 'destructive' : 'default'}>
                                                             {isLowStock ? t('lowStock') : t('inStock')}
@@ -361,10 +431,16 @@ export default function InventoryPage() {
                                     }
                                     menu={
                                         canAdjust && (
-                                            <DropdownMenuItem onClick={() => setAdjusting(item)}>
-                                                <PackagePlus className="mr-2 h-4 w-4" />
-                                                {t('adjustTitle')}
-                                            </DropdownMenuItem>
+                                            <>
+                                                <DropdownMenuItem onClick={() => setThresholdItem(item)}>
+                                                    <Pencil className="mr-2 h-4 w-4" />
+                                                    {t('editThreshold')}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => setAdjusting(item)}>
+                                                    <PackagePlus className="mr-2 h-4 w-4" />
+                                                    {t('adjustTitle')}
+                                                </DropdownMenuItem>
+                                            </>
                                         )
                                     }
                                 />
@@ -391,6 +467,17 @@ export default function InventoryPage() {
                     onClose={() => setAdjusting(null)}
                     onSaved={() => {
                         setAdjusting(null)
+                        inventory.reload()
+                    }}
+                />
+            )}
+            {thresholdItem && (
+                <ThresholdDialog
+                    key={thresholdItem.id}
+                    item={thresholdItem}
+                    onClose={() => setThresholdItem(null)}
+                    onSaved={() => {
+                        setThresholdItem(null)
                         inventory.reload()
                     }}
                 />

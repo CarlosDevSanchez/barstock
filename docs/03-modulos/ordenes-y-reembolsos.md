@@ -19,7 +19,7 @@ Una orden reembolsada muestra fecha y **motivo** del reembolso.
 Una orden con `sync_issues` muestra una tarjeta con el detalle (§Revisión).
 
 ## Ticket de 80 mm (Fase 5, `components/orders/receipt-ticket.tsx`)
-"Print" (`window.print()`) oculta la vista normal y el `AppShell` (`print:hidden`) e imprime en su lugar un ticket
+"Print" (`window.print()`) imprime el ticket a través de `PrintableReceipt` (`components/orders/printable-receipt.tsx`): un portal `#print-root` en `document.body`. En `@media print`, `app/globals.css` oculta el resto de los hijos de `body`. El ticket
 térmico de 80 mm: logo de la tienda si hay uno subido (`store_logo_url`, ≤ 48 mm de ancho), nombre y NIT de la tienda, dirección y teléfono, «COMPROBANTE DE VENTA — No es factura
 electrónica», número de orden, fecha y hora en `settings.timezone`, cliente (o "Walk-in Customer"), forma de pago,
 vendedor, tabla de líneas (cantidad/detalle/IVA %/total), subtotal/IVA/descuento/total, cantidad de ítems, **detalle

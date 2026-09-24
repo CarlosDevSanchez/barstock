@@ -29,6 +29,9 @@ export async function createSale(
     for (const [index, item] of input.items.entries()) {
         if ('product_id' in item) discountFields[`items.${index}.discount`] = item.discount
     }
+    input.payments?.forEach((payment, index) => {
+        discountFields[`payments.${index}.amount`] = payment.amount
+    })
     await assertMoneyScale(supabase, discountFields)
     const { data: orderId, error } = await supabase.rpc('create_sale', {
         // The generated type says `string`, but the function accepts NULL (walk-in customer).
@@ -43,7 +46,9 @@ export async function createSale(
                       discount: item.discount ?? 0
                   }
         ),
-        p_payment_method: input.payment_method,
+        // Null when the caller sent `payments` instead. The generated type is the enum; the function accepts NULL.
+        p_payment_method: (input.payment_method ?? null) as 'cash',
+        p_payments: input.payments ?? null,
         p_discount: input.discount ?? 0,
         p_idempotency_key: (idempotencyKey ?? null) as string,
         p_occurred_at: (input.occurred_at ?? null) as string,

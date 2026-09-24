@@ -1151,7 +1151,8 @@ export type Database = {
           p_idempotency_key?: string
           p_items: Json
           p_occurred_at?: string
-          p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_payment_method?: Database["public"]["Enums"]["payment_method"]
+          p_payments?: Json
         }
         Returns: string
       }
@@ -1198,6 +1199,10 @@ export type Database = {
         Args: { p_from: string; p_to: string; p_tz?: string }
         Returns: Json
       }
+      set_low_stock_threshold: {
+        Args: { p_inventory_id: string; p_threshold: number }
+        Returns: undefined
+      }
       tab_add_items: {
         Args: { p_items: Json; p_tab_id: string }
         Returns: undefined
@@ -1213,6 +1218,10 @@ export type Database = {
           p_method: Database["public"]["Enums"]["payment_method"]
           p_tab_id: string
         }
+        Returns: undefined
+      }
+      tab_pay_split: {
+        Args: { p_member_id: string; p_payments: Json; p_tab_id: string }
         Returns: undefined
       }
       tab_remove_item: {
