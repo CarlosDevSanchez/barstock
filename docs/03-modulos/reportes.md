@@ -21,7 +21,7 @@
 ## Reglas
 - **Se excluyen los reembolsos.**
 - Agregación **en SQL**; el navegador solo pinta.
-- Los límites del rango se calculan como `[00:00 del día inicial, 00:00 del día siguiente al final)` en la zona de Ajustes.
+- Los límites del rango se calculan como `[00:00 del día inicial, 00:00 del día siguiente al final)` en la zona de Ajustes, sobre `coalesce(orders.occurred_at, orders.created_at)`: una venta offline (F2, [offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md)) cae en el día en que ocurrió, no en el día en que se sincronizó.
 - Un combo a 17 000 con lista 20 000 aporta **17 000** (+ impuesto) a ingresos y ~**3 000** a `promo_markdown`, no 20 000 de lista. Ver [promociones](promociones.md) y [D-margin](../06-roadmap/decisiones-pendientes.md).
 
 ## Límites conocidos

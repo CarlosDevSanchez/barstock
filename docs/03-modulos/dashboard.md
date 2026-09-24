@@ -21,6 +21,7 @@ La función es **`SECURITY INVOKER`**: corre con el RLS del que llama. El dashbo
 ## Reglas
 - **Se excluyen los reembolsos** (solo `completed`).
 - Días agrupados por la zona `settings.timezone` (por defecto `UTC`); el gráfico formatea fechas de calendario sin desplazarlas por la zona del navegador.
+- El día de cada orden es `coalesce(orders.occurred_at, orders.created_at)`: una venta offline (F2, [offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md)) cuenta para el día en que ocurrió en el dispositivo, no el día en que se sincronizó.
 - La respuesta se **valida con zod** en el servidor: si el SQL y la UI divergen falla ahí, no muestra `NaN`.
 
 ## Límites conocidos

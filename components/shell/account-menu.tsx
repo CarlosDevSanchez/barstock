@@ -1,11 +1,13 @@
 'use client'
 
+import { useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -15,6 +17,8 @@ import {
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { apiPatch, apiPost, errorMessage } from '@/lib/api/client'
+import { idbClearSnapshot } from '@/lib/offline/db'
+import { pendingOutboxCount } from '@/lib/offline/outbox'
 import { clearOfflineCaches } from '@/lib/pwa/clear-cache'
 import { APP_LOCALES, type AppLocale } from '@/lib/i18n/config'
 import { useCartStore } from '@/stores/cart'
@@ -35,8 +39,9 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
     const t = useTranslations('common')
     const clearCart = useCartStore(state => state.clearCart)
     const displayName = user.fullName || user.email
+    const [pendingLogoutWarning, setPendingLogoutWarning] = useState<number | null>(null)
 
-    const handleLogout = async () => {
+    const doLogout = async () => {
         try {
             await apiPost('auth/logout')
         } catch {
@@ -45,10 +50,24 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
         }
         // The cart belongs to the session: never leave it behind for the next person at this till.
         clearCart()
-        // Same reason, for a shared/kiosk device: the offline caches are per-session, not per-device.
-        await clearOfflineCaches()
+        // Same reason, for a shared/kiosk device: the POS snapshot is per-session, not per-device. The offline
+        // sale queue (lib/offline/outbox.ts) is NOT cleared here: it belongs to the user, not the device, and is
+        // sent the next time they sign back in (see the confirmation below).
+        await Promise.all([clearOfflineCaches(), idbClearSnapshot()])
         router.push('/login')
         router.refresh()
+    }
+
+    // Unsynced offline sales (F3) stay queued through a logout, but the cashier should know they are there before
+    // walking away from this device. Own entries only: a different user's leftovers on a shared device are not
+    // this cashier's to know about (and the sync center itself hides them the same way — F4).
+    const handleLogoutClick = async () => {
+        const pending = await pendingOutboxCount(user.id)
+        if (pending > 0) {
+            setPendingLogoutWarning(pending)
+            return
+        }
+        await doLogout()
     }
 
     const setLocale = async (locale: AppLocale) => {
@@ -119,11 +138,20 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
                     {theme === 'dark' ? t('themeLight') : t('themeDark')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+                <DropdownMenuItem onClick={handleLogoutClick} className="text-red-600">
                     <LogOut className="mr-2 h-4 w-4" />
                     {t('signOut')}
                 </DropdownMenuItem>
             </DropdownMenuContent>
+            <ConfirmDialog
+                open={pendingLogoutWarning !== null}
+                onOpenChange={open => !open && setPendingLogoutWarning(null)}
+                title={t('logoutPendingTitle')}
+                description={t('logoutPendingDescription', { count: pendingLogoutWarning ?? 0 })}
+                confirmLabel={t('logoutPendingConfirm')}
+                onConfirm={doLogout}
+                destructive={false}
+            />
         </DropdownMenu>
     )
 }

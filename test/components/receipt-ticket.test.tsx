@@ -26,6 +26,12 @@ const baseOrder: OrderDetail = {
     refunded_at: null,
     refunded_by: null,
     refund_reason: null,
+    client_ref: null,
+    occurred_at: null,
+    source: 'online',
+    sync_issues: null,
+    reviewed_by: null,
+    reviewed_at: null,
     customer: null,
     created_by_name: 'Jane Cashier',
     tab: null,
@@ -47,6 +53,7 @@ const baseOrder: OrderDetail = {
             product_id: 'p-1',
             variant_id: null,
             promotion_id: null,
+            stock_taken: null,
             quantity: 1,
             unit_price: 100,
             discount: 0,
@@ -64,6 +71,7 @@ const baseOrder: OrderDetail = {
             product_id: 'p-2',
             variant_id: null,
             promotion_id: null,
+            stock_taken: null,
             quantity: 2,
             unit_price: 10,
             discount: 0,
@@ -204,5 +212,21 @@ describe('ReceiptTicket', () => {
         )
         expect(screen.queryByTestId('receipt-logo')).toBeNull()
         expect(screen.getByTestId('receipt-ticket').querySelector('img')).toBeNull()
+    })
+
+    test('shows the PROVISIONAL stamp for a queued-but-not-synced sale (F4), and not otherwise', () => {
+        const { rerender } = render(
+            <IntlProvider>
+                <ReceiptTicket order={baseOrder} settings={testSettings} />
+            </IntlProvider>
+        )
+        expect(screen.queryByTestId('receipt-provisional-stamp')).toBeNull()
+
+        rerender(
+            <IntlProvider>
+                <ReceiptTicket order={baseOrder} settings={testSettings} provisional />
+            </IntlProvider>
+        )
+        expect(screen.getByTestId('receipt-provisional-stamp').textContent).toBe('PROVISIONAL — pending sync')
     })
 })

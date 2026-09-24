@@ -49,6 +49,7 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 ## Ventas
 **`orders`** — `order_number` UNIQUE NOT NULL (`ORD-YYMMDD-NNNNNN`, secuencia `order_number_seq`), `customer_id` → `customers` (NULL = mostrador), `status` NOT NULL default `pending`, `subtotal`, `discount`, `tax`, `total` NOT NULL,
 `notes`, `created_by` → `auth.users`, **`refunded_at`, `refunded_by` → `auth.users`, `refund_reason`**. `CHECK` importes ≥ 0 y **`total = subtotal − discount + tax`** (`NOT VALID`: se exige en filas nuevas; validar tras depurar datos antiguos).
+Offline (F2): `client_ref UUID UNIQUE` (nullable; misma clave que la idempotencia del cobro), `occurred_at timestamptz` (nullable; hora del dispositivo), `source text NOT NULL default 'online' CHECK IN ('online','offline')`, `sync_issues jsonb` (nullable), `reviewed_by/reviewed_at` (reservados para F4).
 
 **`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, **`promotion_id` → `promotions` (nullable; líneas nacidas de un paquete; permite promo soft-deleted)**, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`. `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
 
@@ -78,6 +79,9 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 ## Auditoría
 **`audit_log`** — `id bigint identity`, `occurred_at`, `actor_id` (**sin FK**), `actor_email`, `actor_role`, `action CHECK IN ('insert','update','delete','login','login_failed','logout','invite','password_reset')`, `entity`, `entity_id`, `changes jsonb`, `source CHECK IN ('db','api')`. Append-only: sin política de escritura, privilegios revocados y triggers que bloquean `UPDATE`/`DELETE`/`TRUNCATE` incluso para `service_role`. Ver [Auditoría](../03-modulos/auditoria.md).
 
+## Idempotencia
+**`idempotency_keys`** — `key uuid PK` (la manda el cliente, cabecera `Idempotency-Key`), `user_id NOT NULL`, `action text NOT NULL`, `request_hash text NOT NULL`, `result jsonb` (nulo hasta que la llamada dueña termina, en la misma transacción), `created_at`. Sin política RLS (solo la usan las RPC `SECURITY DEFINER`) y `revoke all` de `anon`/`authenticated`. Hoy solo la usa `create_sale` (evita el doble cobro de un reintento de red); ver [pos-checkout](../03-modulos/pos-checkout.md) y [F0 del diseño offline](../06-roadmap/offline-y-sincronizacion.md).
+
 ## Diferencias respecto a la baseline
 | Cambio | Migración |
 |---|---|
@@ -92,3 +96,8 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `tabs`, `tab_members`, `tab_items`, `tab_payments`, `orders.tab_id`, enum `tab_status` y sus RPC | `…0008` |
 | `promotions`, `promotion_items`, `order_items.promotion_id` (soft-delete; sin hard delete API) | `20260924000001` |
 | `audit_log` (append-only), trigger genérico en 13 tablas, `log_auth_event` RPC | `20260926000001` |
+| `idempotency_keys`; `create_sale` gana `p_idempotency_key` (drop + recreate, firma antigua eliminada) | `20260927000001` |
+| `orders.client_ref/occurred_at/source/sync_issues/reviewed_by/reviewed_at`; `create_sale` gana `p_occurred_at`/`p_expected_total` (drop + recreate); `dashboard_summary`/`sales_report`/`top_selling_products` agrupan por `coalesce(occurred_at, created_at)`; setting `offline_max_hours` | `20260928000001` |
+| `mark_order_reviewed` (RPC, `SECURITY DEFINER`, gerente+): marca `orders.reviewed_by/reviewed_at` para una orden con `sync_issues`; idempotente | `20260929000001` |
+| `order_items.stock_taken`; `create_sale` endurecido (hash de idempotencia sin `occurred_at`/`expected_total`, revisado antes que cliente/producto; venta de mostrador y precio de último valor conocido en vez de rechazar; descuento recortado; `sync_issues.offline_sale` obligatorio); `refund_order` usa `coalesce(stock_taken, quantity)`; `audit_log` acepta `action = 'discard'`; `log_outbox_discard` (RPC, gerente+) — tras revisión adversarial de F0-F4 | `20260930000001` |
+| `order_items.stock_taken` gana `CHECK` de rango; `create_sale`: `sync_issues.customer_unavailable`/`.stale_pricing` pasan de booleano a detalle (id del cliente pedido, ids de productos/promociones obsoletos); `log_outbox_discard` (drop + recreate) gana `p_client_ref` (rechaza con 409 si ya existe una orden con esa clave) y `p_owner_user_id`, y `p_payment_method` pasa de `text` al enum real — tras una segunda revisión adversarial | `20261001000001` |

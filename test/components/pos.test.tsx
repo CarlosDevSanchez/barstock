@@ -3,7 +3,7 @@ import { product, page, settings, userWithRole, IntlProvider } from '../helpers/
 import { setupDom } from '../helpers/dom'
 
 setupDom()
-const { cleanup, fireEvent, render, screen, waitFor, within } = await import('@testing-library/react')
+const { act, cleanup, fireEvent, render, screen, waitFor, within } = await import('@testing-library/react')
 
 const mouse = product({
     id: 'p-mouse',
@@ -26,12 +26,36 @@ const catalog = [mouse, cable, gone]
 
 const list = mock(async (query: Record<string, unknown>) => {
     const ids = typeof query.ids === 'string' ? query.ids.split(',') : null
-    return page(ids ? catalog.filter(item => ids.includes(item.id)) : catalog)
+    let items = ids ? catalog.filter(item => ids.includes(item.id)) : catalog
+    // Live search sends `q`; without this the online path ignores the needle and the offline-browsing
+    // assertion waits on debounce alone — on a slow CI runner that can burn the whole 5s test budget.
+    if (typeof query.q === 'string' && query.q.trim()) {
+        const needle = query.q.trim().toLowerCase()
+        items = items.filter(
+            item =>
+                item.name.toLowerCase().includes(needle) ||
+                item.sku.toLowerCase().includes(needle) ||
+                (item.barcode?.toLowerCase().includes(needle) ?? false)
+        )
+    }
+    return page(items)
 })
-const createSale = mock(async (_body: unknown) => ({ id: 'order-1', order_number: 'ORD-260921-000001', total: 80.27 }))
+const createSale = mock(async (_body: unknown, _idempotencyKey?: string) => ({
+    id: 'order-1',
+    order_number: 'ORD-260921-000001',
+    total: 80.27
+}))
 const push = mock(() => {})
+const snapshot = mock(async () => ({
+    generated_at: new Date().toISOString(),
+    products: catalog,
+    promotions: [],
+    categories: [],
+    customers: []
+}))
 
 void mock.module('@/lib/api/products', () => ({ productsApi: { list, top: async () => [] } }))
+void mock.module('@/lib/api/pos', () => ({ posApi: { snapshot } }))
 void mock.module('@/lib/api/promotions', () => ({
     promotionsApi: { list: async () => page([]) }
 }))
@@ -53,12 +77,15 @@ void mock.module('next/navigation', () => ({
 const { default: POSPage } = await import('@/app/(dashboard)/pos/page')
 const { SessionProvider } = await import('@/components/session-provider')
 const { useCartStore } = await import('@/stores/cart')
+const { TooltipProvider } = await import('@/components/ui/tooltip')
 
 const renderPos = () =>
     render(
         <IntlProvider>
             <SessionProvider value={{ user: userWithRole('cashier'), settings }}>
-                <POSPage />
+                <TooltipProvider>
+                    <POSPage />
+                </TooltipProvider>
             </SessionProvider>
         </IntlProvider>
     )
@@ -71,6 +98,9 @@ const addToCart = (name: string, qty = 1) => {
     fireEvent.click(screen.getByRole('button', { name: 'Confirm' }))
 }
 const openCart = () => fireEvent.click(screen.getByRole('button', { name: /^Cart:/ }))
+const setOnline = (value: boolean) => {
+    Object.defineProperty(navigator, 'onLine', { value, configurable: true })
+}
 // Scoped to the cart dialog: the bubble's own hover preview repeats "Total", so an unscoped query is ambiguous.
 const cartDialog = () => screen.getByRole('dialog', { name: /^Cart/ })
 const cartSummary = (label: string) =>
@@ -80,6 +110,8 @@ beforeEach(() => {
     useCartStore.getState().clearCart()
     list.mockClear()
     createSale.mockClear()
+    snapshot.mockClear()
+    setOnline(true)
 })
 afterEach(cleanup)
 
@@ -257,7 +289,8 @@ describe('POS cart', () => {
                 payment_method: 'card',
                 items: [{ product_id: 'p-mouse', quantity: 2, discount: 0 }],
                 discount: 0
-            }
+            },
+            expect.any(String) // idempotency key: one per checkout attempt, see app/(dashboard)/pos/page.tsx
         ])
         // Nothing but ids and quantities: no prices, tax or totals travel to the server.
         expect(JSON.stringify(createSale.mock.calls[0])).not.toMatch(/29\.99|unit_price|total|tax/)
@@ -280,5 +313,129 @@ describe('POS cart', () => {
         await waitFor(() => expect(createSale).toHaveBeenCalled())
         await waitFor(() => expect(list.mock.calls.length).toBeGreaterThan(2)) // refreshed stock after the failure
         expect(useCartStore.getState().items).toHaveLength(1)
+    })
+
+    test('retrying the same checkout attempt reuses the idempotency key', async () => {
+        createSale.mockImplementationOnce(async () => {
+            throw new Error('network_offline')
+        })
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+        openCart()
+        fireEvent.click(await screen.findByRole('button', { name: /Checkout/ }))
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        const submit = () => within(dialog).getByRole('button', { name: 'Complete Order' })
+        fireEvent.click(submit())
+        await waitFor(() => expect(createSale).toHaveBeenCalledTimes(1))
+        fireEvent.click(submit())
+        await waitFor(() => expect(createSale).toHaveBeenCalledTimes(2))
+
+        const [firstKey] = createSale.mock.calls[0]?.slice(1) ?? []
+        const [secondKey] = createSale.mock.calls[1]?.slice(1) ?? []
+        expect(firstKey).toBe(secondKey)
+    })
+
+    test('closing and reopening the payment dialog after a failed attempt still reuses the same key: a lost response cannot be double-charged by "cancel, try again"', async () => {
+        createSale.mockImplementationOnce(async () => {
+            throw new Error('network_offline')
+        })
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+        openCart()
+        fireEvent.click(await screen.findByRole('button', { name: /Checkout/ }))
+        const firstDialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        fireEvent.click(within(firstDialog).getByRole('button', { name: 'Complete Order' }))
+        await waitFor(() => expect(createSale).toHaveBeenCalledTimes(1))
+
+        // Cancel the failed attempt's dialog, then reopen it (the cart itself was never touched).
+        fireEvent.click(within(firstDialog).getByRole('button', { name: 'Cancel' }))
+        await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Complete Payment' })).toBeNull())
+        fireEvent.click(screen.getByRole('button', { name: /Checkout/ }))
+        const secondDialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        fireEvent.click(within(secondDialog).getByRole('button', { name: 'Complete Order' }))
+        await waitFor(() => expect(createSale).toHaveBeenCalledTimes(2))
+
+        const [firstKey] = createSale.mock.calls[0]?.slice(1) ?? []
+        const [secondKey] = createSale.mock.calls[1]?.slice(1) ?? []
+        expect(firstKey).toBe(secondKey)
+    })
+
+    test('browsing keeps working offline from the last snapshot, search and category filter included', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        await waitFor(() => expect(snapshot).toHaveBeenCalled())
+
+        act(() => {
+            setOnline(false)
+            window.dispatchEvent(new Event('offline'))
+        })
+
+        // Still there, from the snapshot fetched while online, not from the (now failing) live list.
+        expect(screen.getByText('Wireless Mouse')).toBeTruthy()
+        expect(screen.getByText('USB-C Cable')).toBeTruthy()
+
+        fireEvent.change(screen.getByPlaceholderText('Search by name, SKU, or barcode...'), {
+            target: { value: 'cable' }
+        })
+        // useDebouncedValue defaults to 300ms; wait past it once instead of polling up to 3s (that alone
+        // burned most of bun's 5s per-test budget on CI).
+        await act(async () => {
+            await new Promise(resolve => setTimeout(resolve, 350))
+        })
+        expect(screen.queryByText('Wireless Mouse')).toBeNull()
+        expect(screen.getByText('USB-C Cable')).toBeTruthy()
+    })
+
+    test('checkout queues the sale offline instead of calling the server, and still empties the cart', async () => {
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        await waitFor(() => expect(snapshot).toHaveBeenCalled())
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+
+        act(() => {
+            setOnline(false)
+            window.dispatchEvent(new Event('offline'))
+        })
+
+        openCart()
+        const checkoutButton = await screen.findByRole('button', { name: /Checkout/ })
+        expect((checkoutButton as HTMLButtonElement).disabled).toBe(false) // the offline window hasn't expired
+        fireEvent.click(checkoutButton)
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Complete Order' }))
+
+        await waitFor(() => expect(useCartStore.getState().items).toEqual([]))
+        expect(createSale).not.toHaveBeenCalled()
+    })
+
+    test('checkout is blocked once the offline window has expired, with an explanation', async () => {
+        snapshot.mockImplementationOnce(async () => ({
+            generated_at: new Date(Date.now() - 13 * 3_600_000).toISOString(), // settings.offline_max_hours is 12
+            products: catalog,
+            promotions: [],
+            categories: [],
+            customers: []
+        }))
+        renderPos()
+        await screen.findByText('Wireless Mouse')
+        await waitFor(() => expect(snapshot).toHaveBeenCalled())
+        addToCart('Wireless Mouse')
+        await waitFor(() => screen.getByRole('button', { name: /^Cart:/ }))
+
+        act(() => {
+            setOnline(false)
+            window.dispatchEvent(new Event('offline'))
+        })
+        openCart()
+
+        await waitFor(() =>
+            expect((screen.getByRole('button', { name: /Checkout/ }) as HTMLButtonElement).disabled).toBe(true)
+        )
+        expect(createSale).not.toHaveBeenCalled()
     })
 })

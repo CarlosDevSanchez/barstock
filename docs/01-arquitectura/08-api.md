@@ -58,9 +58,12 @@ Todos con `route()`; listas paginadas `?page&pageSize&q` (`pageSize` ≤ 100, po
 | `suppliers`, `suppliers/[id]` | GET/POST/PATCH · DELETE | gerente · admin | DELETE = borrado lógico (`deleted_at`) |
 | `inventory` | GET | cajero | `?low` y `summary` (`total_units`, `item_count`, `low_stock_count`, `stock_value`) sobre todo el conjunto filtrado |
 | `inventory/[id]/adjust` | POST | gerente | RPC `adjust_inventory`; `{ delta, reason }` |
-| `sales` | POST | cajero | RPC `create_sale`; ítems producto **o** promo; precios/totales de la BD (promo → precio asignado) |
-| `orders`, `orders/[id]` | GET | cajero | Cajero: solo las suyas (RLS). `?status&customer_id&from&to&q` (q = número de orden) |
+| `sales` | POST | cajero | RPC `create_sale`; ítems producto **o** promo; precios/totales de la BD (promo → precio asignado); idempotente vía cabecera `Idempotency-Key` |
+| `pos/snapshot` | GET | cajero | Productos/promociones activos, categorías y clientes activos sin paginar (tope 2000 filas/tabla); respalda el POS sin red ([pos-checkout](../03-modulos/pos-checkout.md)) |
+| `orders`, `orders/[id]` | GET | cajero | Cajero: solo las suyas (RLS). `?status&customer_id&from&to&q&needs_review` (q = número de orden; `needs_review` = `sync_issues is not null and reviewed_at is null`, gerente+) |
 | `orders/[id]/refund` | POST | gerente | RPC `refund_order`; `{ reason }`; idempotente |
+| `orders/[id]/review` | PATCH | gerente | RPC `mark_order_reviewed`; sin body; idempotente ([órdenes y reembolsos](../03-modulos/ordenes-y-reembolsos.md)) |
+| `outbox/discard-log` | POST | gerente | RPC `log_outbox_discard`; `{ client_ref, owner_user_id, provisional_number, expected_total, payment_method, reason }`; registra en `audit_log` el descarte de una venta offline en cola; 409 si `client_ref` ya tiene una orden (la venta sí llegó al servidor) ([offline y sincronización](../06-roadmap/offline-y-sincronizacion.md) §9.2) |
 | `tabs`, `tabs/[id]` | GET/POST · GET | cajero | Cuentas abiertas ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)); `?status`; el detalle incluye ítems, personas, pagos y totales (`tab_summary`) |
 | `tabs/[id]/items` | POST | cajero | RPC `tab_add_items` |
 | `tabs/[id]/items/[itemId]` | DELETE | gerente | RPC `tab_remove_item`; `{ quantity, reason }` |

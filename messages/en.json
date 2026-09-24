@@ -41,6 +41,9 @@
     "inactive": "Inactive",
     "signOut": "Sign out",
     "signOutFailed": "Could not sign out. Try again.",
+    "logoutPendingTitle": "Unsynced sales on this device",
+    "logoutPendingDescription": "{count, plural, one {There is # offline sale} other {There are # offline sales}} still waiting to sync. They stay saved and will send automatically once you sign back in and are online — signing out now will not lose them.",
+    "logoutPendingConfirm": "Sign out anyway",
     "themeLight": "Light",
     "themeDark": "Dark",
     "language": "Language",
@@ -118,13 +121,38 @@
   },
   "errors": {
     "generic": "Something went wrong",
-    "network_offline": "You are offline. Check your connection and try again."
+    "network_offline": "You are offline. Check your connection and try again.",
+    "offline_window_expired": "This till has been offline too long to keep ringing up sales. Reconnect to keep selling."
   },
   "connection": {
     "offlineBadge": "Offline",
     "offlineToast": "You are offline: you are seeing saved data, and actions that change data are disabled.",
     "backOnline": "Back online",
-    "offlineActionDisabled": "Not available offline"
+    "offlineActionDisabled": "Not available offline",
+    "offlineWindowExpired": "Too long offline: reconnect to keep selling."
+  },
+  "sync": {
+    "button": "{count, plural, one {# queued sale} other {# queued sales}}",
+    "title": "Sync center",
+    "syncNow": "Sync now",
+    "retry": "Retry",
+    "discard": "Discard",
+    "discarding": "Discarding…",
+    "discardTitle": "Discard {provisionalNumber}?",
+    "discardDescription": "This removes the queued sale from this device for good. It was never sent to the server, so there is nothing to undo there — if the money was already collected, ring it up again.",
+    "discardReasonLabel": "Reason",
+    "discardReasonPlaceholder": "Why this sale should not be sent",
+    "discardLogFailed": "Could not record this. Check the connection and try again — a discard always needs to be logged.",
+    "discardAlreadySynced": "This sale already reached the server — nothing was discarded. Check its review status in Orders.",
+    "discardInProgress": "This sale is being sent right now — nothing was discarded. Check back in a moment.",
+    "state": {
+      "pending": "Waiting to sync",
+      "syncing": "Syncing…",
+      "paused_auth": "Sign-in needed",
+      "rejected": "Rejected",
+      "synced": "Synced",
+      "synced_with_issues": "Synced, needs review"
+    }
   },
   "pwa": {
     "updateAvailable": "A new version is available",
@@ -205,6 +233,8 @@
     "processing": "Processing...",
     "completeOrder": "Complete Order",
     "orderCompleted": "Order {orderNumber} completed: {total}",
+    "orderQueuedOffline": "Sale {provisionalNumber} queued ({total}): it will sync automatically once you are back online.",
+    "printTicket": "Print ticket",
     "viewOrder": "View order",
     "processFailed": "Failed to process order",
     "promotions": "Promotions",
@@ -292,6 +322,8 @@
     "defaultTaxRateHint": "Suggested rate for new products. Each product keeps its own rate.",
     "lowStockThreshold": "Low Stock Threshold",
     "lowStockThresholdHint": "Applies to new products. Existing items keep their own threshold.",
+    "offlineMaxHours": "Max. Hours Offline",
+    "offlineMaxHoursHint": "How long a till may ring up sales without a connection before they need review.",
     "receipt": "Receipt",
     "receiptDesc": "Text printed at the top and bottom of a receipt",
     "header": "Header",
@@ -420,6 +452,8 @@
     "searchPlaceholder": "Search by order number...",
     "filterStatusAria": "Filter by status",
     "allStatuses": "All statuses",
+    "needsReviewOnly": "Needs review",
+    "needsReview": "Needs review",
     "colOrder": "Order #",
     "colCustomer": "Customer",
     "colDate": "Date",
@@ -469,7 +503,22 @@
     "refunding": "Refunding…",
     "refundedToast": "Order refunded and stock restored",
     "refundFailed": "Failed to refund order",
+    "syncIssuesTitle": "Synced with a difference",
+    "syncIssueClamped": "The device's clock was outside the offline window: recorded as {used} instead of {requested}.",
+    "syncIssuePriceMismatch": "The total shown on the device ({expected}) differed from the server's ({actual}); the server's total is what was charged.",
+    "syncIssueStockShortfall": "Sold more than was in stock at the time:",
+    "syncIssueStockShortfallLine": "{name}: {missing} short",
+    "syncIssueCustomer": "The selected customer was no longer active when this synced; recorded as walk-in.",
+    "syncIssueStalePricing": "A product or promotion on this order was inactive when this synced; priced from its last known value.",
+    "syncIssueDiscountClamped": "The discount no longer fit the recalculated price and was capped to avoid a negative total.",
+    "markReviewed": "Mark reviewed",
+    "reviewing": "Marking reviewed…",
+    "reviewedOn": "Reviewed on {date}",
+    "reviewedToast": "Order marked as reviewed",
+    "reviewFailed": "Failed to mark the order as reviewed",
+    "goToInventory": "Go to inventory",
     "receiptTitle": "SALES RECEIPT — Not an electronic invoice",
+    "receiptProvisionalStamp": "PROVISIONAL — pending sync",
     "receiptSeller": "Seller:",
     "receiptColQty": "Qty",
     "receiptColDetail": "Detail",
@@ -672,7 +721,8 @@
       "login_failed": "Failed sign-in",
       "logout": "Signed out",
       "invite": "Invited a user",
-      "password_reset": "Reset password"
+      "password_reset": "Reset password",
+      "discard": "Discarded a queued offline sale"
     }
   },
   "tabs": {

@@ -2,7 +2,7 @@ import 'server-only'
 import { assertNoError } from '@/lib/server/errors'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import { pageRange } from '@/lib/validation/common'
-import type { AuditQuery } from '@/lib/validation/resources'
+import type { AuditQuery, OutboxDiscardInput } from '@/lib/validation/resources'
 import type { Tables } from '@/types/database'
 import type { Page } from './_shared'
 
@@ -31,4 +31,22 @@ export async function listAudit(
     const { data, count, error } = await query.range(from, to)
     assertNoError(error)
     return { rows: data, total: count ?? 0 }
+}
+
+/**
+ * A manager discarding a queued offline sale from the sync center (F4): the RPC (`log_outbox_discard`) is the one
+ * that decides whether this is safe — it refuses (BS409) if an order already exists with this `client_ref`, since
+ * that means the sale actually reached the server and discarding it would falsely claim it never did. RPC-gated to
+ * manager+, same as `refund_order`.
+ */
+export async function logOutboxDiscard(supabase: AppSupabaseClient, input: OutboxDiscardInput): Promise<void> {
+    const { error } = await supabase.rpc('log_outbox_discard', {
+        p_client_ref: input.client_ref,
+        p_provisional_number: input.provisional_number,
+        p_expected_total: input.expected_total,
+        p_payment_method: input.payment_method,
+        p_owner_user_id: input.owner_user_id,
+        p_reason: input.reason
+    })
+    assertNoError(error)
 }

@@ -23,6 +23,7 @@ export const settings: SettingsWithLogoUrl = {
     timezone: 'UTC',
     low_stock_threshold: 10,
     tax_rate: 0.1,
+    offline_max_hours: 12,
     receipt_template: { header: '', footer: '' }
 }
 
