@@ -4,7 +4,17 @@ import { useState } from 'react'
 import { format } from 'date-fns'
 import { enUS, es } from 'date-fns/locale'
 import { useLocale, useTranslations } from 'next-intl'
-import { BarChart3, TrendingUp, Package, Users, DollarSign, Percent, Wallet, SlidersHorizontal } from 'lucide-react'
+import {
+    BarChart3,
+    TrendingUp,
+    Package,
+    Users,
+    DollarSign,
+    Percent,
+    Wallet,
+    SlidersHorizontal,
+    Receipt
+} from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { Badge } from '@/components/ui/badge'
@@ -227,6 +237,38 @@ export default function ReportsPage() {
                     <CardContent>
                         <div className="text-2xl font-bold text-emerald-600">{money(data.gross_profit)}</div>
                         <p className="text-xs text-muted-foreground mt-1">{t('grossProfitHint')}</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('totalExpenses')}</CardTitle>
+                        <Receipt className="h-4 w-4 text-rose-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{money(data.total_expenses)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t('totalExpensesHint')}</p>
+                        {data.expenses_by_category.length > 0 ? (
+                            <ul className="mt-3 space-y-1 text-sm">
+                                {data.expenses_by_category.map(row => (
+                                    <li key={row.category} className="flex justify-between gap-3">
+                                        <span className="truncate">{row.category}</span>
+                                        <span>{money(row.total)}</span>
+                                    </li>
+                                ))}
+                            </ul>
+                        ) : null}
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('netProfit')}</CardTitle>
+                        <TrendingUp className="h-4 w-4 text-emerald-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{money(data.net_profit)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">{t('netProfitHint')}</p>
                     </CardContent>
                 </Card>
             </div>

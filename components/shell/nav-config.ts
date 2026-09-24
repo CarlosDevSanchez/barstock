@@ -12,7 +12,8 @@ import {
     Gift,
     UserCog,
     ScrollText,
-    Banknote
+    Banknote,
+    Receipt
 } from 'lucide-react'
 import type { UserRole } from '@/lib/auth/roles'
 
@@ -28,6 +29,7 @@ export type NavKey =
     | 'customers'
     | 'suppliers'
     | 'reports'
+    | 'expenses'
     | 'settings'
     | 'users'
     | 'audit'
@@ -67,7 +69,10 @@ export const navGroups: NavGroup[] = [
     },
     {
         key: 'analytics',
-        items: [{ icon: BarChart3, key: 'reports', href: '/reports', minimumRole: 'manager' }]
+        items: [
+            { icon: BarChart3, key: 'reports', href: '/reports', minimumRole: 'manager' },
+            { icon: Receipt, key: 'expenses', href: '/expenses', minimumRole: 'manager' }
+        ]
     },
     {
         key: 'admin',

@@ -55,5 +55,6 @@ from pg_stat_user_indexes where schemaname = 'public' order by idx_scan asc, rel
 ```
 
 - `business_days_one_open_idx`: una sola jornada con `closed_at` nulo. `cash_sessions_one_open_register_idx`: una sesión abierta por caja. `closed_at` nulo o posterior a `opened_at`.
-- Pendiente si el volumen lo pide: índice `pg_trgm` GIN sobre `products(name)` para `ilike '%…%'`, `orders(customer_id, created_at)` para historiales largos, y `expenses(date)` cuando exista la UI de gastos.
+- `expenses(occurred_at)` para el listado y el reporte por rango.
+- Pendiente si el volumen lo pide: índice `pg_trgm` GIN sobre `products(name)` para `ilike '%…%'`, y `orders(customer_id, created_at)` para historiales largos.
 - `inventory?low=true` filtra en memoria (hasta 1000 filas): con miles de artículos convendría una vista o una función.

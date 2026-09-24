@@ -65,6 +65,7 @@ describe('signed in', () => {
             ['/pos', true, true, true],
             ['/cash', true, true, true],
             ['/reports', false, true, true],
+            ['/expenses', false, true, true],
             ['/suppliers', false, true, true],
             ['/settings', false, false, true],
             ['/users', false, false, true],

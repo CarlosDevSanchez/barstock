@@ -51,7 +51,7 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 `notes`, `created_by` → `auth.users`, **`refunded_at`, `refunded_by` → `auth.users`, `refund_reason`**. `CHECK` importes ≥ 0 y **`total = subtotal − discount + tax`** (`NOT VALID`: se exige en filas nuevas; validar tras depurar datos antiguos).
 Offline (F2): `client_ref UUID UNIQUE` (nullable; misma clave que la idempotencia del cobro), `occurred_at timestamptz` (nullable; hora del dispositivo), `source text NOT NULL default 'online' CHECK IN ('online','offline')`, `sync_issues jsonb` (nullable), `reviewed_by/reviewed_at` (reservados para F4).
 
-**`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, **`promotion_id` → `promotions` (nullable; líneas nacidas de un paquete; permite promo soft-deleted)**, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`. `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
+**`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, **`promotion_id` → `promotions` (nullable; líneas nacidas de un paquete; permite promo soft-deleted)**, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`, **`unit_cost`** (`NUMERIC(14,2)`, nullable: foto de `products.cost_price` al vender; las líneas anteriores quedan en null). `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
 
 **`payments`** — `order_id` → `orders` CASCADE NOT NULL, `payment_method` NOT NULL, `amount` (`CHECK ≥ 0`), `reference_number`, `notes`. Una orden nacida de una venta directa tiene un pago; una nacida de una
 cuenta ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)) puede tener varios (uno por cada pago parcial). `orders.tab_id` → `tabs` (NULL en una venta directa).
@@ -70,8 +70,8 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 
 **`tab_payments`** — `tab_id` → `tabs` CASCADE NOT NULL, `member_id` → `tab_members` (opcional: un pago puede no asignarse a nadie en particular), `payment_method` NOT NULL, `amount` (`CHECK > 0`), `created_by` → `auth.users`.
 
-## Compras y gastos (solo esquema; sin API ni UI)
-**`purchase_orders`** (`po_number` UNIQUE, `supplier_id`, `status`, `total_amount ≥ 0`, `ordered_by`/`received_by`, fechas) · **`purchase_order_items`** (`purchase_order_id`, `product_id` NOT NULL, `variant_id`, `quantity > 0`, `unit_price ≥ 0`, `total` **GENERATED** `quantity × unit_price`) · **`expenses`** (`category` texto libre, `description`, `amount ≥ 0`, `date`, `created_by`).
+## Compras (solo esquema) y gastos
+**`purchase_orders`** (`po_number` UNIQUE, `supplier_id`, `status`, `total_amount ≥ 0`, `ordered_by`/`received_by`, fechas) · **`purchase_order_items`** (`purchase_order_id`, `product_id` NOT NULL, `variant_id`, `quantity > 0`, `unit_price ≥ 0`, `total` **GENERATED** `quantity × unit_price`) · **`expense_categories`** (`name` UNIQUE, `is_active`; semilla: Arriendo, Servicios, Nómina, Insumos, Otros) · **`expenses`** (`category_id` → `expense_categories`, `description`, `amount ≥ 0`, `payment_method`, `supplier_id` opcional, `business_day_id`, `cash_session_id`, `occurred_at`, `deleted_at`, `void_reason`, `created_by`). La columna de texto `category` y la fecha `date` se migraron a «Otros» (el texto original queda en `description`) y a `occurred_at`. Ver [Gastos](../03-modulos/gastos.md).
 
 ## Configuración
 **`settings`** — `key` UNIQUE NOT NULL, `value jsonb NOT NULL`. Una fila por clave (`store_name`, `currency`, `timezone`, `tax_rate`, `low_stock_threshold`, `receipt_template`…). Ver [Ajustes](../03-modulos/ajustes.md).
@@ -104,3 +104,4 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `inventory.low_stock_threshold`; RPC `set_low_stock_threshold` (gerente+) | `20261002000001` |
 | `create_sale` y `tab_pay_split` aceptan 1 o 2 pagos (`p_payments`); `sales_report` cuenta órdenes distintas por método | `20261002000002` |
 | `business_days`, `cash_registers`, `cash_sessions`, `cash_session_users`, `cash_movements`; `orders`/`payments`/`tab_payments` ganan jornada y caja; settings `default_opening_float` y `cash_count_tolerance` (0); registro «Caja 1» | `20261003000001` |
+| `expense_categories`, `expenses` (categoría, método, jornada, caja, `occurred_at`, anulación), `order_items.unit_cost`; `create_expense` / `void_expense`; el efectivo esperado resta gastos en efectivo | `20261004000001` |

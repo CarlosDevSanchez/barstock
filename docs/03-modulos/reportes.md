@@ -10,8 +10,10 @@
 |---|---|
 | Ingresos, órdenes, ticket medio, impuestos, descuentos | Sobre órdenes `completed` del rango. **Ingreso = lo cobrado** (`orders.total`), nunca `qty × selling_price` de lista |
 | Descuento de promociones (`promo_markdown`) | Σ `(lista actual × qty) − (unit_price asignado × qty − discount de línea)` solo en líneas con `promotion_id`. **No** entra en `total_discount` (ese es el descuento global de la orden) |
-| COGS (`total_cogs`) | Σ `qty × products.cost_price` **actual** (sin foto en la venta, v1) |
+| COGS (`total_cogs`) | Σ `qty × coalesce(order_items.unit_cost, products.cost_price)`. Las ventas nuevas guardan el costo al cobrar; las anteriores usan el costo de catálogo actual |
 | Utilidad bruta (`gross_profit`) | Σ bases de línea (`unit_price × qty − discount`) − `total_cogs` (sin impuesto) |
+| Gastos (`total_expenses`) | Σ `expenses.amount` del rango (`occurred_at`, sin anulados), con desglose `expenses_by_category` |
+| Ganancia neta (`net_profit`) | `gross_profit − total_discount − total_expenses` |
 | Ventas diarias | Serie por día en la zona de Ajustes, con días vacíos a 0 |
 | Top productos (10) | Por **ingresos de línea** (`Σ order_items.total`, incluye impuesto); también `cogs` y `gross_profit` por SKU. Promos cuentan como **componentes** a precio asignado |
 | Top promociones (10) | Paquetes estimados (`min(qty/receta)` por orden), órdenes e ingresos de línea de combo |
@@ -25,10 +27,11 @@
 - Un combo a 17 000 con lista 20 000 aporta **17 000** (+ impuesto) a ingresos y ~**3 000** a `promo_markdown`, no 20 000 de lista. Ver [promociones](promociones.md) y [D-margin](../06-roadmap/decisiones-pendientes.md).
 
 ## Límites conocidos
-- Sin exportación (CSV/PDF), sin gastos operativos (etapa 2), sin comparativas.
+- Sin exportación (CSV/PDF), sin comparativas.
 - Ingreso por producto incluye impuesto: la utilidad bruta usa la **base** sin impuesto.
-- COGS y markdown de promo usan **precio/costo de catálogo actual**, no el del momento de la venta.
+- El markdown de promo usa el **precio de lista actual**. El COGS de una venta nueva usa el costo fotografiado; el de una línea antigua (sin `unit_cost`) sigue el catálogo actual.
 - El dashboard del cajero **no** muestra COGS/utilidad (solo `/reports`, gerente+).
+- `business_day_report` también devuelve `total_expenses`, `expenses_by_category` y `net_profit`. La pantalla «Por jornada» todavía no los pinta: el esquema que valida esa respuesta vive en `lib/validation/cash.ts` y esta fase no lo amplía.
 
 ## Por jornada
 

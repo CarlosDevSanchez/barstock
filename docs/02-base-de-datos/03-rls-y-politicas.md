@@ -33,7 +33,8 @@
 | `suppliers`, `purchase_orders`, `purchase_order_items` | — | SELECT, INSERT, UPDATE (en `suppliers`, `deleted_at` solo admin: trigger `guard_soft_delete`) | + DELETE; borrado lógico de `suppliers` (`deleted_at`) |
 | `orders` | SELECT **propias** (`created_by`) | SELECT todas | SELECT todas |
 | `order_items`, `payments` | SELECT de sus órdenes (heredan la visibilidad de `orders`) | todas | todas |
-| `expenses` | — | SELECT, INSERT | + UPDATE, DELETE |
+| `expenses` | — | SELECT (escritura solo vía `create_expense`) | SELECT; anulación vía `void_expense` |
+| `expense_categories` | SELECT | SELECT | SELECT, INSERT, UPDATE (sin DELETE) |
 | `settings` | SELECT | SELECT | SELECT, INSERT, UPDATE, DELETE |
 | `tabs`, `tab_members`, `tab_items`, `tab_payments` | SELECT (compartido: cualquier cajero ve/atiende cualquier cuenta; escritura solo vía RPC) | SELECT | SELECT |
 | `audit_log` | — | — | SELECT (append-only: ver abajo) |
