@@ -1,7 +1,9 @@
+import { after } from 'next/server'
 import { z } from 'zod'
 import { badRequest } from '@/lib/server/errors'
 import { created, route } from '@/lib/server/http'
 import { createSale } from '@/lib/server/services/sales'
+import { dispatchOutbox } from '@/lib/server/services/notifications'
 import { saleSchema } from '@/lib/validation/resources'
 
 const idempotencyKeySchema = z.uuid()
@@ -18,6 +20,11 @@ function readIdempotencyKey(request: Request): string | null {
 export const POST = route({
     role: 'cashier',
     body: saleSchema,
-    handler: async ({ request, supabase, body }) =>
-        created(await createSale(supabase, body, readIdempotencyKey(request)))
+    handler: async ({ request, supabase, body }) => {
+        const order = await createSale(supabase, body, readIdempotencyKey(request))
+        after(() => {
+            void dispatchOutbox()
+        })
+        return created(order)
+    }
 })

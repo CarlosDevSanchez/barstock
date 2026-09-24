@@ -12,6 +12,7 @@ export type ErrorCode =
     | 'too_many_requests'
     | 'unprocessable'
     | 'storage_not_configured'
+    | 'push_not_configured'
     | 'internal_error'
 
 const STATUS: Record<ErrorCode, number> = {
@@ -26,6 +27,7 @@ const STATUS: Record<ErrorCode, number> = {
     too_many_requests: 429,
     unprocessable: 422,
     storage_not_configured: 503,
+    push_not_configured: 503,
     internal_error: 500
 }
 
@@ -56,6 +58,8 @@ export const unsupportedMediaType = (message = 'Unsupported file type') =>
     new AppError('unsupported_media_type', message)
 /** The 4 R2 env vars (lib/env/schema.ts) are not set: image endpoints are disabled until they are. */
 export const storageNotConfigured = () => new AppError('storage_not_configured', 'Image storage is not configured')
+/** VAPID_* (or the full notification group) unset: push subscribe endpoints answer 503. */
+export const pushNotConfigured = () => new AppError('push_not_configured', 'Push notifications are not configured')
 
 /** Structural shape of a PostgREST / Postgres error (supabase-js does not throw: it returns `{ error }`). */
 export interface DatabaseError {

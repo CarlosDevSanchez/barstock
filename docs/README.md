@@ -64,6 +64,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [ajustes.md](03-modulos/ajustes.md) | Ajustes de la tienda (persisten) |
 | [usuarios.md](03-modulos/usuarios.md) | Invitar, cambiar rol, desactivar |
 | [auditoria.md](03-modulos/auditoria.md) | Registro de escrituras y eventos de sesión, solo admin, append-only |
+| [notificaciones.md](03-modulos/notificaciones.md) | Alertas de personal (stock bajo, jornada autocerrada, cobros vencidos) |
 
 ### 04 · Auditoría técnica — [`04-auditoria/`](04-auditoria/)
 | Archivo | Contenido |

@@ -1,6 +1,6 @@
 'use client'
 
-import { useMemo, useState } from 'react'
+import { useMemo, useState, useSyncExternalStore } from 'react'
 import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
@@ -49,6 +49,17 @@ type AdjustInput = z.input<typeof inventoryAdjustSchema>
 type AdjustOutput = z.output<typeof inventoryAdjustSchema>
 type ThresholdInput = z.input<typeof inventoryThresholdSchema>
 type ThresholdOutput = z.output<typeof inventoryThresholdSchema>
+
+function useLowStockQueryFlag(): boolean {
+    return useSyncExternalStore(
+        onStoreChange => {
+            window.addEventListener('popstate', onStoreChange)
+            return () => window.removeEventListener('popstate', onStoreChange)
+        },
+        () => new URLSearchParams(window.location.search).get('low') === '1',
+        () => false
+    )
+}
 
 interface AdjustDialogProps {
     item: InventoryListItem
@@ -574,7 +585,10 @@ export default function InventoryPage() {
     const canAdjust = roleAtLeast(user.role, 'manager')
 
     const [searchQuery, setSearchQuery] = useState('')
+    const lowFromUrl = useLowStockQueryFlag()
     const [lowOnly, setLowOnly] = useState(false)
+    const [dismissedUrlLow, setDismissedUrlLow] = useState(false)
+    const filterLow = lowOnly || (lowFromUrl && !dismissedUrlLow)
     const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const [adjusting, setAdjusting] = useState<InventoryListItem | null>(null)
     const [thresholdItem, setThresholdItem] = useState<InventoryListItem | null>(null)
@@ -582,8 +596,8 @@ export default function InventoryPage() {
     const search = useDebouncedValue(searchQuery)
 
     const inventory = useApiQuery(
-        signal => inventoryApi.list({ page, pageSize, q: search, low: lowOnly }, signal),
-        JSON.stringify({ page, pageSize, search, lowOnly })
+        signal => inventoryApi.list({ page, pageSize, q: search, low: filterLow }, signal),
+        JSON.stringify({ page, pageSize, search, filterLow })
     )
     const catalog = useApiQuery(signal => inventoryApi.list({ pageSize: 100 }, signal), 'purchase-catalog')
     const summary = inventory.data?.summary
@@ -730,11 +744,17 @@ export default function InventoryPage() {
                 searchPlaceholder={t('searchPlaceholder')}
             >
                 <Button
-                    variant={lowOnly ? 'default' : 'outline'}
-                    aria-pressed={lowOnly}
+                    variant={filterLow ? 'default' : 'outline'}
+                    aria-pressed={filterLow}
                     className="w-full lg:w-auto"
                     onClick={() => {
-                        setLowOnly(value => !value)
+                        if (filterLow) {
+                            setLowOnly(false)
+                            setDismissedUrlLow(true)
+                        } else {
+                            setLowOnly(true)
+                            setDismissedUrlLow(false)
+                        }
                         reset()
                     }}
                 >
