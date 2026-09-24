@@ -15,6 +15,8 @@ export const serverEnvSchema = clientEnvSchema
         SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
         // Public URL of the app; base for invitation and password-reset links.
         APP_URL: z.url(),
+        // Bearer secret for GET /api/cron/tick (Vercel Cron). Optional: when unset the route answers 503.
+        CRON_SECRET: z.string().min(1).optional(),
         // Cloudflare R2 (product and receipt-logo image storage, lib/server/storage.ts). Optional AS A GROUP: the
         // bucket is provisioned later, so `next build`/CI must keep working with none of these set. When absent,
         // the image endpoints answer 503 storage_not_configured and the UI hides the image picker.

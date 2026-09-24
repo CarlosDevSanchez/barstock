@@ -123,6 +123,10 @@ where grantee = 'anon' and table_schema = 'public';
   rollback;
   ```
 
+## Jornada y cajas (`20261003000001`)
+
+Cajero+ puede leer `business_days`, `cash_registers`, `cash_sessions`, `cash_session_users` y `cash_movements`. No hay políticas de escritura: todo pasa por RPC, salvo `cash_registers` (insert y update solo admin). `anon` no tiene privilegios; `authenticated` no puede borrar ni truncar.
+
 ## Migrar una base ya desplegada
 
 `…03_roles_rls.sql` elimina **todas** las políticas existentes (incluidas las de `fix_rls_policies.sql` si se aplicó) y crea las definitivas.

@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
 import { useMoney, useSession } from '@/components/session-provider'
+import { roleAtLeast } from '@/lib/auth/roles'
+import { ReviewBanner } from '@/components/cash/review-banner'
 import { DEFAULT_LOCALE } from '@/lib/money'
 import { dashboardApi } from '@/lib/api/reports'
 import { calendarDate } from '@/lib/dates'
@@ -17,7 +19,7 @@ import { useApiQuery } from '@/hooks/use-api-query'
 export default function DashboardPage() {
     const t = useTranslations('dashboard')
     const money = useMoney()
-    const { settings } = useSession()
+    const { settings, user } = useSession()
     // One request: the database aggregates (refunded orders excluded, days bucketed in the store time zone).
     const summary = useApiQuery(signal => dashboardApi.get(signal), 'dashboard')
 
@@ -43,6 +45,7 @@ export default function DashboardPage() {
                 <h1 className="text-3xl font-bold">{t('title')}</h1>
                 <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>
+            {roleAtLeast(user.role, 'admin') ? <ReviewBanner /> : null}
 
             {/* KPI Cards */}
             <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">

@@ -90,6 +90,21 @@ void mock.module('@/lib/api/orders', () => ({
     salesApi: { create: createSale },
     ordersApi: { get: async () => completedOrder }
 }))
+const cashDesk = {
+    day: { id: 'day-1' } as { id: string } | null,
+    sessions: [{ users: [{ id: 'user-cashier' }] }] as { users: { id: string }[] }[]
+}
+void mock.module('@/lib/api/cash', () => ({
+    cashApi: {
+        current: async () => ({
+            day: cashDesk.day,
+            sessions: cashDesk.sessions,
+            registers: [],
+            staff: [],
+            default_opening_float: 0
+        })
+    }
+}))
 void mock.module('@/lib/api/tabs', () => ({
     tabsApi: {
         list: async () => page([]),
@@ -135,6 +150,8 @@ const cartSummary = (label: string) =>
     within(cartDialog()).getByText(label, { selector: 'span' }).parentElement?.textContent ?? ''
 
 beforeEach(() => {
+    cashDesk.day = { id: 'day-1' }
+    cashDesk.sessions = [{ users: [{ id: 'user-cashier' }] }]
     useCartStore.getState().clearCart()
     list.mockClear()
     createSale.mockClear()
@@ -519,5 +536,12 @@ describe('POS cart', () => {
         expect(print).toHaveBeenCalled()
         fireEvent.click(within(done).getByRole('button', { name: 'New sale' }))
         await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Sale completed' })).toBeNull())
+    })
+
+    test('a missing business day is a notice and does not block the catalog', async () => {
+        cashDesk.day = null
+        renderPos()
+        expect(await screen.findByText('No business day is open')).toBeTruthy()
+        expect(await screen.findByText('Wireless Mouse')).toBeTruthy()
     })
 })

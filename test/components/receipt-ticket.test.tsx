@@ -18,6 +18,8 @@ const baseOrder: OrderDetail = {
     discount: 0,
     tax: 21,
     total: 141,
+    business_day_id: null,
+    cash_session_id: null,
     notes: null,
     tab_id: null,
     created_by: 'user-1',
@@ -43,7 +45,10 @@ const baseOrder: OrderDetail = {
             amount: 141,
             reference_number: null,
             notes: null,
-            created_at: '2026-09-21T15:30:00Z'
+            created_at: '2026-09-21T15:30:00Z',
+            created_by: null,
+            business_day_id: null,
+            cash_session_id: null
         }
     ],
     items: [
@@ -137,7 +142,10 @@ describe('ReceiptTicket', () => {
                     amount: 100,
                     reference_number: null,
                     notes: null,
-                    created_at: '2026-09-21T15:30:00Z'
+                    created_at: '2026-09-21T15:30:00Z',
+                    created_by: null,
+                    business_day_id: null,
+                    cash_session_id: null
                 },
                 {
                     id: 'pay-2',
@@ -146,7 +154,10 @@ describe('ReceiptTicket', () => {
                     amount: 41,
                     reference_number: null,
                     notes: null,
-                    created_at: '2026-09-21T15:30:00Z'
+                    created_at: '2026-09-21T15:30:00Z',
+                    created_by: null,
+                    business_day_id: null,
+                    cash_session_id: null
                 }
             ]
         }

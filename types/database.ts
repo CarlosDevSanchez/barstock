@@ -73,6 +73,243 @@ export type Database = {
         }
         Relationships: []
       }
+      business_days: {
+        Row: {
+          close_kind: string | null
+          closed_at: string | null
+          closed_by: string | null
+          id: string
+          needs_review: boolean
+          notes: string | null
+          opened_at: string
+          opened_by: string
+          reviewed_at: string | null
+          reviewed_by: string | null
+        }
+        Insert: {
+          close_kind?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          id?: string
+          needs_review?: boolean
+          notes?: string | null
+          opened_at?: string
+          opened_by: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+        }
+        Update: {
+          close_kind?: string | null
+          closed_at?: string | null
+          closed_by?: string | null
+          id?: string
+          needs_review?: boolean
+          notes?: string | null
+          opened_at?: string
+          opened_by?: string
+          reviewed_at?: string | null
+          reviewed_by?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "business_days_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_days_opened_by_fkey"
+            columns: ["opened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "business_days_reviewed_by_fkey"
+            columns: ["reviewed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_movements: {
+        Row: {
+          amount: number
+          created_at: string
+          created_by: string
+          id: string
+          kind: string
+          reason: string
+          session_id: string
+        }
+        Insert: {
+          amount: number
+          created_at?: string
+          created_by: string
+          id?: string
+          kind: string
+          reason: string
+          session_id: string
+        }
+        Update: {
+          amount?: number
+          created_at?: string
+          created_by?: string
+          id?: string
+          kind?: string
+          reason?: string
+          session_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_movements_created_by_fkey"
+            columns: ["created_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_movements_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_registers: {
+        Row: {
+          created_at: string
+          id: string
+          is_active: boolean
+          name: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          is_active?: boolean
+          name?: string
+        }
+        Relationships: []
+      }
+      cash_session_users: {
+        Row: {
+          session_id: string
+          user_id: string
+        }
+        Insert: {
+          session_id: string
+          user_id: string
+        }
+        Update: {
+          session_id?: string
+          user_id?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_session_users_session_id_fkey"
+            columns: ["session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_session_users_user_id_fkey"
+            columns: ["user_id"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      cash_sessions: {
+        Row: {
+          business_day_id: string
+          closed_at: string | null
+          closed_by: string | null
+          counted_cash: number | null
+          difference: number | null
+          expected_cash: number | null
+          id: string
+          needs_review: boolean
+          notes: string | null
+          opened_at: string
+          opened_by: string
+          opening_float: number
+          register_id: string
+          status: string
+        }
+        Insert: {
+          business_day_id: string
+          closed_at?: string | null
+          closed_by?: string | null
+          counted_cash?: number | null
+          difference?: number | null
+          expected_cash?: number | null
+          id?: string
+          needs_review?: boolean
+          notes?: string | null
+          opened_at?: string
+          opened_by: string
+          opening_float: number
+          register_id: string
+          status?: string
+        }
+        Update: {
+          business_day_id?: string
+          closed_at?: string | null
+          closed_by?: string | null
+          counted_cash?: number | null
+          difference?: number | null
+          expected_cash?: number | null
+          id?: string
+          needs_review?: boolean
+          notes?: string | null
+          opened_at?: string
+          opened_by?: string
+          opening_float?: number
+          register_id?: string
+          status?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "cash_sessions_business_day_id_fkey"
+            columns: ["business_day_id"]
+            isOneToOne: false
+            referencedRelation: "business_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_sessions_closed_by_fkey"
+            columns: ["closed_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_sessions_opened_by_fkey"
+            columns: ["opened_by"]
+            isOneToOne: false
+            referencedRelation: "profiles"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "cash_sessions_register_id_fkey"
+            columns: ["register_id"]
+            isOneToOne: false
+            referencedRelation: "cash_registers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
       categories: {
         Row: {
           created_at: string
@@ -381,6 +618,8 @@ export type Database = {
       }
       orders: {
         Row: {
+          business_day_id: string | null
+          cash_session_id: string | null
           client_ref: string | null
           created_at: string
           created_by: string | null
@@ -405,6 +644,8 @@ export type Database = {
           updated_at: string
         }
         Insert: {
+          business_day_id?: string | null
+          cash_session_id?: string | null
           client_ref?: string | null
           created_at?: string
           created_by?: string | null
@@ -429,6 +670,8 @@ export type Database = {
           updated_at?: string
         }
         Update: {
+          business_day_id?: string | null
+          cash_session_id?: string | null
           client_ref?: string | null
           created_at?: string
           created_by?: string | null
@@ -454,6 +697,20 @@ export type Database = {
         }
         Relationships: [
           {
+            foreignKeyName: "orders_business_day_id_fkey"
+            columns: ["business_day_id"]
+            isOneToOne: false
+            referencedRelation: "business_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+          {
             foreignKeyName: "orders_customer_id_fkey"
             columns: ["customer_id"]
             isOneToOne: false
@@ -472,7 +729,10 @@ export type Database = {
       payments: {
         Row: {
           amount: number
+          business_day_id: string | null
+          cash_session_id: string | null
           created_at: string
+          created_by: string | null
           id: string
           notes: string | null
           order_id: string
@@ -481,7 +741,10 @@ export type Database = {
         }
         Insert: {
           amount: number
+          business_day_id?: string | null
+          cash_session_id?: string | null
           created_at?: string
+          created_by?: string | null
           id?: string
           notes?: string | null
           order_id: string
@@ -490,7 +753,10 @@ export type Database = {
         }
         Update: {
           amount?: number
+          business_day_id?: string | null
+          cash_session_id?: string | null
           created_at?: string
+          created_by?: string | null
           id?: string
           notes?: string | null
           order_id?: string
@@ -498,6 +764,20 @@ export type Database = {
           reference_number?: string | null
         }
         Relationships: [
+          {
+            foreignKeyName: "payments_business_day_id_fkey"
+            columns: ["business_day_id"]
+            isOneToOne: false
+            referencedRelation: "business_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "payments_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "payments_order_id_fkey"
             columns: ["order_id"]
@@ -1011,6 +1291,7 @@ export type Database = {
       tab_payments: {
         Row: {
           amount: number
+          cash_session_id: string | null
           created_at: string
           created_by: string | null
           id: string
@@ -1020,6 +1301,7 @@ export type Database = {
         }
         Insert: {
           amount: number
+          cash_session_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -1029,6 +1311,7 @@ export type Database = {
         }
         Update: {
           amount?: number
+          cash_session_id?: string | null
           created_at?: string
           created_by?: string | null
           id?: string
@@ -1037,6 +1320,13 @@ export type Database = {
           tab_id?: string
         }
         Relationships: [
+          {
+            foreignKeyName: "tab_payments_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
           {
             foreignKeyName: "tab_payments_member_id_fkey"
             columns: ["member_id"]
@@ -1127,7 +1417,16 @@ export type Database = {
       [_ in never]: never
     }
     Functions: {
+      _auto_close_stale_business_days: { Args: never; Returns: undefined }
       _close_tab: { Args: { p_tab_id: string }; Returns: string }
+      _current_assignment: {
+        Args: { p_at: string; p_user: string }
+        Returns: {
+          business_day_id: string
+          cash_session_id: string
+        }[]
+      }
+      _session_cash: { Args: { p_session_id: string }; Returns: Json }
       _tab_totals: {
         Args: { p_tab_id: string }
         Returns: {
@@ -1139,9 +1438,40 @@ export type Database = {
           total: number
         }[]
       }
+      add_cash_movement: {
+        Args: {
+          p_amount: number
+          p_kind: string
+          p_reason: string
+          p_session_id: string
+        }
+        Returns: string
+      }
+      adjust_business_day: {
+        Args: {
+          p_closed_at: string
+          p_id: string
+          p_notes?: string
+          p_opened_at: string
+        }
+        Returns: undefined
+      }
       adjust_inventory: {
         Args: { p_delta: number; p_inventory_id: string; p_reason: string }
         Returns: number
+      }
+      business_day_report: {
+        Args: { p_business_day_id: string }
+        Returns: Json
+      }
+      cash_session_summary: { Args: { p_session_id: string }; Returns: Json }
+      close_business_day: {
+        Args: { p_id: string; p_notes?: string }
+        Returns: undefined
+      }
+      close_cash_session: {
+        Args: { p_counted_cash: number; p_notes?: string; p_session_id: string }
+        Returns: undefined
       }
       create_sale: {
         Args: {
@@ -1183,10 +1513,20 @@ export type Database = {
       }
       mark_order_reviewed: { Args: { p_order_id: string }; Returns: undefined }
       money_scale: { Args: never; Returns: number }
+      open_business_day: { Args: { p_notes?: string }; Returns: string }
+      open_cash_session: {
+        Args: {
+          p_opening_float: number
+          p_register_id: string
+          p_user_ids: string[]
+        }
+        Returns: string
+      }
       open_tab: {
         Args: { p_customer_id: string; p_label: string; p_members: string[] }
         Returns: string
       }
+      refresh_business_days: { Args: never; Returns: undefined }
       refresh_customer_totals: {
         Args: { p_customer_id: string }
         Returns: undefined

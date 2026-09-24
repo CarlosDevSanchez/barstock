@@ -44,7 +44,8 @@ Ninguna de las tablas de ventas y stock se borra desde la API (privilegios revoc
 ## Cardinalidades y particularidades
 
 - **Producto ↔ inventario:** una fila por (producto, variante); para productos sin variante, el índice parcial único garantiza **una sola**. El trigger `create_inventory_for_product` la crea (cantidad 0) al insertar el producto.
-- **Orden ↔ pago:** modelado 1:N, usado 1:1 (pagos mixtos: D5).
+- **Orden ↔ pago:** 1:N. Un cobro lleva uno o dos métodos (D5).
+- **Jornada ↔ orden / pago:** opcional. Sin jornada abierta el id queda nulo. Una sesión de caja pertenece a una jornada y a una caja; los responsables están en `cash_session_users`.
 - **Orden ↔ creador:** FK a `auth.users`, no a `profiles`, así que PostgREST **no puede embeber** el perfil: el servicio consulta el perfil aparte (`created_by_name`). El antiguo embed `profiles!orders_created_by_fkey` no funcionaba.
 - **Categorías anidadas:** existe `parent_id`; ninguna pantalla lo usa.
 - **`inventory_transactions.reference_id`** apunta lógicamente a una orden o compra **sin FK** (así las bitácoras sobreviven a su origen).
