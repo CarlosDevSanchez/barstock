@@ -891,6 +891,17 @@
       "voided": "Anulada"
     }
   },
+  "notifications": {
+    "title": "Notificaciones",
+    "email": "Correo",
+    "push": "Push",
+    "installForPush": "Instala la app para recibir notificaciones",
+    "pushDenied": "Permiso de notificaciones denegado",
+    "pushFailed": "No se pudo activar las notificaciones push",
+    "prefsFailed": "No se pudieron guardar las preferencias",
+    "bell": "Alertas de stock bajo",
+    "bellCount": "{count} productos con stock bajo"
+  },
   "pagination": {
     "showing": "Mostrando {from}–{to} de {total}",
     "rowsPerPage": "Filas por página",

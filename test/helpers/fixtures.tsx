@@ -32,7 +32,9 @@ export const userWithRole = (role: SessionUser['role'], locale: AppLocale = 'en'
     email: `${role}@test.dev`,
     fullName: null,
     role,
-    locale
+    locale,
+    notifyEmail: true,
+    notifyPush: true
 })
 
 /** Component tests stay on English messages so existing assertions keep working. */

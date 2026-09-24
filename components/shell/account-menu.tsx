@@ -17,6 +17,7 @@ import {
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
 import { apiPatch, apiPost, errorMessage } from '@/lib/api/client'
+import { notificationsApi } from '@/lib/api/notifications'
 import { idbClearSnapshot } from '@/lib/offline/db'
 import { pendingOutboxCount } from '@/lib/offline/outbox'
 import { clearOfflineCaches } from '@/lib/pwa/clear-cache'
@@ -33,13 +34,41 @@ interface AccountMenuProps {
     variant?: 'icon' | 'full'
 }
 
+function isIos(): boolean {
+    if (typeof navigator === 'undefined') return false
+    return (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    )
+}
+
+function isStandalone(): boolean {
+    if (typeof window === 'undefined') return false
+    const media = window.matchMedia('(display-mode: standalone)').matches
+    const safari = 'standalone' in navigator && Boolean((navigator as { standalone?: boolean }).standalone)
+    return media || safari
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+    const raw = atob(base64)
+    const output = new Uint8Array(raw.length)
+    for (let i = 0; i < raw.length; i++) output[i] = raw.charCodeAt(i)
+    return output
+}
+
 export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuProps) {
     const router = useRouter()
     const { theme, setTheme } = useTheme()
     const t = useTranslations('common')
+    const tn = useTranslations('notifications')
     const clearCart = useCartStore(state => state.clearCart)
     const displayName = user.fullName || user.email
     const [pendingLogoutWarning, setPendingLogoutWarning] = useState<number | null>(null)
+    const [notifyEmail, setNotifyEmail] = useState(user.notifyEmail)
+    const [notifyPush, setNotifyPush] = useState(user.notifyPush)
+    const [prefsBusy, setPrefsBusy] = useState(false)
 
     const doLogout = async () => {
         try {
@@ -77,6 +106,84 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
             router.refresh()
         } catch (error: unknown) {
             toast.error(errorMessage(error))
+        }
+    }
+
+    const savePrefs = async (email: boolean, push: boolean) => {
+        setPrefsBusy(true)
+        try {
+            await notificationsApi.updatePrefs({ notify_email: email, notify_push: push })
+            setNotifyEmail(email)
+            setNotifyPush(push)
+            router.refresh()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, tn('prefsFailed')))
+            throw error
+        } finally {
+            setPrefsBusy(false)
+        }
+    }
+
+    const toggleEmail = async () => {
+        const next = !notifyEmail
+        try {
+            await savePrefs(next, notifyPush)
+        } catch {
+            /* toast already shown */
+        }
+    }
+
+    const togglePush = async () => {
+        if (notifyPush) {
+            try {
+                const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.ready : null
+                const sub = await reg?.pushManager.getSubscription()
+                if (sub) {
+                    await notificationsApi.unsubscribe(sub.endpoint)
+                    await sub.unsubscribe()
+                }
+                await savePrefs(notifyEmail, false)
+            } catch (error: unknown) {
+                toast.error(errorMessage(error, tn('prefsFailed')))
+            }
+            return
+        }
+
+        if (isIos() && !isStandalone()) {
+            toast.message(tn('installForPush'))
+            return
+        }
+
+        try {
+            if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+                toast.error(tn('pushFailed'))
+                return
+            }
+            const permission = await Notification.requestPermission()
+            if (permission !== 'granted') {
+                toast.error(tn('pushDenied'))
+                return
+            }
+            const { publicKey } = await notificationsApi.getPushKey()
+            const reg = await navigator.serviceWorker.ready
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource
+            })
+            const json = sub.toJSON()
+            if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+                toast.error(tn('pushFailed'))
+                return
+            }
+            await notificationsApi.subscribe({
+                endpoint: json.endpoint,
+                p256dh: json.keys.p256dh,
+                auth: json.keys.auth,
+                user_agent: navigator.userAgent
+            })
+            await savePrefs(notifyEmail, true)
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, tn('pushFailed')))
         }
     }
 
@@ -132,6 +239,51 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
                         {locale === 'es' ? 'Español' : 'English'}
                     </DropdownMenuItem>
                 ))}
+                <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                    {tn('title')}
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                    disabled={prefsBusy}
+                    onSelect={e => {
+                        e.preventDefault()
+                        void toggleEmail()
+                    }}
+                    className="justify-between"
+                >
+                    <span>{tn('email')}</span>
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        aria-checked={notifyEmail}
+                        checked={notifyEmail}
+                        readOnly
+                        className="h-4 w-4 accent-emerald-600 pointer-events-none"
+                    />
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    disabled={prefsBusy}
+                    onSelect={e => {
+                        e.preventDefault()
+                        void togglePush()
+                    }}
+                    className="justify-between"
+                >
+                    <span>{tn('push')}</span>
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        aria-checked={notifyPush}
+                        checked={notifyPush}
+                        readOnly
+                        className="h-4 w-4 accent-emerald-600 pointer-events-none"
+                    />
+                </DropdownMenuItem>
+                {isIos() && !isStandalone() && (
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground whitespace-normal">
+                        {tn('installForPush')}
+                    </DropdownMenuLabel>
+                )}
                 <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
                     {theme === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}

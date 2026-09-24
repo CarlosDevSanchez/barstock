@@ -7,6 +7,7 @@ export const clientEnvSchema = z.object({
 })
 
 const R2_KEYS = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'] as const
+const NOTIFY_KEYS = ['RESEND_API_KEY', 'EMAIL_FROM', 'VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'] as const
 
 /** Server variables: adds secrets that must NEVER carry the NEXT_PUBLIC_ prefix. */
 export const serverEnvSchema = clientEnvSchema
@@ -33,18 +34,38 @@ export const serverEnvSchema = clientEnvSchema
         // (e.g. http://localhost:9000), as opposed to the Docker-internal host (http://r2:9000) the app container
         // uses to reach MinIO for uploads/deletes. Falls back to R2_ENDPOINT_OVERRIDE when unset (same host works
         // for both when the app itself runs outside Docker, e.g. `bun run dev` on the host).
-        R2_PUBLIC_ENDPOINT_OVERRIDE: z.string().url().optional()
+        R2_PUBLIC_ENDPOINT_OVERRIDE: z.string().url().optional(),
+        // Staff alerts (email via Resend, push via web-push). Optional AS A GROUP: build/CI work with none set;
+        // dispatchOutbox skips a channel when its keys are missing (email needs RESEND+FROM; push needs all VAPID_*).
+        RESEND_API_KEY: z.string().min(1).optional(),
+        EMAIL_FROM: z.string().min(1).optional(),
+        VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+        VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+        VAPID_SUBJECT: z.string().min(1).optional()
     })
     .superRefine((value, ctx) => {
-        const present = R2_KEYS.filter(key => value[key] !== undefined)
-        if (present.length === 0 || present.length === R2_KEYS.length) return
-        for (const key of R2_KEYS) {
-            if (value[key] === undefined) {
-                ctx.addIssue({
-                    code: 'custom',
-                    path: [key],
-                    message: 'All four R2 variables must be set together, or none'
-                })
+        const presentR2 = R2_KEYS.filter(key => value[key] !== undefined)
+        if (presentR2.length !== 0 && presentR2.length !== R2_KEYS.length) {
+            for (const key of R2_KEYS) {
+                if (value[key] === undefined) {
+                    ctx.addIssue({
+                        code: 'custom',
+                        path: [key],
+                        message: 'All four R2 variables must be set together, or none'
+                    })
+                }
+            }
+        }
+        const presentNotify = NOTIFY_KEYS.filter(key => value[key] !== undefined)
+        if (presentNotify.length !== 0 && presentNotify.length !== NOTIFY_KEYS.length) {
+            for (const key of NOTIFY_KEYS) {
+                if (value[key] === undefined) {
+                    ctx.addIssue({
+                        code: 'custom',
+                        path: [key],
+                        message: 'All five notification variables must be set together, or none'
+                    })
+                }
             }
         }
     })

@@ -82,3 +82,40 @@ describe('R2 variables (lib/server/storage.ts), optional as a group', () => {
         expect(() => parseEnv(serverEnvSchema, { ...valid, R2_BUCKET: r2.R2_BUCKET })).toThrow(/R2_ACCOUNT_ID: missing/)
     })
 })
+
+describe('notification variables (lib/server/services/notifications.ts), optional as a group', () => {
+    const notify = {
+        RESEND_API_KEY: 're_test',
+        EMAIL_FROM: 'Barstock <alerts@example.com>',
+        VAPID_PUBLIC_KEY: 'vapid-pub',
+        VAPID_PRIVATE_KEY: 'vapid-priv',
+        VAPID_SUBJECT: 'mailto:ops@example.com'
+    }
+
+    test('none of the five is valid: build/CI must work before email/push are provisioned', () => {
+        expect(parseEnv(serverEnvSchema, valid)).toMatchObject(valid)
+    })
+
+    test('all five together are valid', () => {
+        expect(parseEnv(serverEnvSchema, { ...valid, ...notify })).toEqual({ ...valid, ...notify })
+    })
+
+    test('a partial set is rejected, naming every missing notification variable', () => {
+        let error: unknown
+        try {
+            parseEnv(serverEnvSchema, {
+                ...valid,
+                RESEND_API_KEY: notify.RESEND_API_KEY,
+                VAPID_PUBLIC_KEY: notify.VAPID_PUBLIC_KEY
+            })
+        } catch (e: unknown) {
+            error = e
+        }
+        expect(error).toBeInstanceOf(EnvError)
+        expect((error as EnvError).problems).toEqual([
+            'EMAIL_FROM: missing',
+            'VAPID_PRIVATE_KEY: missing',
+            'VAPID_SUBJECT: missing'
+        ])
+    })
+})

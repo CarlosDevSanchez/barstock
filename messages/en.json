@@ -891,6 +891,17 @@
       "voided": "Voided"
     }
   },
+  "notifications": {
+    "title": "Notifications",
+    "email": "Email",
+    "push": "Push",
+    "installForPush": "Install the app to receive notifications",
+    "pushDenied": "Notification permission denied",
+    "pushFailed": "Could not enable push notifications",
+    "prefsFailed": "Could not save notification preferences",
+    "bell": "Low stock alerts",
+    "bellCount": "{count} low-stock products"
+  },
   "pagination": {
     "showing": "Showing {from}–{to} of {total}",
     "rowsPerPage": "Rows per page",
