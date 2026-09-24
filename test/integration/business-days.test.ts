@@ -1,5 +1,14 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import { GET as cronTick } from '@/app/api/cron/tick/route'
+import { GET as getDay, PATCH as adjustDay } from '@/app/api/v1/business-days/[id]/route'
+import { POST as closeDay } from '@/app/api/v1/business-days/[id]/close/route'
+import { GET as current } from '@/app/api/v1/business-days/current/route'
+import { GET as listDays, POST as openDay } from '@/app/api/v1/business-days/route'
+import { GET as listRegisters, POST as createRegister } from '@/app/api/v1/cash-registers/route'
+import { POST as closeSession } from '@/app/api/v1/cash-sessions/[id]/close/route'
+import { POST as addMovement } from '@/app/api/v1/cash-sessions/[id]/movements/route'
+import { GET as getSession } from '@/app/api/v1/cash-sessions/[id]/route'
+import { POST as openSession } from '@/app/api/v1/cash-sessions/route'
 import {
     adminClient,
     createProduct,
@@ -8,6 +17,7 @@ import {
     type Db,
     type TestUsers
 } from '../helpers/integration'
+import { dataOf, loginAs } from '../helpers/http'
 
 let cashier: Db
 let manager: Db
@@ -23,20 +33,35 @@ const sell = (db: Db, productId: string) =>
         p_discount: 0
     })
 
+function justAfter(openedAt: string): string {
+    // After the open, and not in the future: a future closed_at still owns a sale made now.
+    return new Date(Math.max(new Date(openedAt).getTime() + 1, Date.now() - 1)).toISOString()
+}
+
 async function closeAnyDay() {
-    const { data, error } = await service().from('business_days').select('id').is('closed_at', null)
-    if (error) throw error
-    const closedAt = new Date(Date.now() + 5000).toISOString()
-    for (const day of data ?? []) {
-        const sessions = await service()
+    const now = new Date().toISOString()
+    const open = await service().from('business_days').select('id, opened_at').is('closed_at', null)
+    if (open.error) throw open.error
+    const future = await service().from('business_days').select('id, opened_at').gt('closed_at', now)
+    if (future.error) throw future.error
+    const data = [...(open.data ?? []), ...(future.data ?? [])]
+    for (const day of data) {
+        const openSessions = await service()
             .from('cash_sessions')
-            .update({ status: 'closed', closed_at: closedAt })
+            .select('id, opened_at')
             .eq('business_day_id', day.id)
             .eq('status', 'open')
-        if (sessions.error) throw sessions.error
+        if (openSessions.error) throw openSessions.error
+        for (const session of openSessions.data ?? []) {
+            const sessions = await service()
+                .from('cash_sessions')
+                .update({ status: 'closed', closed_at: justAfter(session.opened_at) })
+                .eq('id', session.id)
+            if (sessions.error) throw sessions.error
+        }
         const closed = await service()
             .from('business_days')
-            .update({ closed_at: closedAt, close_kind: 'manual' })
+            .update({ closed_at: justAfter(day.opened_at), close_kind: 'manual' })
             .eq('id', day.id)
         if (closed.error) throw closed.error
     }
@@ -224,6 +249,82 @@ describe('business days and cash sessions', () => {
         expect(allowed.error).toBeNull()
         const { data } = await service().from('business_days').select('needs_review').eq('id', opened.data!).single()
         expect(data?.needs_review).toBe(false)
+    })
+
+    test('the cash routes open a day, move the drawer and report it', async () => {
+        await closeAnyDay()
+        const [cashierHttp, managerHttp, adminHttp] = await Promise.all([
+            loginAs('cashier'),
+            loginAs('manager'),
+            loginAs('admin')
+        ])
+
+        const empty = await cashierHttp.get(current, 'business-days/current')
+        expect(empty.status).toBe(200)
+        expect(dataOf<{ day: unknown }>(empty).day).toBeNull()
+
+        const opened = await cashierHttp.post(openDay, 'business-days', { body: {} })
+        expect(opened.status).toBe(201)
+        const day = dataOf<{ id: string; opened_at: string }>(opened)
+
+        const registers = dataOf<{ id: string; name: string }[]>(await cashierHttp.get(listRegisters, 'cash-registers'))
+        const caja = registers.find(register => register.name === 'Caja 1')
+        expect(caja).toBeTruthy()
+
+        const beforeTill = dataOf<{ sessions: unknown[] }>(await cashierHttp.get(current, 'business-days/current'))
+        expect(beforeTill.sessions).toEqual([])
+
+        const session = await cashierHttp.post(openSession, 'cash-sessions', {
+            body: { register_id: caja!.id, opening_float: 1000, user_ids: [users.cashier.id] }
+        })
+        expect(session.status).toBe(201)
+        const sessionId = dataOf<{ id: string }>(session).id
+
+        const movement = await cashierHttp.post(addMovement, `cash-sessions/${sessionId}/movements`, {
+            params: { id: sessionId },
+            body: { kind: 'withdrawal', amount: 200, reason: 'cambio' }
+        })
+        expect(movement.status).toBe(201)
+
+        const live = dataOf<{ sessions: { expected_cash: number; movements: { reason: string }[] }[] }>(
+            await cashierHttp.get(current, 'business-days/current')
+        )
+        expect(live.sessions[0]?.expected_cash).toBe(800)
+        expect(live.sessions[0]?.movements[0]?.reason).toBe('cambio')
+        expect(
+            (await cashierHttp.get(getSession, `cash-sessions/${sessionId}`, { params: { id: sessionId } })).status
+        ).toBe(200)
+
+        const counted = await cashierHttp.post(closeSession, `cash-sessions/${sessionId}/close`, {
+            params: { id: sessionId },
+            body: { counted_cash: 800 }
+        })
+        expect(counted.status).toBe(204)
+        expect(
+            (
+                await cashierHttp.get(getSession, 'cash-sessions/00000000-0000-4000-8000-000000000000', {
+                    params: { id: '00000000-0000-4000-8000-000000000000' }
+                })
+            ).status
+        ).toBe(404)
+
+        expect((await cashierHttp.get(listDays, 'business-days')).status).toBe(403)
+        expect((await managerHttp.get(listDays, 'business-days')).status).toBe(200)
+        expect((await managerHttp.get(listDays, 'business-days?needs_review=false')).status).toBe(200)
+        expect((await managerHttp.get(getDay, `business-days/${day.id}`, { params: { id: day.id } })).status).toBe(200)
+
+        const adjusted = await adminHttp.patch(adjustDay, `business-days/${day.id}`, {
+            params: { id: day.id },
+            body: { opened_at: day.opened_at, notes: 'reviewed from the api' }
+        })
+        expect(adjusted.status).toBe(200)
+        expect(
+            (await cashierHttp.post(closeDay, `business-days/${day.id}/close`, { params: { id: day.id }, body: {} }))
+                .status
+        ).toBe(200)
+        expect(
+            (await adminHttp.post(createRegister, 'cash-registers', { body: { name: `Caja ${Date.now()}` } })).status
+        ).toBe(201)
     })
 
     test('the cron route rejects a missing secret and closes a stale day with the right one', async () => {
