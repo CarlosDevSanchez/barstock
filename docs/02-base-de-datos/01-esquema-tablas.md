@@ -12,7 +12,7 @@ Los importes son `NUMERIC(14,2)` (hasta ≈ 10¹²). En COP y otras monedas de u
 | `user_role` | `admin`, `manager`, `cashier` |
 | `payment_method` | `cash`, `card`, `ewallet` |
 | `order_status` | `draft`, `pending`, `completed`, `refunded` (**la aplicación solo produce `completed` y `refunded`**) |
-| `po_status` | `draft`, `pending`, `received`, `cancelled` (sin uso: compras sin UI) |
+| `po_status` | `draft`, `pending`, `received`, `cancelled` (`received`/`cancelled` vía `receive_purchase` / `void_purchase`) |
 | `tab_status` | `open`, `closed`, `voided` |
 
 ## Usuarios
@@ -39,7 +39,7 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 `low_stock_threshold` NOT NULL default 10 (`CHECK ≥ 0`), `location`, `last_restocked_at`. Único por (`product_id`, `variant_id`) **y** por `product_id` cuando `variant_id IS NULL` (índice parcial; `UNIQUE` a secas no impide duplicados con NULL).
 
 **`inventory_transactions`** — bitácora de movimientos: `inventory_id` → `inventory` CASCADE NOT NULL, `transaction_type` **`CHECK IN ('purchase','sale','adjustment','return')`**, `quantity` (`CHECK ≠ 0`; negativo = salida),
-`reference_id` (orden o compra; **sin FK**), `notes`, `created_by` → `auth.users`. Solo la escriben los RPC.
+`reference_id` (orden o compra; **sin FK**), `supplier_id` → `suppliers` (compras), `unit_cost` (compras), `notes`, `created_by` → `auth.users`. Solo la escriben los RPC. **[Por verificar]** tras `20261005000001_purchases.sql`.
 
 ## Personas
 **`customers`** — `name` NOT NULL, `email` UNIQUE, `phone`, `address`, **`loyalty_points`** y **`total_spent`** NOT NULL default 0 (**derivados por trigger** de las órdenes `completed`; no escribibles por la API), `is_active` NOT NULL default true.
@@ -71,7 +71,7 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 **`tab_payments`** — `tab_id` → `tabs` CASCADE NOT NULL, `member_id` → `tab_members` (opcional: un pago puede no asignarse a nadie en particular), `payment_method` NOT NULL, `amount` (`CHECK > 0`), `created_by` → `auth.users`.
 
 ## Compras (solo esquema) y gastos
-**`purchase_orders`** (`po_number` UNIQUE, `supplier_id`, `status`, `total_amount ≥ 0`, `ordered_by`/`received_by`, fechas) · **`purchase_order_items`** (`purchase_order_id`, `product_id` NOT NULL, `variant_id`, `quantity > 0`, `unit_price ≥ 0`, `total` **GENERATED** `quantity × unit_price`) · **`expense_categories`** (`name` UNIQUE, `is_active`; semilla: Arriendo, Servicios, Nómina, Insumos, Otros) · **`expenses`** (`category_id` → `expense_categories`, `description`, `amount ≥ 0`, `payment_method`, `supplier_id` opcional, `business_day_id`, `cash_session_id`, `occurred_at`, `deleted_at`, `void_reason`, `created_by`). La columna de texto `category` y la fecha `date` se migraron a «Otros» (el texto original queda en `description`) y a `occurred_at`. Ver [Gastos](../03-modulos/gastos.md).
+**`purchase_orders`** (`po_number` UNIQUE, `supplier_id`, `status`, `total_amount ≥ 0`, `invoice_number`, `business_day_id`, `cash_session_id`, `ordered_by`/`received_by`, fechas) · **`purchase_order_items`** (`purchase_order_id`, `product_id` NOT NULL, `variant_id`, `quantity > 0`, `unit_price ≥ 0`, `total` **GENERATED** `quantity × unit_price`) · **`expense_categories`** (`name` UNIQUE, `is_active`; semilla: Arriendo, Servicios, Nómina, Insumos, Otros) · **`expenses`** (`category_id` → `expense_categories`, `description`, `amount ≥ 0`, `payment_method`, `supplier_id` opcional, `business_day_id`, `cash_session_id`, `occurred_at`, `deleted_at`, `void_reason`, `created_by`). La columna de texto `category` y la fecha `date` se migraron a «Otros» (el texto original queda en `description`) y a `occurred_at`. Ver [Gastos](../03-modulos/gastos.md).
 
 ## Configuración
 **`settings`** — `key` UNIQUE NOT NULL, `value jsonb NOT NULL`. Una fila por clave (`store_name`, `currency`, `timezone`, `tax_rate`, `low_stock_threshold`, `receipt_template`…). Ver [Ajustes](../03-modulos/ajustes.md).

@@ -470,7 +470,26 @@
     "packagesColAvailable": "Packages",
     "packagesColRecipe": "Recipe",
     "packagesEmpty": "No active promotions",
-    "packagesUnavailable": "No inventory"
+    "packagesUnavailable": "No inventory",
+    "registerPurchase": "Record purchase",
+    "supplierEntry": "Supplier intake",
+    "asAdjustment": "Manual adjustment",
+    "asPurchase": "Supplier intake",
+    "supplier": "Supplier",
+    "pickSupplier": "Choose a supplier",
+    "unitCost": "Unit cost",
+    "invoice": "Invoice",
+    "invoicePlaceholder": "Invoice number (optional)",
+    "notes": "Notes",
+    "paidFromTill": "Paid with cash from the till",
+    "till": "Open till",
+    "noOpenTill": "There is no open till.",
+    "purchaseSaved": "Purchase recorded",
+    "purchaseFailed": "Could not record the purchase",
+    "costMismatch": "Purchase cost ({purchase}) differs from catalog cost ({catalog}). The catalog is left unchanged.",
+    "addLine": "Add product",
+    "removeLine": "Remove",
+    "savePurchase": "Save purchase"
   },
   "orders": {
     "title": "Orders",
@@ -638,7 +657,9 @@
     "colEmail": "Email",
     "colPhone": "Phone",
     "colAddress": "Address",
-    "empty": "No suppliers found"
+    "empty": "No suppliers found",
+    "viewHistory": "Purchase history",
+    "viewHistoryAria": "View purchase history for {name}"
   },
   "expenses": {
     "title": "Expenses",
@@ -900,5 +921,31 @@
     "nextPage": "Next page",
     "lastPage": "Last page",
     "pageAria": "Page {page}"
+  },
+  "purchases": {
+    "historyTitle": "Purchase history",
+    "historySubtitle": "Received purchases from this supplier",
+    "backToSuppliers": "Back to suppliers",
+    "backAria": "Back to suppliers",
+    "notFound": "Supplier not found",
+    "from": "From",
+    "to": "To",
+    "total": "Total purchased",
+    "purchases": "Purchases",
+    "products": "Products",
+    "colPo": "PO",
+    "colInvoice": "Invoice",
+    "colWhen": "Date",
+    "colAmount": "Amount",
+    "colProduct": "Product",
+    "colQty": "Quantity",
+    "colLastCost": "Last cost",
+    "colAvgCost": "Average cost",
+    "empty": "No purchases in this range",
+    "costMismatch": "The last purchase cost differs from the catalog cost. The catalog is left unchanged.",
+    "void": "Void",
+    "voidTitle": "Void this purchase?",
+    "voidReason": "Reason",
+    "voided": "Purchase voided"
   }
 }

@@ -470,7 +470,26 @@
     "packagesColAvailable": "Paquetes",
     "packagesColRecipe": "Receta",
     "packagesEmpty": "No hay promociones activas",
-    "packagesUnavailable": "Sin inventario"
+    "packagesUnavailable": "Sin inventario",
+    "registerPurchase": "Registrar compra",
+    "supplierEntry": "Entrada de proveedor",
+    "asAdjustment": "Ajuste manual",
+    "asPurchase": "Entrada de proveedor",
+    "supplier": "Proveedor",
+    "pickSupplier": "Elige un proveedor",
+    "unitCost": "Costo unitario",
+    "invoice": "Factura",
+    "invoicePlaceholder": "Número de factura (opcional)",
+    "notes": "Notas",
+    "paidFromTill": "Pagado con efectivo de caja",
+    "till": "Caja abierta",
+    "noOpenTill": "No hay una caja abierta.",
+    "purchaseSaved": "Compra registrada",
+    "purchaseFailed": "No se pudo registrar la compra",
+    "costMismatch": "El costo de compra ({purchase}) no coincide con el costo del catálogo ({catalog}). El catálogo no se modifica.",
+    "addLine": "Añadir producto",
+    "removeLine": "Quitar",
+    "savePurchase": "Guardar compra"
   },
   "orders": {
     "title": "Órdenes",
@@ -638,7 +657,9 @@
     "colEmail": "Correo",
     "colPhone": "Teléfono",
     "colAddress": "Dirección",
-    "empty": "No se encontraron proveedores"
+    "empty": "No se encontraron proveedores",
+    "viewHistory": "Historial de compras",
+    "viewHistoryAria": "Ver historial de compras de {name}"
   },
   "expenses": {
     "title": "Gastos",
@@ -900,5 +921,31 @@
     "nextPage": "Página siguiente",
     "lastPage": "Última página",
     "pageAria": "Página {page}"
+  },
+  "purchases": {
+    "historyTitle": "Historial de compras",
+    "historySubtitle": "Compras recibidas de este proveedor",
+    "backToSuppliers": "Volver a proveedores",
+    "backAria": "Volver a proveedores",
+    "notFound": "Proveedor no encontrado",
+    "from": "Desde",
+    "to": "Hasta",
+    "total": "Total comprado",
+    "purchases": "Compras",
+    "products": "Productos",
+    "colPo": "OC",
+    "colInvoice": "Factura",
+    "colWhen": "Fecha",
+    "colAmount": "Monto",
+    "colProduct": "Producto",
+    "colQty": "Cantidad",
+    "colLastCost": "Último costo",
+    "colAvgCost": "Costo promedio",
+    "empty": "No hay compras en este rango",
+    "costMismatch": "El último costo de compra no coincide con el costo del catálogo. El catálogo no se modifica.",
+    "void": "Anular",
+    "voidTitle": "¿Anular esta compra?",
+    "voidReason": "Motivo",
+    "voided": "Compra anulada"
   }
 }
