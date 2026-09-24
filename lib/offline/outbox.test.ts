@@ -1,16 +1,7 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
-import { fakeIdbStore, resetFakeIdb } from '../../test/helpers/fake-idb'
+import { fakeIdbModule, resetFakeIdb } from '../../test/helpers/fake-idb'
 
-void mock.module('@/lib/offline/db', () => ({
-    idbGet: async (store: string, key: string) => fakeIdbStore(store).get(key),
-    idbSet: async (store: string, key: string, value: unknown) => {
-        fakeIdbStore(store).set(key, value)
-    },
-    idbGetAll: async (store: string) => [...fakeIdbStore(store).values()],
-    idbDelete: async (store: string, key: string) => {
-        fakeIdbStore(store).delete(key)
-    }
-}))
+void mock.module('@/lib/offline/db', fakeIdbModule)
 
 const {
     discardOutboxEntry,

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, mock, test } from 'bun:test'
 import type { OutboxEntry } from './outbox'
-import { fakeIdbStore, resetFakeIdb } from '../../test/helpers/fake-idb'
+import { fakeIdbModule, resetFakeIdb } from '../../test/helpers/fake-idb'
 
 class MockApiError extends Error {
     constructor(
@@ -20,16 +20,7 @@ void mock.module('@/lib/api/orders', () => ({ salesApi: { create } }))
 // Same fake IndexedDB as lib/offline/outbox.test.ts (shared on purpose — see test/helpers/fake-idb.ts): this file
 // exercises the real outbox.ts on top of it, not a stand-in for outbox.ts itself, so `runSync`'s real filtering
 // (retryable states, FIFO order, per-user matching) is what is actually under test here.
-void mock.module('@/lib/offline/db', () => ({
-    idbGet: async (store: string, key: string) => fakeIdbStore(store).get(key),
-    idbSet: async (store: string, key: string, value: unknown) => {
-        fakeIdbStore(store).set(key, value)
-    },
-    idbGetAll: async (store: string) => [...fakeIdbStore(store).values()],
-    idbDelete: async (store: string, key: string) => {
-        fakeIdbStore(store).delete(key)
-    }
-}))
+void mock.module('@/lib/offline/db', fakeIdbModule)
 
 const { enqueueSale, updateOutboxEntry, listOutboxEntries } = await import('./outbox')
 const { runSync } = await import('./sync')
