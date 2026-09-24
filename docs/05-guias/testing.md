@@ -55,8 +55,10 @@ Con `CI=true`, Playwright no reutiliza un servidor existente y arranca `bun run 
   handler real `auth/login` (cookies reales de `@supabase/ssr`).
 - **Por qué procesos separados.** `mock.module` de Bun es **global al proceso** y persiste entre archivos: el mock de `@/lib/server/supabase` de
   `http.test.ts` rompería las pruebas de integración que usan el cliente real. Además Testing Library captura `document` al importarse, así que
-  cada archivo de componentes necesita su propio proceso (`test:components` los lanza uno a uno). Consecuencia: no se usa `coverageThreshold` de
-  `bunfig.toml` (juzgaría cada proceso por separado).
+  cada archivo de componentes necesita su propio proceso (`test:components` los lanza uno a uno). Misma razón: `lib/offline/db.test.ts` corre
+  solo (`test:unit` / `test:coverage` lo excluyen del batch y lo lanzan después) — si comparte proceso con `outbox.test.ts`/`sync.test.ts`, el
+  `mock.module('@/lib/offline/db')` de esos archivos sustituye el módulo real y la suite deja de probar el degradado sin `indexedDB` (falla
+  cuando el orden es sync → db, como en CI Linux). Consecuencia: no se usa `coverageThreshold` de `bunfig.toml` (juzgaría cada proceso por separado).
 - **Cobertura** (`scripts/coverage-check.ts`): fusiona los informes lcov de unitarias e integración y exige **≥ 80 % de líneas** en `lib/server/**` y
   `lib/validation/**`; un archivo que ninguna prueba carga cuenta como fallo (no desaparece del informe). Hoy: `lib/server` 96,8 %, `lib/validation` 99,1 %.
 - **Nomenclatura E2E**: `*.e2e.ts`, no `*.spec.ts`, porque `bun test` recoge los `.spec.` y los ejecutaría como unitarios.

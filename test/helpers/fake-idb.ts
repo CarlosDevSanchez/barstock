@@ -1,9 +1,9 @@
 /**
- * A shared in-memory stand-in for lib/offline/db.ts's IndexedDB wrapper, used by any lib/offline/*.test.ts file
- * that needs `@/lib/offline/db` mocked. Bun's `mock.module` is process-global (test:unit runs every lib/**
- * file in one process), so two test files independently mocking the same module can otherwise stomp on each
- * other depending on load order. Importing this ONE shared instance from every such file, and resetting it in
- * each file's own `beforeEach`, makes the outcome the same no matter which file's `mock.module` call wins.
+ * A shared in-memory stand-in for lib/offline/db.ts's IndexedDB wrapper, used by outbox.test.ts and sync.test.ts.
+ * Bun's `mock.module` is process-global (test:unit runs every lib/** file in one process), so those two files
+ * import this ONE shared instance and reset it in each file's own `beforeEach`, so the outcome is the same no
+ * matter which file's `mock.module` call wins. lib/offline/db.test.ts is deliberately NOT in that process — it
+ * needs the real module's no-indexedDB path (see test:unit / test:coverage path-ignore).
  */
 const stores = new Map<string, Map<string, unknown>>()
 
