@@ -53,7 +53,8 @@ describe('navigation follows the role', () => {
         'Promotions',
         'Inventory',
         'Suppliers',
-        'Reports'
+        'Reports',
+        'Expenses'
     ]
 
     test('a cashier sees the till and the catalog, but not suppliers, reports, settings or users', () => {

@@ -59,6 +59,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [proveedores-y-compras.md](03-modulos/proveedores-y-compras.md) | Proveedores; órdenes de compra (sin UI) |
 | [dashboard.md](03-modulos/dashboard.md) | KPIs y gráficas (agregados en SQL) |
 | [reportes.md](03-modulos/reportes.md) | Reportes por rango de fechas |
+| [gastos.md](03-modulos/gastos.md) | Gastos operativos, costo fotografiado y ganancia neta |
 | [ajustes.md](03-modulos/ajustes.md) | Ajustes de la tienda (persisten) |
 | [usuarios.md](03-modulos/usuarios.md) | Invitar, cambiar rol, desactivar |
 | [auditoria.md](03-modulos/auditoria.md) | Registro de escrituras y eventos de sesión, solo admin, append-only |

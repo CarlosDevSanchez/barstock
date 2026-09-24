@@ -67,7 +67,7 @@ Los tests unitarios viven junto al código (`*.test.ts` en `lib/`, `stores/`).
 |---|---|
 | `components/ui/tabs.tsx` | 0 importaciones (shadcn lo trajo; borrar o usar) |
 | `public/*.svg` (5) | Restos de `create-next-app`, sin referencias |
-| `purchase_orders`, `purchase_order_items`, `expenses`, `product_variants` | Solo esquema: sin API ni UI (etapa 2) |
+| `purchase_orders`, `purchase_order_items`, `product_variants` | Solo esquema: sin API ni UI (etapa 2). Los gastos ya tienen API y pantalla: [gastos](../03-modulos/gastos.md) |
 | `receipt_template` (ajustes) | Se guarda y se edita, pero nadie imprime un recibo con él |
 
 ## Convenciones de ubicación para código nuevo

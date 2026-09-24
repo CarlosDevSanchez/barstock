@@ -387,38 +387,109 @@ export type Database = {
         }
         Relationships: []
       }
-      expenses: {
+      expense_categories: {
         Row: {
-          amount: number
-          category: string
           created_at: string
-          created_by: string | null
-          date: string
-          description: string
           id: string
+          is_active: boolean
+          name: string
           updated_at: string
         }
         Insert: {
-          amount: number
-          category: string
           created_at?: string
-          created_by?: string | null
-          date: string
-          description: string
           id?: string
+          is_active?: boolean
+          name: string
           updated_at?: string
         }
         Update: {
-          amount?: number
-          category?: string
           created_at?: string
-          created_by?: string | null
-          date?: string
-          description?: string
           id?: string
+          is_active?: boolean
+          name?: string
           updated_at?: string
         }
         Relationships: []
+      }
+      expenses: {
+        Row: {
+          amount: number
+          business_day_id: string | null
+          cash_session_id: string | null
+          category_id: string
+          created_at: string
+          created_by: string | null
+          deleted_at: string | null
+          description: string
+          id: string
+          occurred_at: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          supplier_id: string | null
+          updated_at: string
+          void_reason: string | null
+        }
+        Insert: {
+          amount: number
+          business_day_id?: string | null
+          cash_session_id?: string | null
+          category_id: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description: string
+          id?: string
+          occurred_at?: string
+          payment_method: Database["public"]["Enums"]["payment_method"]
+          supplier_id?: string | null
+          updated_at?: string
+          void_reason?: string | null
+        }
+        Update: {
+          amount?: number
+          business_day_id?: string | null
+          cash_session_id?: string | null
+          category_id?: string
+          created_at?: string
+          created_by?: string | null
+          deleted_at?: string | null
+          description?: string
+          id?: string
+          occurred_at?: string
+          payment_method?: Database["public"]["Enums"]["payment_method"]
+          supplier_id?: string | null
+          updated_at?: string
+          void_reason?: string | null
+        }
+        Relationships: [
+          {
+            foreignKeyName: "expenses_business_day_id_fkey"
+            columns: ["business_day_id"]
+            isOneToOne: false
+            referencedRelation: "business_days"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_cash_session_id_fkey"
+            columns: ["cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_category_id_fkey"
+            columns: ["category_id"]
+            isOneToOne: false
+            referencedRelation: "expense_categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "expenses_supplier_id_fkey"
+            columns: ["supplier_id"]
+            isOneToOne: false
+            referencedRelation: "suppliers"
+            referencedColumns: ["id"]
+          },
+        ]
       }
       idempotency_keys: {
         Row: {
@@ -552,6 +623,7 @@ export type Database = {
           tax: number
           tax_rate: number | null
           total: number
+          unit_cost: number | null
           unit_price: number
           variant_id: string | null
         }
@@ -567,6 +639,7 @@ export type Database = {
           tax?: number
           tax_rate?: number | null
           total: number
+          unit_cost?: number | null
           unit_price: number
           variant_id?: string | null
         }
@@ -582,6 +655,7 @@ export type Database = {
           tax?: number
           tax_rate?: number | null
           total?: number
+          unit_cost?: number | null
           unit_price?: number
           variant_id?: string | null
         }
@@ -1473,6 +1547,18 @@ export type Database = {
         Args: { p_counted_cash: number; p_notes?: string; p_session_id: string }
         Returns: undefined
       }
+      create_expense: {
+        Args: {
+          p_amount: number
+          p_cash_session_id: string
+          p_category_id: string
+          p_description: string
+          p_occurred_at: string
+          p_payment_method: Database["public"]["Enums"]["payment_method"]
+          p_supplier_id: string
+        }
+        Returns: string
+      }
       create_sale: {
         Args: {
           p_customer_id: string
@@ -1598,6 +1684,10 @@ export type Database = {
           selling_price: number
           stock: number
         }[]
+      }
+      void_expense: {
+        Args: { p_id: string; p_reason: string }
+        Returns: undefined
       }
       void_tab: {
         Args: { p_reason: string; p_tab_id: string }

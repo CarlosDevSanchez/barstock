@@ -10,9 +10,9 @@
 ### Borrado lógico (`deleted_at`)
 `DELETE /suppliers/{id}` (solo admin) pone `deleted_at = now()` e `is_active = false`; no borra la fila. `listSuppliers`/`getSupplier` filtran `deleted_at is null`. A diferencia de `customers`, `suppliers` no tenía grants por columna (`UPDATE` de tabla completa ya otorgado a `authenticated`), así que la migración `20260923000001_soft_delete_people.sql` no necesitó un `grant` adicional para la columna nueva — solo el trigger `guard_soft_delete` (mismo que en `customers`), que exige `has_min_role('admin')` para cambiar `deleted_at`; sin él, un gerente podría borrar un proveedor directamente por PostgREST porque `suppliers_update` ya le permite hacer `UPDATE`.
 
-## Órdenes de compra y gastos (solo esquema)
-`purchase_orders`, `purchase_order_items` y `expenses` existen con sus `CHECK`, índices y RLS (gerente lee/escribe; admin borra; gastos: gerente lee y crea, admin edita y borra),
-pero **no hay API ni pantalla**, y recibir una compra **no repone stock** todavía. Es trabajo de la **etapa 2** (UI de órdenes de compra y gastos).
+## Órdenes de compra (solo esquema)
+`purchase_orders` y `purchase_order_items` existen con sus `CHECK`, índices y RLS (gerente lee y escribe; admin borra),
+pero **no hay API ni pantalla**, y recibir una compra **no repone stock** todavía. Los gastos operativos están en [Gastos](gastos.md).
 
 Diseño previsto: `purchase_orders` con líneas → recibir = RPC transaccional que suma stock y registra `purchase` en `inventory_transactions`, igual que `adjust_inventory`.
 

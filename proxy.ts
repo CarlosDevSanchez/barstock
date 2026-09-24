@@ -15,6 +15,7 @@ const PAGE_ROLE_GUARDS: Array<{ prefix: string; minimum: UserRole }> = [
     { prefix: '/users', minimum: 'admin' },
     { prefix: '/audit', minimum: 'admin' },
     { prefix: '/reports', minimum: 'manager' },
+    { prefix: '/expenses', minimum: 'manager' },
     { prefix: '/suppliers', minimum: 'manager' },
     { prefix: '/promotions', minimum: 'manager' }
 ]

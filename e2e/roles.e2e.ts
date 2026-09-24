@@ -105,6 +105,7 @@ test('an admin sees every section and settings persist across a reload', async (
         'Inventory',
         'Suppliers',
         'Reports',
+        'Expenses',
         'Settings',
         'Users',
         'Audit log'
