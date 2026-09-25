@@ -6,7 +6,9 @@ import type { TabDetail } from '@/lib/api/tabs'
 setupDom()
 const { cleanup, fireEvent, render, screen, within } = await import('@testing-library/react')
 
-const defer = mock(async () => ({ id: 'order-1' }))
+const defer = mock(async (_tabId: string, _body?: { customer_id?: string | null; debtor_name?: string | null }) => ({
+    id: 'order-1'
+}))
 void mock.module('@/lib/api/tabs', () => ({
     tabsApi: { defer }
 }))
@@ -87,9 +89,9 @@ describe('DeferTabDialog', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Close as receivable' }))
 
         expect(defer).toHaveBeenCalledTimes(1)
-        const body = defer.mock.calls[0]?.[1] as { customer_id?: string | null; debtor_name?: string | null }
-        expect(body.customer_id).toBe('cust-1')
-        expect(body.debtor_name ?? null).toBeNull()
+        const body = defer.mock.calls[0]?.[1]
+        expect(body?.customer_id).toBe('cust-1')
+        expect(body?.debtor_name ?? null).toBeNull()
     })
 
     test('an abono that covers the whole balance is rejected in the UI', async () => {

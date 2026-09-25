@@ -46,11 +46,9 @@ Backfill: órdenes `completed`/`refunded` existentes reciben `settled_at = coale
 - `/receivables`: lista, pago (1–2 métodos), editar (gerente), castigar (admin).
   - Editar preserva `reminder_note` como valor inicial del diálogo (antes se perdía porque `list_receivables` no
     la devolvía).
-  - El diálogo de pago dividido reutiliza la misma lógica pura del POS (`lib/tab-split.ts`:
-    `splitRemainder`/`paymentGap`): el segundo monto se autocompleta con lo que falta del saldo, muestra
-    «Falta»/«Sobra» mientras no cuadre y el botón queda deshabilitado si los montos no suman el saldo o si se
-    repite el método (antes había que calcular el segundo monto a mano y no había ninguna validación en el
-    cliente).
+  - El diálogo de abono es el mismo `PaymentDialog` del POS (`amountEditable`): el monto se puede bajar del
+    saldo (abono parcial), un pago dividido no puede repetir método (la segunda fila excluye el primero) y, si
+    hay efectivo, muestra recibido y cambio vía `cashDifference`.
 - Cliente: bloque «Saldo pendiente».
 - Ticket: línea «PENDIENTE DE PAGO» si `status = pending`.
 - Dashboard: tarjeta «Por cobrar».
