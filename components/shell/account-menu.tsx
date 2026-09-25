@@ -92,10 +92,12 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
     const doLogout = async () => {
         // U5: drop this browser's push subscription BEFORE logging out, so a shared/kiosk device does not keep
         // sending the next cashier's push notifications to this session's subscription.
+        // `getRegistration` (not `.ready`) because `.ready` never resolves when no service worker is registered
+        // at all (e.g. `next dev`, see components/pwa/sw-register.tsx) — that would hang the whole logout forever.
         try {
             if ('serviceWorker' in navigator) {
-                const reg = await navigator.serviceWorker.ready
-                const sub = await reg.pushManager.getSubscription()
+                const reg = await navigator.serviceWorker.getRegistration()
+                const sub = await reg?.pushManager.getSubscription()
                 if (sub) {
                     await notificationsApi.unsubscribe(sub.endpoint).catch(() => {})
                     await sub.unsubscribe().catch(() => {})
