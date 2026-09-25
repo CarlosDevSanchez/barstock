@@ -35,6 +35,8 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 | `TextField`, `SelectField` | Campos de `react-hook-form` con etiqueta y mensaje de error asociados (`htmlFor`/`aria-describedby` por `FormControl`) |
 | `Pagination` (`lib/pagination.ts`, `hooks/use-pagination.ts`) | "Mostrando X–Y de N" + `Select` de tamaño (10/25/50, namespace `pagination` de next-intl) + primera/anterior/números/siguiente/última; **siempre visible** (ya no se oculta con una sola página); los números se ocultan en pantallas estrechas |
 | `QueryError`, `PageSpinner` | Error con "Try again" y spinner (antes copiado en 5 archivos) |
+| `SearchableSelect` (`components/searchable-select.tsx`) | Dropdown de selección única con el buscador **integrado en el propio popup** (`Popover` + lista filtrable), en vez de un `<Input>` de búsqueda suelto encima de un `<select>`. `search`/`onSearchChange` quedan en el caller (normalmente contra una API con debounce); el componente solo pinta `options` |
+| `MultiSelectDropdown` (`components/multi-select-dropdown.tsx`) | Selección múltiple compacta: un dropdown con checkboxes en vez de una fila de casillas sueltas (ocupa una sola línea; muestra "N seleccionados" cuando hay más de una) |
 
 ## Layout del dashboard
 
@@ -82,7 +84,7 @@ Reglas táctiles: objetivos de al menos 44 px, `text-base` en inputs (evita el z
 
 ## Patrones de pantalla
 
-1. **Listado:** cabecera (`h1` + descripción + botón "Add" solo si el rol puede escribir), buscador con *debounce*, tabla, paginación en servidor, estado vacío y de error.
+1. **Listado:** cabecera (`PageHeader`), `FilterBar`/buscador con *debounce*, tabla envuelta en `Card className="rounded-2xl p-6"` vía `ResponsiveList`, **paginador siempre presente** (`Pagination` + `usePagination`; si el endpoint no pagina en servidor, se pagina en cliente sobre el array completo — nunca una tabla sin paginador, aunque hoy tenga pocas filas), estado vacío y de error.
 2. **Alta/edición:** `Dialog` con `react-hook-form` + el **mismo esquema zod que valida el servidor**; los errores salen bajo cada campo (`Required`, `Must be 0 or more`…),
    los del servidor en un `toast`. El diálogo se monta al abrirse (`key` por producto), así que el formulario siempre parte del valor guardado.
 3. **Detalle:** botón volver (`aria-label`), tarjetas de información, tabla.
@@ -108,3 +110,7 @@ ocultan con `print:hidden` y `app/globals.css` fija `@page { size: 80mm auto; ma
 - Dinero siempre con `useMoney()`; nunca `$${x.toFixed(2)}`.
 - Botones de icono con `aria-label`; confirmaciones con `ConfirmDialog`, nunca `window.confirm()`.
 - Los formularios reutilizan el esquema del servidor; la conversión de presentación (p. ej. porcentaje → fracción) vive en el esquema (`taxRatePercent`), no en el componente.
+- **Toda tabla de listado lleva paginador** (`Pagination` + `usePagination`), incluso si hoy el endpoint devuelve el array completo (pagina en cliente con `.slice()`, ver `receivables` y `cash` → historial de jornadas). Nunca una tabla "toda junta" sin paginar, por pocas filas que tenga hoy.
+- **Selección múltiple de pocas opciones (roles, responsables, tags):** `MultiSelectDropdown`, no una fila de checkboxes sueltos — ocupa una sola línea y escala mejor con más opciones.
+- **Selección desde un catálogo buscable (proveedores, productos, clientes):** `SearchableSelect` — el buscador vive **dentro** del propio dropdown, nunca como un `<Input>` de búsqueda suelto encima de un `<select>` (ese patrón, corregido en `inventory` §RegisterPurchaseDialog/AdjustDialog, desincroniza visualmente el filtro de lo que filtra). `search`/`onSearchChange` siguen siendo del caller — el componente no decide cómo se busca, solo cómo se muestra.
+- Un `<select>` nativo o el `Select` de shadcn solo para listas cortas y fijas (método de pago, estado, tamaño de página); en cuanto la lista viene de una búsqueda contra la API, es `SearchableSelect`.

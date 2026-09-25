@@ -1,7 +1,7 @@
 'use client'
 
 import { useState, type ComponentProps } from 'react'
-import { Trash2, Plus, Minus, ShoppingCart, CreditCard, DollarSign, Smartphone } from 'lucide-react'
+import { Trash2, Plus, Minus, ShoppingCart, CreditCard, DollarSign, Smartphone, Info } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -50,6 +50,21 @@ const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card', 'ewallet']
 export interface CheckoutPayment {
     payment_method: PaymentMethod
     payments?: Array<{ method: PaymentMethod; amount: number }>
+}
+
+/** Small (i) icon that explains a field on hover/focus, for labels whose meaning isn't obvious from the
+ * name alone (e.g. "Cash received" only makes sense once you know it's for calculating change). */
+function FieldHint({ text }: { text: string }) {
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                <button type="button" tabIndex={-1} className="text-muted-foreground hover:text-foreground">
+                    <Info className="h-3.5 w-3.5" />
+                </button>
+            </TooltipTrigger>
+            <TooltipContent className="max-w-64">{text}</TooltipContent>
+        </Tooltip>
+    )
 }
 
 const PAYMENT_ICONS: Array<{ value: PaymentMethod; icon: typeof DollarSign }> = [
@@ -414,28 +429,32 @@ export function CartSheet({
                         </DialogDescription>
                     </DialogHeader>
                     <div className="space-y-4 py-4">
-                        <Button
-                            type="button"
-                            variant={split ? 'default' : 'outline'}
-                            aria-pressed={split}
-                            onClick={() => {
-                                setSplit(on => {
-                                    const next = !on
-                                    if (next) {
-                                        setAmount2Draft(null)
-                                        setMethod2(paymentMethod === 'cash' ? 'card' : 'cash')
-                                    }
-                                    return next
-                                })
-                            }}
-                        >
-                            {t('splitPayment')}
-                        </Button>
+                        <div className="flex items-center gap-1.5">
+                            <Button
+                                type="button"
+                                variant={split ? 'default' : 'outline'}
+                                aria-pressed={split}
+                                onClick={() => {
+                                    setSplit(on => {
+                                        const next = !on
+                                        if (next) {
+                                            setAmount2Draft(null)
+                                            setMethod2(paymentMethod === 'cash' ? 'card' : 'cash')
+                                        }
+                                        return next
+                                    })
+                                }}
+                            >
+                                {t('splitPayment')}
+                            </Button>
+                            <FieldHint text={t('splitPaymentHint')} />
+                        </div>
                         {split ? (
                             <div className="space-y-3">
+                                <p className="text-xs text-muted-foreground">{t('splitPaymentHint')}</p>
                                 {[
                                     {
-                                        label: t('paymentMethod'),
+                                        label: t('firstPayment'),
                                         method: paymentMethod,
                                         onMethod: onPaymentMethodChange,
                                         amount: amount1,
@@ -512,7 +531,10 @@ export function CartSheet({
                         {cashDue > 0 && (
                             <div className="grid grid-cols-2 gap-2">
                                 <div className="space-y-1">
-                                    <Label htmlFor="cash-received">{t('cashReceived')}</Label>
+                                    <div className="flex items-center gap-1">
+                                        <Label htmlFor="cash-received">{t('cashReceived')}</Label>
+                                        <FieldHint text={t('cashReceivedHint')} />
+                                    </div>
                                     <Input
                                         id="cash-received"
                                         type="number"
@@ -524,7 +546,10 @@ export function CartSheet({
                                     />
                                 </div>
                                 <div className="space-y-1">
-                                    <Label>{t('cashChange')}</Label>
+                                    <div className="flex items-center gap-1">
+                                        <Label>{t('cashChange')}</Label>
+                                        <FieldHint text={t('cashChangeHint')} />
+                                    </div>
                                     <p className="h-9 flex items-center font-medium">{money(change)}</p>
                                 </div>
                             </div>
