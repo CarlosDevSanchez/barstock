@@ -198,6 +198,7 @@ describe('receivable_due outbox', () => {
                 id: orderId,
                 order_number: uniq('ORD'),
                 status: 'pending',
+                debtor_name: 'Due reminder',
                 subtotal: 10,
                 tax: 0,
                 discount: 0,

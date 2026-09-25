@@ -31,7 +31,6 @@ import { previewTotals, type PreviewLine } from '@/lib/cart-preview'
 import { allocatePackagePrice } from '@/lib/promotion-allocate'
 import { buildProvisionalOrder } from '@/lib/receipt-preview'
 import { useMoney, useSession } from '@/components/session-provider'
-import type { PaymentMethod } from '@/types'
 import { useCartStore } from '@/stores/cart'
 import { type ApiQuery, useApiQuery } from '@/hooks/use-api-query'
 import { type InfiniteApiList, useInfiniteApiList } from '@/hooks/use-infinite-api-list'
@@ -108,7 +107,6 @@ export default function POSPage() {
     const [searchQuery, setSearchQuery] = useState('')
     const [selectedCategory, setSelectedCategory] = useState(ALL)
     const [selectedCustomer, setSelectedCustomer] = useState('')
-    const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cash')
     const [showCart, setShowCart] = useState(false)
     const [showPaymentDialog, setShowPaymentDialog] = useState(false)
     const [processing, setProcessing] = useState(false)
@@ -546,8 +544,6 @@ export default function POSPage() {
                     offlineWindowExpired={offlineWindowExpired}
                     showPaymentDialog={showPaymentDialog}
                     onShowPaymentDialog={setShowPaymentDialog}
-                    paymentMethod={paymentMethod}
-                    onPaymentMethodChange={setPaymentMethod}
                     processing={processing}
                     onCheckout={handleCheckout}
                     openTabs={openTabs.data?.data ?? []}

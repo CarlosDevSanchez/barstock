@@ -5,31 +5,34 @@ import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
+import { Card } from '@/components/ui/card'
 import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
+import { PageHeader } from '@/components/page-header'
+import { Pagination } from '@/components/pagination'
 import { ListCardRow, ResponsiveList } from '@/components/responsive-list'
+import { PaymentDialog } from '@/components/pos/payment-dialog'
 import { useMoney, useSession } from '@/components/session-provider'
 import { errorMessage } from '@/lib/api/client'
 import { receivablesApi, type ReceivableRow } from '@/lib/api/receivables'
 import { roleAtLeast } from '@/lib/auth/roles'
-import { currencyDecimals } from '@/lib/money'
-import { paymentGap, splitRemainder } from '@/lib/tab-split'
-import { PAYMENT_METHODS } from '@/lib/validation/resources'
 import type { PaymentMethod } from '@/types'
 import { useApiQuery } from '@/hooks/use-api-query'
+import { usePagination } from '@/hooks/use-pagination'
 
-type StatusFilter = '' | 'pending' | 'written_off'
+const ALL_STATUSES = 'all'
+type StatusFilter = typeof ALL_STATUSES | 'pending' | 'written_off'
 
 export default function ReceivablesPage() {
     const t = useTranslations('receivables')
     const money = useMoney()
-    const { settings, user } = useSession()
-    const decimals = currencyDecimals(settings.currency)
+    const { user } = useSession()
     const canEdit = roleAtLeast(user.role, 'manager')
     const canWriteOff = roleAtLeast(user.role, 'admin')
 
@@ -38,39 +41,49 @@ export default function ReceivablesPage() {
     const [editing, setEditing] = useState<ReceivableRow | null>(null)
     const [writingOff, setWritingOff] = useState<ReceivableRow | null>(null)
     const [writeOffReason, setWriteOffReason] = useState('')
+    const { page, pageSize, setPage, setPageSize, reset } = usePagination()
 
     const list = useApiQuery(
         signal =>
             receivablesApi.list(
                 {
-                    ...(status ? { status } : {})
+                    ...(status === ALL_STATUSES ? {} : { status })
                 },
                 signal
             ),
-        `receivables:${status || 'all'}`
+        `receivables:${status}`
     )
 
     const rows = list.data ?? []
+    // The RPC returns the full list (no server-side paging), so the table pages through it client-side.
+    const pageRows = rows.slice((page - 1) * pageSize, page * pageSize)
 
     return (
         <div className="space-y-6">
-            <div className="min-w-0">
-                <h1 className="truncate text-xl font-bold lg:text-3xl">{t('title')}</h1>
-                <p className="text-muted-foreground">{t('subtitle')}</p>
-            </div>
+            <PageHeader title={t('title')} description={t('subtitle')} />
 
-            <div className="space-y-1">
-                <Label htmlFor="receivable-status">{t('status')}</Label>
-                <select
-                    id="receivable-status"
-                    className="border-input bg-background h-9 rounded-md border px-3 text-sm"
-                    value={status}
-                    onChange={event => setStatus(event.target.value as StatusFilter)}
-                >
-                    <option value="">{t('filterAll')}</option>
-                    <option value="pending">{t('filterPending')}</option>
-                    <option value="written_off">{t('filterWrittenOff')}</option>
-                </select>
+            <div className="flex flex-wrap items-center gap-3">
+                <div className="space-y-1.5">
+                    <Label className="lg:sr-only" htmlFor="receivable-status">
+                        {t('status')}
+                    </Label>
+                    <Select
+                        value={status}
+                        onValueChange={value => {
+                            setStatus(value as StatusFilter)
+                            reset()
+                        }}
+                    >
+                        <SelectTrigger id="receivable-status" className="w-full lg:w-52">
+                            <SelectValue />
+                        </SelectTrigger>
+                        <SelectContent>
+                            <SelectItem value={ALL_STATUSES}>{t('filterAll')}</SelectItem>
+                            <SelectItem value="pending">{t('filterPending')}</SelectItem>
+                            <SelectItem value="written_off">{t('filterWrittenOff')}</SelectItem>
+                        </SelectContent>
+                    </Select>
+                </div>
             </div>
 
             {list.error ? <QueryError error={list.error} onRetry={list.reload} /> : null}
@@ -79,63 +92,79 @@ export default function ReceivablesPage() {
 
             {rows.length > 0 ? (
                 <ResponsiveList
-                    items={rows}
+                    items={pageRows}
                     keyOf={row => row.order_id}
                     table={
-                        <Table>
-                            <TableHeader>
-                                <TableRow>
-                                    <TableHead>{t('customer')}</TableHead>
-                                    <TableHead>{t('total')}</TableHead>
-                                    <TableHead>{t('paid')}</TableHead>
-                                    <TableHead>{t('balance')}</TableHead>
-                                    <TableHead>{t('dueDate')}</TableHead>
-                                    <TableHead>{t('status')}</TableHead>
-                                    <TableHead />
-                                </TableRow>
-                            </TableHeader>
-                            <TableBody>
-                                {rows.map(row => (
-                                    <TableRow key={row.order_id}>
-                                        <TableCell>
-                                            <div className="font-medium">{row.customer_name ?? '—'}</div>
-                                            <div className="text-xs text-muted-foreground">{row.order_number}</div>
-                                        </TableCell>
-                                        <TableCell>{money(row.total)}</TableCell>
-                                        <TableCell>{money(row.paid)}</TableCell>
-                                        <TableCell>{money(row.balance)}</TableCell>
-                                        <TableCell>
-                                            <div className="flex flex-wrap items-center gap-2">
-                                                <span>{row.due_date ?? '—'}</span>
-                                                {row.days_overdue > 0 && row.status === 'pending' ? (
-                                                    <Badge variant="destructive">{t('overdue')}</Badge>
-                                                ) : null}
-                                            </div>
-                                        </TableCell>
-                                        <TableCell>
-                                            {row.status === 'written_off' ? t('statusWrittenOff') : t('statusPending')}
-                                        </TableCell>
-                                        <TableCell className="text-right">
-                                            <RowActions
-                                                row={row}
-                                                canEdit={canEdit}
-                                                canWriteOff={canWriteOff}
-                                                onPay={() => setPaying(row)}
-                                                onEdit={() => setEditing(row)}
-                                                onWriteOff={() => {
-                                                    setWriteOffReason('')
-                                                    setWritingOff(row)
-                                                }}
-                                            />
-                                        </TableCell>
+                        <Card className="rounded-2xl p-6">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>{t('customer')}</TableHead>
+                                        <TableHead>{t('total')}</TableHead>
+                                        <TableHead>{t('paid')}</TableHead>
+                                        <TableHead>{t('balance')}</TableHead>
+                                        <TableHead>{t('dueDate')}</TableHead>
+                                        <TableHead>{t('status')}</TableHead>
+                                        <TableHead />
                                     </TableRow>
-                                ))}
-                            </TableBody>
-                        </Table>
+                                </TableHeader>
+                                <TableBody>
+                                    {pageRows.map(row => (
+                                        <TableRow key={row.order_id}>
+                                            <TableCell>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="font-medium">{row.customer_name ?? '—'}</span>
+                                                    {row.customer_id == null ? (
+                                                        <Badge variant="secondary">{t('noCustomer')}</Badge>
+                                                    ) : null}
+                                                </div>
+                                                <div className="text-xs text-muted-foreground">{row.order_number}</div>
+                                            </TableCell>
+                                            <TableCell>{money(row.total)}</TableCell>
+                                            <TableCell>{money(row.paid)}</TableCell>
+                                            <TableCell>{money(row.balance)}</TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span>{row.due_date ?? '—'}</span>
+                                                    {row.days_overdue > 0 && row.status === 'pending' ? (
+                                                        <Badge variant="destructive">{t('overdue')}</Badge>
+                                                    ) : null}
+                                                </div>
+                                            </TableCell>
+                                            <TableCell>
+                                                {row.status === 'written_off'
+                                                    ? t('statusWrittenOff')
+                                                    : t('statusPending')}
+                                            </TableCell>
+                                            <TableCell className="text-right">
+                                                <RowActions
+                                                    row={row}
+                                                    canEdit={canEdit}
+                                                    canWriteOff={canWriteOff}
+                                                    onPay={() => setPaying(row)}
+                                                    onEdit={() => setEditing(row)}
+                                                    onWriteOff={() => {
+                                                        setWriteOffReason('')
+                                                        setWritingOff(row)
+                                                    }}
+                                                />
+                                            </TableCell>
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </Card>
                     }
                     renderCard={row => (
                         <ListCardRow
-                            title={row.customer_name ?? row.order_number}
+                            title={
+                                <span className="flex flex-wrap items-center gap-2">
+                                    <span>{row.customer_name ?? row.order_number}</span>
+                                    {row.customer_id == null ? (
+                                        <Badge variant="secondary">{t('noCustomer')}</Badge>
+                                    ) : null}
+                                </span>
+                            }
                             subtitle={`${row.order_number} · ${row.due_date ?? '—'} · ${
                                 row.status === 'written_off' ? t('statusWrittenOff') : t('statusPending')
                             }`}
@@ -186,10 +215,19 @@ export default function ReceivablesPage() {
                 />
             ) : null}
 
+            {rows.length > 0 ? (
+                <Pagination
+                    page={page}
+                    pageSize={pageSize}
+                    total={rows.length}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                />
+            ) : null}
+
             {paying ? (
                 <PayDialog
                     row={paying}
-                    decimals={decimals}
                     onClose={() => setPaying(null)}
                     onDone={() => {
                         setPaying(null)
@@ -282,51 +320,16 @@ function RowActions({
     )
 }
 
-function PayDialog({
-    row,
-    decimals,
-    onClose,
-    onDone
-}: {
-    row: ReceivableRow
-    decimals: number
-    onClose: () => void
-    onDone: () => void
-}) {
+function PayDialog({ row, onClose, onDone }: { row: ReceivableRow; onClose: () => void; onDone: () => void }) {
     const t = useTranslations('receivables')
-    const tc = useTranslations('common')
-    const money = useMoney()
-    const [method1, setMethod1] = useState<PaymentMethod>('cash')
-    const [method2, setMethod2] = useState<PaymentMethod>('card')
-    const [amount1, setAmount1] = useState(String(row.balance))
-    const [split, setSplit] = useState(false)
-    // C6: same auto-complete-the-remainder pattern as the POS split payment (lib/tab-split.ts, components/pos/
-    // cart-sheet.tsx) — the second amount defaults to "whatever is left of the balance" and only stops tracking
-    // it once the person types their own value.
-    const [amount2Draft, setAmount2Draft] = useState<string | null>(null)
     const [submitting, setSubmitting] = useState(false)
     // U3/C5: generated once when the dialog opens and reused on every retry, so a double-click or a retry after
     // a dropped response replays the same request instead of paying twice.
     const [idempotencyKey] = useState(() => crypto.randomUUID())
 
-    const firstAmount = Number(amount1) || 0
-    const amount2 = amount2Draft ?? (split ? splitRemainder(row.balance, firstAmount, decimals).toFixed(decimals) : '')
-    const secondAmount = Number(amount2) || 0
-    const gap = split ? paymentGap(row.balance, [firstAmount, secondAmount], decimals) : 0
-    const sameMethod = split && method1 === method2
-    // `pay_receivable` accepts a partial abono (sum <= balance), not just an exact match — `gap === 0` blocked a
-    // deliberate partial split payment that the server would happily take. Block only an overpay (gap < 0).
-    const canSubmit = split ? gap >= 0 && firstAmount > 0 && secondAmount > 0 && !sameMethod : firstAmount > 0
-
-    const submit = async () => {
+    const submit = async (payments: Array<{ method: PaymentMethod; amount: number }>) => {
         setSubmitting(true)
         try {
-            const payments = split
-                ? [
-                      { method: method1, amount: firstAmount },
-                      { method: method2, amount: secondAmount }
-                  ]
-                : [{ method: method1, amount: firstAmount }]
             await receivablesApi.pay(row.order_id, { payments }, idempotencyKey)
             toast.success(t('paymentSuccess'))
             onDone()
@@ -338,98 +341,17 @@ function PayDialog({
     }
 
     return (
-        <Dialog open onOpenChange={next => !submitting && !next && onClose()}>
-            <DialogContent className="sm:max-w-md">
-                <DialogHeader>
-                    <DialogTitle>{t('recordPayment')}</DialogTitle>
-                </DialogHeader>
-                <div className="space-y-3">
-                    <p className="text-sm text-muted-foreground">
-                        {row.order_number} · {row.customer_name}
-                    </p>
-                    <div className="space-y-1">
-                        <Label>{t('paymentMethod')}</Label>
-                        <select
-                            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                            value={method1}
-                            onChange={event => setMethod1(event.target.value as PaymentMethod)}
-                        >
-                            {PAYMENT_METHODS.map(method => (
-                                <option key={method} value={method}>
-                                    {tc(`payment.${method}`)}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="space-y-1">
-                        <Label>{t('amount')}</Label>
-                        <Input
-                            type="number"
-                            min="0"
-                            step={decimals === 0 ? 1 : 0.01}
-                            value={amount1}
-                            onChange={event => setAmount1(event.target.value)}
-                        />
-                    </div>
-                    <Button
-                        type="button"
-                        variant="outline"
-                        size="sm"
-                        onClick={() => {
-                            setSplit(current => !current)
-                            setAmount2Draft(null)
-                        }}
-                    >
-                        {t('splitPayment')}
-                    </Button>
-                    {split ? (
-                        <>
-                            <div className="space-y-1">
-                                <Label>{t('secondPayment')}</Label>
-                                <select
-                                    className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                                    value={method2}
-                                    onChange={event => setMethod2(event.target.value as PaymentMethod)}
-                                >
-                                    {PAYMENT_METHODS.map(method => (
-                                        <option key={method} value={method}>
-                                            {tc(`payment.${method}`)}
-                                        </option>
-                                    ))}
-                                </select>
-                            </div>
-                            <div className="space-y-1">
-                                <Label>{t('amount')}</Label>
-                                <Input
-                                    type="number"
-                                    min="0"
-                                    step={decimals === 0 ? 1 : 0.01}
-                                    value={amount2}
-                                    onChange={event => setAmount2Draft(event.target.value)}
-                                />
-                            </div>
-                            {sameMethod ? (
-                                <p className="text-sm text-red-600">{t('sameMethodTwice')}</p>
-                            ) : gap !== 0 ? (
-                                <p className="text-sm text-muted-foreground">
-                                    {gap > 0
-                                        ? t('paymentShort', { amount: money(gap) })
-                                        : t('paymentOver', { amount: money(-gap) })}
-                                </p>
-                            ) : null}
-                        </>
-                    ) : null}
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" disabled={submitting} onClick={onClose}>
-                        {t('cancel')}
-                    </Button>
-                    <Button disabled={submitting || !canSubmit} onClick={() => void submit()}>
-                        {t('recordPayment')}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
+        <PaymentDialog
+            open
+            onOpenChange={next => !next && onClose()}
+            title={t('recordPayment')}
+            description={`${row.order_number} · ${row.customer_name ?? '—'}`}
+            amountDue={row.balance}
+            amountEditable={true}
+            submitLabel={t('recordPayment')}
+            processing={submitting}
+            onSubmit={payments => void submit(payments)}
+        />
     )
 }
 

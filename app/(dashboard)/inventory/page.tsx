@@ -29,6 +29,7 @@ import { PageSpinner } from '@/components/page-spinner'
 import { PageHeader } from '@/components/page-header'
 import { FilterBar } from '@/components/filter-bar'
 import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
+import { SearchableSelect } from '@/components/searchable-select'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
@@ -184,31 +185,19 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
                             {mode === 'purchase' && showPurchaseOption ? (
                                 <>
                                     <div className="space-y-1">
-                                        <Label htmlFor="adj-supplier-search">{tc('search')}</Label>
-                                        <Input
-                                            id="adj-supplier-search"
-                                            value={supplierSearch}
-                                            onChange={event => setSupplierSearch(event.target.value)}
-                                            placeholder={tc('search')}
-                                        />
-                                    </div>
-                                    <div className="space-y-1">
                                         <Label htmlFor="adj-supplier">{t('supplier')}</Label>
-                                        <select
+                                        <SearchableSelect
                                             id="adj-supplier"
-                                            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
                                             value={selectedSupplier}
-                                            onChange={event => setSupplierId(event.target.value)}
-                                        >
-                                            <option value="" disabled>
-                                                {t('pickSupplier')}
-                                            </option>
-                                            {(suppliers.data?.data ?? []).map(supplier => (
-                                                <option key={supplier.id} value={supplier.id}>
-                                                    {supplier.name}
-                                                </option>
-                                            ))}
-                                        </select>
+                                            onValueChange={setSupplierId}
+                                            search={supplierSearch}
+                                            onSearchChange={setSupplierSearch}
+                                            placeholder={t('pickSupplier')}
+                                            options={(suppliers.data?.data ?? []).map(supplier => ({
+                                                value: supplier.id,
+                                                label: supplier.name
+                                            }))}
+                                        />
                                     </div>
                                     <div className="space-y-1">
                                         <Label htmlFor="adj-cost">{t('unitCost')}</Label>
@@ -436,39 +425,18 @@ function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onS
                 </DialogHeader>
                 <div className="space-y-3">
                     <div className="space-y-1">
-                        <Label htmlFor="po-supplier-search">{tc('search')}</Label>
-                        <Input
-                            id="po-supplier-search"
-                            value={supplierSearch}
-                            onChange={event => setSupplierSearch(event.target.value)}
-                            placeholder={tc('search')}
-                        />
-                    </div>
-                    <div className="space-y-1">
                         <Label htmlFor="po-supplier">{t('supplier')}</Label>
-                        <select
+                        <SearchableSelect
                             id="po-supplier"
-                            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
                             value={selectedSupplier}
-                            onChange={event => setSupplierId(event.target.value)}
-                        >
-                            <option value="" disabled>
-                                {t('pickSupplier')}
-                            </option>
-                            {(suppliers.data?.data ?? []).map(supplier => (
-                                <option key={supplier.id} value={supplier.id}>
-                                    {supplier.name}
-                                </option>
-                            ))}
-                        </select>
-                    </div>
-                    <div className="space-y-1">
-                        <Label htmlFor="po-product-search">{tc('search')}</Label>
-                        <Input
-                            id="po-product-search"
-                            value={productSearch}
-                            onChange={event => setProductSearch(event.target.value)}
-                            placeholder={tc('search')}
+                            onValueChange={setSupplierId}
+                            search={supplierSearch}
+                            onSearchChange={setSupplierSearch}
+                            placeholder={t('pickSupplier')}
+                            options={(suppliers.data?.data ?? []).map(supplier => ({
+                                value: supplier.id,
+                                label: supplier.name
+                            }))}
                         />
                     </div>
                     {lines.map((line, index) => {
@@ -489,11 +457,9 @@ function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onS
                             <div key={index} className="space-y-2 rounded-md border p-3">
                                 <div className="space-y-1">
                                     <Label>{t('product')}</Label>
-                                    <select
-                                        className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                                    <SearchableSelect
                                         value={line.product_id}
-                                        onChange={event => {
-                                            const id = event.target.value
+                                        onValueChange={id => {
                                             const next = productById.get(id)
                                             setLines(current =>
                                                 current.map((row, i) =>
@@ -508,21 +474,24 @@ function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onS
                                                 )
                                             )
                                         }}
-                                    >
-                                        <option value="" disabled>
-                                            {t('pickProduct')}
-                                        </option>
-                                        {selectedOutsidePage && (
-                                            <option value={selectedOutsidePage.product_id}>
-                                                {selectedOutsidePage.name}
-                                            </option>
-                                        )}
-                                        {products.map(item => (
-                                            <option key={item.product.id} value={item.product.id}>
-                                                {item.product.name}
-                                            </option>
-                                        ))}
-                                    </select>
+                                        search={productSearch}
+                                        onSearchChange={setProductSearch}
+                                        placeholder={t('pickProduct')}
+                                        options={[
+                                            ...(selectedOutsidePage
+                                                ? [
+                                                      {
+                                                          value: selectedOutsidePage.product_id,
+                                                          label: selectedOutsidePage.name
+                                                      }
+                                                  ]
+                                                : []),
+                                            ...products.map(item => ({
+                                                value: item.product.id,
+                                                label: item.product.name
+                                            }))
+                                        ]}
+                                    />
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <div className="space-y-1">
@@ -689,7 +658,7 @@ export default function InventoryPage() {
                 }
             />
 
-            <div className="grid grid-cols-1 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 <Card className="gap-2 rounded-2xl py-4 md:gap-6 md:py-6">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 px-4 pb-2 md:px-6">
                         <CardTitle className="text-xs font-medium md:text-sm">{t('totalItems')}</CardTitle>

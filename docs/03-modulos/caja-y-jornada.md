@@ -19,7 +19,7 @@ Una **jornada** es el día de operación del negocio. Una **caja** (`cash_regist
 
 `opening_float` + pagos en efectivo de la sesión + efectivo de cuentas aún abiertas − retiros + ingresos − efectivo de órdenes de esa sesión ya reembolsadas.
 
-El pago de una cuenta no se cuenta dos veces: mientras la cuenta sigue abierta está solo en `tab_payments`; al cerrarla, la copia en `payments` conserva `cash_session_id` y la cuenta deja de sumarse. Un gasto en efectivo de esa caja (no anulado) se resta. Un gasto con otro método no mueve el efectivo.
+El pago de una cuenta no se cuenta dos veces: mientras la cuenta sigue abierta está solo en `tab_payments`; al cerrarla, la copia en `payments` conserva `cash_session_id` y la cuenta deja de sumarse. Un abono inicial de `defer_tab` se escribe primero en `tab_payments` y se copia igual — cuenta en el efectivo esperado de la caja **una sola vez**, como cualquier otro cobro de cuenta. Un gasto en efectivo de esa caja (no anulado) se resta. Un gasto con otro método no mueve el efectivo.
 
 `expected_cash` guardado al cerrar es una foto. El resumen en vivo usa el estado actual (un reembolso posterior baja el esperado en pantalla, no el número ya guardado) — salvo que la caja ya esté cerrada: entonces `cash_session_summary` devuelve siempre la foto guardada, nunca un recálculo.
 

@@ -13,6 +13,8 @@ test('an admin invites a cashier, who accepts by email, chooses a password and l
     await admin.getByLabel('Full name').fill('New Cashier')
     await admin.getByRole('button', { name: 'Send invitation' }).click()
     await expect(admin.locator('[data-sonner-toast]').filter({ hasText: `Invitation sent to ${email}` })).toBeVisible()
+    // Users are listed oldest first, 10 per page: once the DB holds more than 10 profiles the invitee is not on page 1.
+    await admin.getByPlaceholder('Search by name or email...').fill(email)
     await expect(admin.getByRole('row', { name: new RegExp(email) })).toContainText('Active')
 
     // The invitee opens the link from the email in their own browser.

@@ -747,6 +747,7 @@ export type Database = {
           created_at: string
           created_by: string | null
           customer_id: string | null
+          debtor_name: string | null
           discount: number
           due_date: string | null
           id: string
@@ -782,6 +783,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          debtor_name?: string | null
           discount?: number
           due_date?: string | null
           id?: string
@@ -817,6 +819,7 @@ export type Database = {
           created_at?: string
           created_by?: string | null
           customer_id?: string | null
+          debtor_name?: string | null
           discount?: number
           due_date?: string | null
           id?: string
@@ -1700,6 +1703,7 @@ export type Database = {
       _close_tab: { Args: { p_tab_id: string }; Returns: string }
       _create_order_from_tab: {
         Args: {
+          p_debtor_name?: string
           p_status: Database["public"]["Enums"]["order_status"]
           p_tab_id: string
         }
@@ -1752,6 +1756,10 @@ export type Database = {
         Args: { p_delta: number; p_inventory_id: string; p_reason: string }
         Returns: number
       }
+      balance: {
+        Args: { t: Database["public"]["Tables"]["tabs"]["Row"] }
+        Returns: number
+      }
       business_day_report: {
         Args: { p_business_day_id: string }
         Returns: Json
@@ -1798,8 +1806,12 @@ export type Database = {
       dashboard_summary: { Args: { p_tz?: string }; Returns: Json }
       defer_tab: {
         Args: {
+          p_customer_id?: string
+          p_debtor_name?: string
           p_due_date: string
+          p_idempotency_key?: string
           p_note: string
+          p_payments?: Json
           p_reminder: boolean
           p_tab_id: string
         }
@@ -1810,7 +1822,12 @@ export type Database = {
         Returns: boolean
       }
       list_receivables: {
-        Args: { p_customer_id: string; p_limit?: number; p_status: string }
+        Args: {
+          p_customer_id: string
+          p_limit?: number
+          p_q?: string
+          p_status: string
+        }
         Returns: Json
       }
       log_auth_event: {
@@ -1921,6 +1938,7 @@ export type Database = {
       tab_pay: {
         Args: {
           p_amount: number
+          p_idempotency_key?: string
           p_member_id: string
           p_method: Database["public"]["Enums"]["payment_method"]
           p_tab_id: string
@@ -1928,7 +1946,12 @@ export type Database = {
         Returns: undefined
       }
       tab_pay_split: {
-        Args: { p_member_id: string; p_payments: Json; p_tab_id: string }
+        Args: {
+          p_idempotency_key?: string
+          p_member_id: string
+          p_payments: Json
+          p_tab_id: string
+        }
         Returns: undefined
       }
       tab_remove_item: {

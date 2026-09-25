@@ -163,7 +163,9 @@ export default function OrdersPage() {
                                                 <TableCell className="font-mono font-medium">
                                                     {order.order_number}
                                                 </TableCell>
-                                                <TableCell>{order.customer?.name || t('walkIn')}</TableCell>
+                                                <TableCell>
+                                                    {order.customer?.name || order.debtor_name || t('walkIn')}
+                                                </TableCell>
                                                 <TableCell>
                                                     {format(new Date(order.created_at), 'MMM dd, yyyy HH:mm', {
                                                         locale: dateLocale
@@ -212,7 +214,7 @@ export default function OrdersPage() {
                             <ListCardRow
                                 href={`/orders/${order.id}`}
                                 title={order.order_number}
-                                subtitle={`${order.customer?.name || t('walkIn')} · ${format(
+                                subtitle={`${order.customer?.name || order.debtor_name || t('walkIn')} · ${format(
                                     new Date(order.created_at),
                                     'MMM dd, HH:mm',
                                     { locale: dateLocale }

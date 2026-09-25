@@ -21,6 +21,7 @@ void mock.module('@/lib/api/client', () => ({
     apiPostForm: async () => undefined,
     apiPatch: async () => undefined,
     apiDelete: async () => undefined,
+    setSigningOut: () => {},
     errorMessage: (error: unknown, fallback = 'Something went wrong') =>
         error instanceof Error ? error.message : fallback
 }))

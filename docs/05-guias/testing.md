@@ -95,6 +95,11 @@ volver al estado sano con `bun run db:reset`.
 - Los ids del seed (`aaaaaaaa-…`) no son UUID RFC 4122 válidos para `z.uuid()` de zod 4: se usa `z.guid()`.
 - Un formulario enviado **antes de hidratar** hace un `GET` nativo y deja la contraseña en la URL: el botón de los formularios de auth espera a `useHydrated()`.
 - `getByText('Total')` en Playwright casa también con "Subtotal": usar `{ exact: true }`.
+- En las tablas paginadas **en el cliente** (p. ej. `/receivables`), comprobar una fila antes de que cargue la lista la da por ausente: el
+  helper `receivableRow` (`e2e/cash-and-receivables.e2e.ts`) espera el texto «Showing X–Y of N» antes de recorrer páginas. Sin esa espera,
+  con 11 filas y la buscada en la página 1, saltaba a la página 2 (fallo del CI en el PR #13).
+- `page.route` **no ve** los `fetch` que atiende el service worker (build de producción): para interceptarlos, crear el contexto con
+  `serviceWorkers: 'block'`.
 
 ## Cómo añadir pruebas a un recurso nuevo
 

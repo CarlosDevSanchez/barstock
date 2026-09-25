@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { money, nullableText, optionalUuid } from '@/lib/validation/common'
+import { blankToNull, money, nullableText, nullableUuid, optionalUuid } from '@/lib/validation/common'
 import { PAYMENT_METHODS } from '@/lib/validation/resources'
 
 const positiveMoney = money.refine(value => value > 0, 'validation.minZero')
@@ -11,9 +11,14 @@ const receivablePaymentSchema = z.object({
 })
 
 export const deferTabSchema = z.object({
-    due_date: z.iso.date().nullable().optional(),
+    due_date: z.iso.date(),
     reminder_enabled: z.boolean().default(false),
-    reminder_note: nullableText(500)
+    reminder_note: nullableText(500),
+    customer_id: nullableUuid,
+    // Blank → null before the length check. customer_id|debtor_name is NOT refined here: the tab may already
+    // have a customer, which this schema cannot see — the DB raises 'A customer or debtor name is required'.
+    debtor_name: z.preprocess(blankToNull, z.string().trim().min(2).max(120).nullable().optional()),
+    payments: z.array(receivablePaymentSchema).min(1).max(2).optional()
 })
 export type DeferTabInput = z.infer<typeof deferTabSchema>
 
@@ -36,12 +41,15 @@ export type WriteOffReceivableInput = z.infer<typeof writeOffReceivableSchema>
 
 export const listReceivablesQuerySchema = z.object({
     status: z.enum(['pending', 'written_off']).optional(),
-    customer_id: optionalUuid
+    customer_id: optionalUuid,
+    q: z.preprocess(value => blankToNull(value) ?? undefined, z.string().trim().max(100).optional())
 })
 export type ListReceivablesQuery = z.infer<typeof listReceivablesQuerySchema>
 
 export const receivableRowSchema = z.object({
     customer_name: z.string().nullable(),
+    debtor_name: z.string().nullable(),
+    customer_id: z.string().nullable(),
     order_id: z.string(),
     order_number: z.string(),
     total: z.number(),

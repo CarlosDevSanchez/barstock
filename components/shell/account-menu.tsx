@@ -16,7 +16,7 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { apiPatch, apiPost, errorMessage } from '@/lib/api/client'
+import { apiPatch, apiPost, errorMessage, setSigningOut } from '@/lib/api/client'
 import { notificationsApi } from '@/lib/api/notifications'
 import { idbClearSnapshot } from '@/lib/offline/db'
 import { pendingOutboxCount } from '@/lib/offline/outbox'
@@ -106,9 +106,11 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
         } catch {
             /* best-effort: never block logout on push cleanup */
         }
+        setSigningOut(true)
         try {
             await apiPost('auth/logout')
         } catch {
+            setSigningOut(false)
             toast.error(t('signOutFailed'))
             return
         }
@@ -118,8 +120,10 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
         // sale queue (lib/offline/outbox.ts) is NOT cleared here: it belongs to the user, not the device, and is
         // sent the next time they sign back in (see the confirmation below).
         await Promise.all([clearOfflineCaches(), idbClearSnapshot()])
-        router.push('/login')
-        router.refresh()
+        // Full page load: it resets `setSigningOut` (a soft navigation would keep 401 redirects muted into the next
+        // session) and drops the client router cache of signed-in RSC payloads.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.assign('/login')
     }
 
     // Unsynced offline sales (F3) stay queued through a logout, but the cashier should know they are there before
