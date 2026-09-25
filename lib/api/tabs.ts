@@ -24,8 +24,14 @@ export const tabsApi = {
     removeItem: (id: string, itemId: string, body: RemoveTabItemInput) =>
         apiDelete<TabDetail>(`tabs/${id}/items/${itemId}`, body),
     setDiscount: (id: string, body: SetTabDiscountInput) => apiPost<TabDetail>(`tabs/${id}/discount`, body),
-    pay: (id: string, body: PayTabInput) => apiPost<TabDetail>(`tabs/${id}/payments`, body),
-    paySplit: (id: string, body: PayTabSplitInput) => apiPost<TabDetail>(`tabs/${id}/payments`, body),
+    pay: (id: string, body: PayTabInput, idempotencyKey?: string) =>
+        apiPost<TabDetail>(`tabs/${id}/payments`, body, {
+            headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
+        }),
+    paySplit: (id: string, body: PayTabSplitInput, idempotencyKey?: string) =>
+        apiPost<TabDetail>(`tabs/${id}/payments`, body, {
+            headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
+        }),
     void: (id: string, body: VoidTabInput) => apiPost<TabDetail>(`tabs/${id}/void`, body),
     /** Close an open tab as a pending receivable (customer required). */
     defer: (id: string, body: DeferTabInput) => apiPost<OrderDetail>(`tabs/${id}/defer`, body)

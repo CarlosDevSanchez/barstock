@@ -71,8 +71,15 @@ const removeItem = (client: TestClient, id: string, itemId: string, body: { quan
 const pay = (
     client: TestClient,
     id: string,
-    body: { member_id?: string | null; payment_method: string; amount: number }
-) => client.post(payTab, `tabs/${id}/payments`, { params: { id }, body })
+    body: { member_id?: string | null; payment_method: string; amount: number },
+    headers?: Record<string, string>
+) => client.post(payTab, `tabs/${id}/payments`, { params: { id }, body, headers })
+const paySplit = (
+    client: TestClient,
+    id: string,
+    body: { member_id?: string | null; payments: Array<{ method: string; amount: number }> },
+    headers?: Record<string, string>
+) => client.post(payTab, `tabs/${id}/payments`, { params: { id }, body, headers })
 const voidIt = (client: TestClient, id: string, reason: string) =>
     client.post(voidTab, `tabs/${id}/void`, { params: { id }, body: { reason } })
 
@@ -184,6 +191,132 @@ describe('splitting the bill with partial payments', () => {
         expect(order.items).toEqual([expect.objectContaining({ product_id: product.id, quantity: 3 })])
         expect(order.payments.map(payment => payment.amount).sort((a, b) => a - b)).toEqual([30, 30, 30])
         expect(order.payments.reduce((sum, payment) => sum + payment.amount, 0)).toBe(order.total)
+    })
+})
+
+describe('tab payment hardening (idempotency, duplicate methods, listTabs balance)', () => {
+    test('tab_pay_split rejects two payments with the same method (B7)', async () => {
+        const product = await createProduct({ selling_price: 40, tax_rate: 0, stock: 5 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('DupMethod') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+
+        const response = await paySplit(cashier, tab.id, {
+            member_id: null,
+            payments: [
+                { method: 'cash', amount: 20 },
+                { method: 'cash', amount: 20 }
+            ]
+        })
+        expect(response.status).toBe(422)
+        expect(errorOf(response).message).toBe('Payment methods must be distinct')
+
+        const untouched = dataOf<Tab>(await detail(cashier, tab.id))
+        expect(untouched.totals.paid).toBe(0)
+    })
+
+    test('retrying tab_pay with the same Idempotency-Key does not double-charge', async () => {
+        const product = await createProduct({ selling_price: 50, tax_rate: 0, stock: 5 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('IdemPay') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+        const key = crypto.randomUUID()
+
+        const first = await pay(cashier, tab.id, { payment_method: 'cash', amount: 20 }, { 'Idempotency-Key': key })
+        expect(first.status).toBe(200)
+        expect(dataOf<Tab>(first).totals.paid).toBe(20)
+
+        const retry = await pay(cashier, tab.id, { payment_method: 'cash', amount: 20 }, { 'Idempotency-Key': key })
+        expect(retry.status).toBe(200)
+        expect(dataOf<Tab>(retry).totals.paid).toBe(20)
+
+        const { data: payments, error } = await adminClient()
+            .from('tab_payments')
+            .select('id, amount')
+            .eq('tab_id', tab.id)
+        expect(error).toBeNull()
+        expect(payments).toHaveLength(1)
+        expect(payments![0]!.amount).toBe(20)
+    })
+
+    test('a same-key retry with a DIFFERENT payload is rejected (409), not silently replayed', async () => {
+        const product = await createProduct({ selling_price: 50, tax_rate: 0, stock: 5 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('IdemMismatch') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+        const key = crypto.randomUUID()
+
+        const first = await pay(cashier, tab.id, { payment_method: 'cash', amount: 20 }, { 'Idempotency-Key': key })
+        expect(first.status).toBe(200)
+
+        const mismatched = await pay(
+            cashier,
+            tab.id,
+            { payment_method: 'card', amount: 20 },
+            { 'Idempotency-Key': key }
+        )
+        expect(mismatched.status).toBe(409)
+
+        const { data: payments, error } = await adminClient().from('tab_payments').select('id').eq('tab_id', tab.id)
+        expect(error).toBeNull()
+        expect(payments).toHaveLength(1)
+    })
+
+    test('retrying tab_pay_split with the same Idempotency-Key does not double-insert either payment', async () => {
+        const product = await createProduct({ selling_price: 100, tax_rate: 0, stock: 5 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('IdemSplit') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+        const key = crypto.randomUUID()
+        const payments = [
+            { method: 'cash', amount: 30 },
+            { method: 'card', amount: 20 }
+        ]
+
+        const first = await paySplit(cashier, tab.id, { member_id: null, payments }, { 'Idempotency-Key': key })
+        expect(first.status).toBe(200)
+        expect(dataOf<Tab>(first).totals.paid).toBe(50)
+
+        const retry = await paySplit(cashier, tab.id, { member_id: null, payments }, { 'Idempotency-Key': key })
+        expect(retry.status).toBe(200)
+        expect(dataOf<Tab>(retry).totals.paid).toBe(50)
+
+        const { data: rows, error } = await adminClient().from('tab_payments').select('id, amount').eq('tab_id', tab.id)
+        expect(error).toBeNull()
+        expect(rows).toHaveLength(2)
+    })
+
+    test('the Idempotency-Key header is optional: a request without it still pays normally', async () => {
+        const product = await createProduct({ selling_price: 15, tax_rate: 0, stock: 5 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('NoKey') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+
+        const response = await pay(cashier, tab.id, { payment_method: 'cash', amount: 15 })
+        expect(response.status).toBe(200)
+        expect(dataOf<Tab>(response).status).toBe('closed')
+    })
+
+    test('a malformed Idempotency-Key header is rejected with 400', async () => {
+        const product = await createProduct({ selling_price: 15, tax_rate: 0, stock: 5 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('BadKey') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+
+        const response = await pay(
+            cashier,
+            tab.id,
+            { payment_method: 'cash', amount: 15 },
+            { 'Idempotency-Key': 'not-a-uuid' }
+        )
+        expect(response.status).toBe(400)
+    })
+
+    test("listTabs exposes each tab's running balance without a per-row RPC", async () => {
+        const product = await createProduct({ selling_price: 25, tax_rate: 0, stock: 5 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('ListBalance') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+        await pay(cashier, tab.id, { payment_method: 'cash', amount: 10 })
+
+        const list = (await cashier.get(getTab, 'tabs?status=open')).json<{
+            data: Array<{ id: string; balance: number }>
+        }>()
+        const row = list.data.find(candidate => candidate.id === tab.id)
+        expect(row?.balance).toBe(15)
     })
 })
 

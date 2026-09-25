@@ -4,14 +4,13 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { CreditCard, DollarSign, Smartphone, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import {
     Dialog,
     DialogContent,
@@ -22,10 +21,11 @@ import {
 } from '@/components/ui/dialog'
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
+import { PaymentDialog } from '@/components/pos/payment-dialog'
 import { errorMessage } from '@/lib/api/client'
 import { tabsApi, type TabDetail } from '@/lib/api/tabs'
 import { groupOrderItemsByPromotion, type GroupableOrderItem } from '@/lib/order-item-groups'
-import { cashChange, paymentGap, splitEqual, splitRemainder, validateCustom } from '@/lib/tab-split'
+import { splitEqual, validateCustom } from '@/lib/tab-split'
 import { currencyDecimals } from '@/lib/money'
 import { roleAtLeast } from '@/lib/auth/roles'
 import { useApiQuery } from '@/hooks/use-api-query'
@@ -41,12 +41,6 @@ interface TabDetailSheetProps {
     /** The tab just closed into an order. The POS opens the same "sale completed" dialog as a direct sale. */
     onOrderClosed?: (orderId: string) => void
 }
-
-const PAYMENT_ICONS: Array<{ value: PaymentMethod; icon: typeof DollarSign }> = [
-    { value: 'cash', icon: DollarSign },
-    { value: 'card', icon: CreditCard },
-    { value: 'ewallet', icon: Smartphone }
-]
 
 function RemoveItemDialog({
     tabId,
@@ -179,19 +173,17 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
     const [splitMode, setSplitMode] = useState<'equal' | 'custom' | null>(null)
     const [selectedMembers, setSelectedMembers] = useState<string[]>([])
     const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
-    const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
-    const [payingKey, setPayingKey] = useState<string | null>(null)
-    const [splitPay, setSplitPay] = useState(false)
-    const [payMethod2, setPayMethod2] = useState<PaymentMethod>('card')
-    const [payAmount1, setPayAmount1] = useState('')
-    const [payAmount2Draft, setPayAmount2Draft] = useState<string | null>(null)
-    const [cashReceived, setCashReceived] = useState('')
+    /** What the `PaymentDialog` is currently open for: the whole tab (`memberId: null`) or one member's computed
+     * share. A fresh `idempotencyKey` is generated right here, once per "open the dialog" — reused on every retry
+     * within that same dialog session, same pattern as receivables' `PayDialog`. */
+    const [payingFor, setPayingFor] = useState<{
+        amountDue: number
+        memberId: string | null
+        idempotencyKey: string
+    } | null>(null)
+    const [processingPayment, setProcessingPayment] = useState(false)
 
     const tab = tabQuery.data
-    const balance = tab?.totals.balance ?? 0
-    const payAmount2 =
-        payAmount2Draft ??
-        (splitPay ? splitRemainder(balance, Number(payAmount1) || 0, decimals).toFixed(decimals) : '')
     const itemGroups = useMemo(() => {
         if (!tab) return []
         const groupable: GroupableOrderItem[] = tab.items.map(item => {
@@ -230,37 +222,33 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
         }
     }
 
-    const paySplitFull = async () => {
-        if (!tabId) return
-        setPayingKey('full')
+    const submitPayment = async (payments: Array<{ method: PaymentMethod; amount: number }>) => {
+        if (!tabId || !payingFor) return
+        setProcessingPayment(true)
         try {
-            const next = await tabsApi.paySplit(tabId, {
-                member_id: null,
-                payments: [
-                    { method: payMethod, amount: Number(payAmount1) || 0 },
-                    { method: payMethod2, amount: Number(payAmount2) || 0 }
-                ]
-            })
+            const next =
+                payments.length === 2
+                    ? await tabsApi.paySplit(
+                          tabId,
+                          { member_id: payingFor.memberId, payments },
+                          payingFor.idempotencyKey
+                      )
+                    : await tabsApi.pay(
+                          tabId,
+                          {
+                              member_id: payingFor.memberId,
+                              payment_method: payments[0]!.method,
+                              amount: payments[0]!.amount
+                          },
+                          payingFor.idempotencyKey
+                      )
             toast.success(t('paymentRecorded'))
+            setPayingFor(null)
             applyChange(next)
         } catch (error: unknown) {
             toast.error(errorMessage(error, t('paymentFailed')))
         } finally {
-            setPayingKey(null)
-        }
-    }
-
-    const pay = async (memberId: string | null, amount: number, key: string) => {
-        if (!tabId || amount <= 0) return
-        setPayingKey(key)
-        try {
-            const tab = await tabsApi.pay(tabId, { member_id: memberId, payment_method: payMethod, amount })
-            toast.success(t('paymentRecorded'))
-            applyChange(tab)
-        } catch (error: unknown) {
-            toast.error(errorMessage(error, t('paymentFailed')))
-        } finally {
-            setPayingKey(null)
+            setProcessingPayment(false)
         }
     }
 
@@ -297,7 +285,11 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                             )
 
                             return (
-                                <div className="flex flex-col h-full overflow-y-auto">
+                                // Keyed on `tabId`: the parent can swap which tab is open without unmounting
+                                // `TabDetailSheet` itself, and `useApiQuery` keeps showing the previous tab's
+                                // `data` while the new one loads — this forces the split/pay local state below to
+                                // reset instead of leaking into the newly selected tab.
+                                <div key={tabId} className="flex flex-col h-full overflow-y-auto">
                                     <SheetHeader>
                                         <SheetTitle className="flex items-center gap-2 flex-wrap">
                                             {tab.label}
@@ -470,164 +462,18 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                                         {canPay && (
                                             <div className="space-y-3 rounded-xl border p-3">
                                                 <h3 className="text-sm font-semibold">{t('collectPayment')}</h3>
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    {PAYMENT_ICONS.map(({ value, icon: Icon }) => (
-                                                        <Button
-                                                            key={value}
-                                                            type="button"
-                                                            variant={payMethod === value ? 'default' : 'outline'}
-                                                            size="sm"
-                                                            aria-pressed={payMethod === value}
-                                                            onClick={() => setPayMethod(value)}
-                                                        >
-                                                            <Icon className="h-4 w-4 mr-1" />
-                                                            {tc(`payment.${value}`)}
-                                                        </Button>
-                                                    ))}
-                                                </div>
-
-                                                <Button
-                                                    type="button"
-                                                    variant={splitPay ? 'default' : 'outline'}
-                                                    size="sm"
-                                                    aria-pressed={splitPay}
-                                                    onClick={() => {
-                                                        setSplitPay(on => {
-                                                            const next = !on
-                                                            if (next) {
-                                                                setPayAmount2Draft(null)
-                                                                setPayMethod2(payMethod === 'cash' ? 'card' : 'cash')
-                                                            }
-                                                            return next
-                                                        })
-                                                    }}
-                                                >
-                                                    {tPos('splitPayment')}
-                                                </Button>
-                                                {splitPay && (
-                                                    <div className="space-y-2">
-                                                        <div className="grid grid-cols-2 gap-2">
-                                                            <div className="space-y-1">
-                                                                <Label>{tPos('paymentAmount')}</Label>
-                                                                <Input
-                                                                    type="number"
-                                                                    min="0"
-                                                                    step={decimals === 0 ? 1 : 0.01}
-                                                                    aria-label={tPos('paymentAmount')}
-                                                                    value={payAmount1}
-                                                                    onChange={event =>
-                                                                        setPayAmount1(event.target.value)
-                                                                    }
-                                                                />
-                                                            </div>
-                                                            <div className="space-y-1">
-                                                                <Label>{tPos('secondPayment')}</Label>
-                                                                <Select
-                                                                    value={payMethod2}
-                                                                    onValueChange={value =>
-                                                                        setPayMethod2(value as PaymentMethod)
-                                                                    }
-                                                                >
-                                                                    <SelectTrigger aria-label={tPos('secondPayment')}>
-                                                                        <SelectValue />
-                                                                    </SelectTrigger>
-                                                                    <SelectContent>
-                                                                        {PAYMENT_ICONS.map(({ value }) => (
-                                                                            <SelectItem key={value} value={value}>
-                                                                                {tc(`payment.${value}`)}
-                                                                            </SelectItem>
-                                                                        ))}
-                                                                    </SelectContent>
-                                                                </Select>
-                                                            </div>
-                                                        </div>
-                                                        <Input
-                                                            type="number"
-                                                            min="0"
-                                                            step={decimals === 0 ? 1 : 0.01}
-                                                            aria-label={`${tPos('secondPayment')} ${tPos('paymentAmount')}`}
-                                                            value={payAmount2}
-                                                            onChange={event => setPayAmount2Draft(event.target.value)}
-                                                        />
-                                                        {(() => {
-                                                            const gap = paymentGap(
-                                                                tab.totals.balance,
-                                                                [Number(payAmount1) || 0, Number(payAmount2) || 0],
-                                                                decimals
-                                                            )
-                                                            if (gap === 0) return null
-                                                            return (
-                                                                <p className="text-sm text-red-600">
-                                                                    {gap > 0
-                                                                        ? tPos('paymentShort', { amount: money(gap) })
-                                                                        : tPos('paymentOver', {
-                                                                              amount: money(Math.abs(gap))
-                                                                          })}
-                                                                </p>
-                                                            )
-                                                        })()}
-                                                        {(payMethod === 'cash' || payMethod2 === 'cash') && (
-                                                            <div className="grid grid-cols-2 gap-2">
-                                                                <div className="space-y-1">
-                                                                    <Label htmlFor="tab-cash-received">
-                                                                        {tPos('cashReceived')}
-                                                                    </Label>
-                                                                    <Input
-                                                                        id="tab-cash-received"
-                                                                        type="number"
-                                                                        min="0"
-                                                                        step={decimals === 0 ? 1 : 0.01}
-                                                                        value={cashReceived}
-                                                                        onChange={event =>
-                                                                            setCashReceived(event.target.value)
-                                                                        }
-                                                                    />
-                                                                </div>
-                                                                <div className="space-y-1">
-                                                                    <Label>{tPos('cashChange')}</Label>
-                                                                    <p className="h-9 flex items-center font-medium">
-                                                                        {money(
-                                                                            cashChange(
-                                                                                Number(cashReceived) || 0,
-                                                                                (payMethod === 'cash'
-                                                                                    ? Number(payAmount1) || 0
-                                                                                    : 0) +
-                                                                                    (payMethod2 === 'cash'
-                                                                                        ? Number(payAmount2) || 0
-                                                                                        : 0),
-                                                                                decimals
-                                                                            )
-                                                                        )}
-                                                                    </p>
-                                                                </div>
-                                                            </div>
-                                                        )}
-                                                    </div>
-                                                )}
 
                                                 <OfflineDisabledButton
                                                     className="w-full"
-                                                    disabled={
-                                                        payingKey !== null ||
-                                                        (splitPay &&
-                                                            paymentGap(
-                                                                tab.totals.balance,
-                                                                [Number(payAmount1) || 0, Number(payAmount2) || 0],
-                                                                decimals
-                                                            ) !== 0) ||
-                                                        (splitPay &&
-                                                            ((Number(payAmount1) || 0) <= 0 ||
-                                                                (Number(payAmount2) || 0) <= 0))
-                                                    }
                                                     onClick={() =>
-                                                        splitPay
-                                                            ? void paySplitFull()
-                                                            : pay(null, tab.totals.balance, 'full')
+                                                        setPayingFor({
+                                                            amountDue: tab.totals.balance,
+                                                            memberId: null,
+                                                            idempotencyKey: crypto.randomUUID()
+                                                        })
                                                     }
                                                 >
-                                                    {payingKey === 'full'
-                                                        ? t('paying')
-                                                        : t('payFullBalance', { amount: money(tab.totals.balance) })}
+                                                    {t('payFullBalance', { amount: money(tab.totals.balance) })}
                                                 </OfflineDisabledButton>
 
                                                 {tab.members.length > 1 && (
@@ -697,14 +543,16 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                                                                     <span className="font-medium">{money(share)}</span>
                                                                     <Button
                                                                         size="sm"
-                                                                        disabled={payingKey !== null}
+                                                                        disabled={share <= 0}
                                                                         onClick={() =>
-                                                                            pay(memberId, share, `equal:${memberId}`)
+                                                                            setPayingFor({
+                                                                                amountDue: share,
+                                                                                memberId,
+                                                                                idempotencyKey: crypto.randomUUID()
+                                                                            })
                                                                         }
                                                                     >
-                                                                        {payingKey === `equal:${memberId}`
-                                                                            ? t('paying')
-                                                                            : t('pay')}
+                                                                        {t('pay')}
                                                                     </Button>
                                                                 </div>
                                                             )
@@ -743,21 +591,17 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                                                                 />
                                                                 <Button
                                                                     size="sm"
-                                                                    disabled={
-                                                                        payingKey !== null ||
-                                                                        !(Number(customAmounts[member.id]) > 0)
-                                                                    }
+                                                                    disabled={!(Number(customAmounts[member.id]) > 0)}
                                                                     onClick={() =>
-                                                                        pay(
-                                                                            member.id,
-                                                                            Number(customAmounts[member.id]) || 0,
-                                                                            `custom:${member.id}`
-                                                                        )
+                                                                        setPayingFor({
+                                                                            amountDue:
+                                                                                Number(customAmounts[member.id]) || 0,
+                                                                            memberId: member.id,
+                                                                            idempotencyKey: crypto.randomUUID()
+                                                                        })
                                                                     }
                                                                 >
-                                                                    {payingKey === `custom:${member.id}`
-                                                                        ? t('paying')
-                                                                        : t('pay')}
+                                                                    {t('pay')}
                                                                 </Button>
                                                             </div>
                                                         ))}
@@ -792,6 +636,22 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                     )}
                 </SheetContent>
             </Sheet>
+
+            <PaymentDialog
+                open={payingFor !== null}
+                onOpenChange={open => !open && setPayingFor(null)}
+                title={
+                    payingFor?.memberId
+                        ? (tab?.members.find(member => member.id === payingFor.memberId)?.display_name ??
+                          t('collectPayment'))
+                        : t('collectPayment')
+                }
+                amountDue={payingFor?.amountDue ?? 0}
+                amountEditable
+                submitLabel={t('pay')}
+                processing={processingPayment}
+                onSubmit={payments => void submitPayment(payments)}
+            />
 
             {removingItem && tabId && (
                 <RemoveItemDialog

@@ -16,7 +16,12 @@ import type {
 import type { Tables } from '@/types/database'
 import { assertMoneyScale, type Page } from './_shared'
 
-export type TabListItem = Tables<'tabs'> & { customer: Pick<Tables<'customers'>, 'id' | 'name'> | null }
+export type TabListItem = Tables<'tabs'> & {
+    customer: Pick<Tables<'customers'>, 'id' | 'name'> | null
+    /** Running balance (`_tab_totals(id).balance`), exposed as a PostgREST computed column (`public.balance(tabs)`,
+     * see the tab_payments_hardening migration) so the list doesn't need an N+1 `tab_summary` RPC per row. */
+    balance: number
+}
 
 export interface TabTotals {
     subtotal: number
@@ -54,14 +59,18 @@ export async function listTabs(
 ): Promise<Page<TabListItem>> {
     let query = supabase
         .from('tabs')
-        .select('*, customer:customers(id, name)', { count: 'exact' })
+        .select('*, customer:customers(id, name), balance', { count: 'exact' })
         .order('opened_at', { ascending: false })
     if (status) query = query.eq('status', status)
 
     const { from, to } = pageRange({ page, pageSize })
     const { data, count, error } = await query.range(from, to)
     assertNoError(error)
-    return { rows: data, total: count ?? 0 }
+    // `balance` is a PostgREST "computed column" (public.balance(tabs), see the tab_payments_hardening migration):
+    // it's a real, selectable field at the REST layer, but codegen only models actual table/view columns, so
+    // supabase-js's select-string type inference can't see it — same class of gap as the "Phase E RPCs not yet in
+    // generated types" cast in test/integration/receivables.test.ts.
+    return { rows: data as unknown as TabListItem[], total: count ?? 0 }
 }
 
 export async function getTab(supabase: AppSupabaseClient, id: string): Promise<TabDetail> {
@@ -147,13 +156,19 @@ export async function setTabDiscount(
     return getTab(supabase, id)
 }
 
-export async function payTab(supabase: AppSupabaseClient, id: string, input: PayTabInput): Promise<TabDetail> {
+export async function payTab(
+    supabase: AppSupabaseClient,
+    id: string,
+    input: PayTabInput,
+    idempotencyKey?: string
+): Promise<TabDetail> {
     await assertMoneyScale(supabase, { amount: input.amount })
     const { error } = await supabase.rpc('tab_pay', {
         p_tab_id: id,
         p_member_id: (input.member_id ?? null) as string,
         p_method: input.payment_method,
-        p_amount: input.amount
+        p_amount: input.amount,
+        p_idempotency_key: (idempotencyKey ?? null) as string
     })
     assertNoError(error)
     return getTab(supabase, id)
@@ -162,7 +177,8 @@ export async function payTab(supabase: AppSupabaseClient, id: string, input: Pay
 export async function payTabSplit(
     supabase: AppSupabaseClient,
     id: string,
-    input: PayTabSplitInput
+    input: PayTabSplitInput,
+    idempotencyKey?: string
 ): Promise<TabDetail> {
     const amounts: Record<string, number> = {}
     input.payments.forEach((payment, index) => {
@@ -172,7 +188,8 @@ export async function payTabSplit(
     const { error } = await supabase.rpc('tab_pay_split', {
         p_tab_id: id,
         p_member_id: (input.member_id ?? null) as string,
-        p_payments: input.payments
+        p_payments: input.payments,
+        p_idempotency_key: (idempotencyKey ?? null) as string
     })
     assertNoError(error)
     return getTab(supabase, id)

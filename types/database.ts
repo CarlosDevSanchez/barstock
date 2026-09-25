@@ -1752,6 +1752,10 @@ export type Database = {
         Args: { p_delta: number; p_inventory_id: string; p_reason: string }
         Returns: number
       }
+      balance: {
+        Args: { t: Database["public"]["Tables"]["tabs"]["Row"] }
+        Returns: number
+      }
       business_day_report: {
         Args: { p_business_day_id: string }
         Returns: Json
@@ -1921,6 +1925,7 @@ export type Database = {
       tab_pay: {
         Args: {
           p_amount: number
+          p_idempotency_key?: string
           p_member_id: string
           p_method: Database["public"]["Enums"]["payment_method"]
           p_tab_id: string
@@ -1928,7 +1933,12 @@ export type Database = {
         Returns: undefined
       }
       tab_pay_split: {
-        Args: { p_member_id: string; p_payments: Json; p_tab_id: string }
+        Args: {
+          p_idempotency_key?: string
+          p_member_id: string
+          p_payments: Json
+          p_tab_id: string
+        }
         Returns: undefined
       }
       tab_remove_item: {

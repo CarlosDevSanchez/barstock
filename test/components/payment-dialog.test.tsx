@@ -13,9 +13,11 @@ const { SessionProvider } = await import('@/components/session-provider')
  * that, since the dialog itself doesn't expose a trigger). */
 function Harness({
     amountDue = 32.99,
+    amountEditable = false,
     onSubmit = () => {}
 }: {
     amountDue?: number
+    amountEditable?: boolean
     onSubmit?: (payments: Array<{ method: PaymentMethod; amount: number }>) => void
 }) {
     const [open, setOpen] = useState(true)
@@ -29,6 +31,7 @@ function Harness({
                 onOpenChange={setOpen}
                 title="Complete Payment"
                 amountDue={amountDue}
+                amountEditable={amountEditable}
                 submitLabel="Complete Order"
                 processing={false}
                 onSubmit={onSubmit}
@@ -121,6 +124,69 @@ describe('PaymentDialog — split payment', () => {
 
         expect((firstAmount as HTMLInputElement).value).toBe('')
         expect(within(dialog).queryByLabelText('Cash received')).toBeNull() // cash is no longer involved
+    })
+})
+
+describe('PaymentDialog — editable amount (partial payment)', () => {
+    test('defaults to the full amount due, pre-filled and submittable as-is', async () => {
+        const submitted: Array<Array<{ method: PaymentMethod; amount: number }>> = []
+        renderDialog({ amountDue: 60, amountEditable: true, onSubmit: payments => submitted.push(payments) })
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        expect((within(dialog).getByLabelText('Amount') as HTMLInputElement).value).toBe('60.00')
+
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Complete Order' }))
+        expect(submitted).toEqual([[{ method: 'cash', amount: 60 }]])
+    })
+
+    test('typing a smaller amount pays only that much (an abono), not the full balance', async () => {
+        const submitted: Array<Array<{ method: PaymentMethod; amount: number }>> = []
+        renderDialog({ amountDue: 60, amountEditable: true, onSubmit: payments => submitted.push(payments) })
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+
+        fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '20' } })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Complete Order' }))
+        expect(submitted).toEqual([[{ method: 'cash', amount: 20 }]])
+    })
+
+    test('an amount above the balance shows "Invalid amount" and blocks submit', async () => {
+        renderDialog({ amountDue: 60, amountEditable: true })
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+
+        fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '90' } })
+        expect(within(dialog).getByText('Invalid amount')).toBeTruthy()
+        expect((within(dialog).getByRole('button', { name: 'Complete Order' }) as HTMLButtonElement).disabled).toBe(
+            true
+        )
+    })
+
+    test('a zero or empty amount also blocks submit', async () => {
+        renderDialog({ amountDue: 60, amountEditable: true })
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+
+        fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '' } })
+        expect((within(dialog).getByRole('button', { name: 'Complete Order' }) as HTMLButtonElement).disabled).toBe(
+            true
+        )
+    })
+
+    test('"Full balance" resets a narrowed amount back to the full amount due', async () => {
+        renderDialog({ amountDue: 60, amountEditable: true })
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+
+        const amountField = within(dialog).getByLabelText('Amount')
+        fireEvent.change(amountField, { target: { value: '20' } })
+        // A real click on another button blurs the field first (moving focus); fireEvent.click alone doesn't
+        // simulate that focus shift, so it's done explicitly here — same reasoning as the blur in MoneyInput's
+        // own "reformats on blur" behavior.
+        fireEvent.blur(amountField)
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Full balance' }))
+        expect((within(dialog).getByLabelText('Amount') as HTMLInputElement).value).toBe('60.00')
+    })
+
+    test('with amountEditable off, no amount input is shown at all (the old, non-partial callers)', async () => {
+        renderDialog({ amountDue: 60, amountEditable: false })
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        expect(within(dialog).queryByLabelText('Amount')).toBeNull()
     })
 })
 
