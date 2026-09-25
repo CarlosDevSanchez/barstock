@@ -345,6 +345,7 @@ function PayDialog({ row, onClose, onDone }: { row: ReceivableRow; onClose: () =
             open
             onOpenChange={next => !next && onClose()}
             title={t('recordPayment')}
+            description={`${row.order_number} · ${row.customer_name ?? '—'}`}
             amountDue={row.balance}
             amountEditable={true}
             submitLabel={t('recordPayment')}

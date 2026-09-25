@@ -1,6 +1,6 @@
 'use client'
 
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { CreditCard, DollarSign, Smartphone } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -33,6 +33,8 @@ export interface PaymentDialogProps {
     open: boolean
     onOpenChange: (open: boolean) => void
     title: string
+    /** Extra muted line under the title (e.g. order · customer). Does not replace the estimated-total description. */
+    description?: ReactNode
     /** Total to charge (or, when `amountEditable`, the maximum the person can choose to pay). */
     amountDue: number
     /** True lets the person pay less than `amountDue` (a tab/receivable abono); false/omitted charges it in full. */
@@ -55,6 +57,7 @@ export function PaymentDialog({
     open,
     onOpenChange,
     title,
+    description,
     amountDue,
     amountEditable = false,
     submitLabel,
@@ -71,6 +74,7 @@ export function PaymentDialog({
             <DialogContent className="sm:max-w-md">
                 <DialogHeader>
                     <DialogTitle>{title}</DialogTitle>
+                    {description ? <p className="text-sm text-muted-foreground">{description}</p> : null}
                     <DialogDescription>
                         {t('estimatedTotal')}{' '}
                         <span className="text-lg font-bold text-emerald-600">{money(amountDue)}</span>

@@ -62,6 +62,7 @@ afterEach(cleanup)
 describe('receivables PayDialog', () => {
     test('the amount is capped to the balance and cash short/change shows', async () => {
         const dialog = await openPayDialog()
+        expect(within(dialog).getByText('ORD-260925-000001 · Jane Doe')).toBeTruthy()
         expect((within(dialog).getByLabelText('Amount') as HTMLInputElement).value).toBe('60.00')
 
         fireEvent.change(within(dialog).getByLabelText('Amount'), { target: { value: '90' } })
