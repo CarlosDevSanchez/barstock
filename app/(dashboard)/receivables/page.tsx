@@ -115,7 +115,12 @@ export default function ReceivablesPage() {
                                     {pageRows.map(row => (
                                         <TableRow key={row.order_id}>
                                             <TableCell>
-                                                <div className="font-medium">{row.customer_name ?? '—'}</div>
+                                                <div className="flex flex-wrap items-center gap-2">
+                                                    <span className="font-medium">{row.customer_name ?? '—'}</span>
+                                                    {row.customer_id == null ? (
+                                                        <Badge variant="secondary">{t('noCustomer')}</Badge>
+                                                    ) : null}
+                                                </div>
                                                 <div className="text-xs text-muted-foreground">{row.order_number}</div>
                                             </TableCell>
                                             <TableCell>{money(row.total)}</TableCell>
@@ -155,7 +160,14 @@ export default function ReceivablesPage() {
                     }
                     renderCard={row => (
                         <ListCardRow
-                            title={row.customer_name ?? row.order_number}
+                            title={
+                                <span className="flex flex-wrap items-center gap-2">
+                                    <span>{row.customer_name ?? row.order_number}</span>
+                                    {row.customer_id == null ? (
+                                        <Badge variant="secondary">{t('noCustomer')}</Badge>
+                                    ) : null}
+                                </span>
+                            }
                             subtitle={`${row.order_number} · ${row.due_date ?? '—'} · ${
                                 row.status === 'written_off' ? t('statusWrittenOff') : t('statusPending')
                             }`}

@@ -13,6 +13,7 @@ const baseOrder: OrderDetail = {
     id: 'order-1',
     order_number: 'ORD-260921-000001',
     customer_id: null,
+    debtor_name: null,
     status: 'completed',
     subtotal: 120,
     discount: 0,

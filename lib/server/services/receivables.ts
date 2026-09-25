@@ -37,18 +37,35 @@ export async function listReceivables(
 ): Promise<ReceivableRow[]> {
     const { data, error } = await rpc(supabase).rpc('list_receivables', {
         p_status: query.status ?? null,
-        p_customer_id: query.customer_id ?? null
+        p_customer_id: query.customer_id ?? null,
+        p_q: query.q ?? null
     })
     assertNoError(error)
     return z.array(receivableRowSchema).parse(data ?? [])
 }
 
-export async function deferTab(supabase: AppSupabaseClient, tabId: string, input: DeferTabInput): Promise<OrderDetail> {
+export async function deferTab(
+    supabase: AppSupabaseClient,
+    tabId: string,
+    input: DeferTabInput,
+    idempotencyKey: string
+): Promise<OrderDetail> {
+    if (input.payments) {
+        const amounts: Record<string, number> = {}
+        input.payments.forEach((payment, index) => {
+            amounts[`payments.${index}.amount`] = payment.amount
+        })
+        await assertMoneyScale(supabase, amounts)
+    }
     const { data, error } = await rpc(supabase).rpc('defer_tab', {
         p_tab_id: tabId,
-        p_due_date: input.due_date ?? null,
+        p_due_date: input.due_date,
         p_reminder: input.reminder_enabled,
-        p_note: input.reminder_note ?? null
+        p_note: input.reminder_note ?? null,
+        p_customer_id: input.customer_id ?? null,
+        p_debtor_name: input.debtor_name ?? null,
+        p_payments: input.payments ?? null,
+        p_idempotency_key: idempotencyKey
     })
     assertNoError(error)
     return getOrder(supabase, data as string)

@@ -936,6 +936,15 @@
     "deferTitle": "Cerrar como cuenta por cobrar",
     "deferDescription": "La cuenta se cierra y el saldo queda pendiente de cobro.",
     "dueDate": "Fecha de vencimiento",
+    "debtor": "Deudor",
+    "debtorCustomer": "Cliente",
+    "debtorNameOnly": "Solo nombre",
+    "debtorName": "Nombre",
+    "remainder": "Qué queda pendiente",
+    "payAllBalance": "Todo el saldo",
+    "payPartialNow": "Abona una parte ahora",
+    "payingNow": "Abono ahora",
+    "remaining": "Pendiente",
     "reminder": "Recordatorio",
     "reminderYes": "Sí",
     "reminderNo": "No",
@@ -1035,6 +1044,7 @@
     "statusPending": "Pendiente",
     "statusWrittenOff": "Castigada",
     "openBalance": "Saldo pendiente",
-    "noOpenBalance": "Sin saldo pendiente"
+    "noOpenBalance": "Sin saldo pendiente",
+    "noCustomer": "Sin cliente"
   }
 }

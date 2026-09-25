@@ -90,7 +90,7 @@ export function ReceiptTicket({ order, settings, provisional = false }: ReceiptT
 
             <div className="space-y-0.5">
                 <p>
-                    {t('name')} {order.customer?.name || t('walkInCustomer')}
+                    {t('name')} {order.customer?.name || order.debtor_name || t('walkInCustomer')}
                 </p>
                 {order.payments.length > 0 && (
                     <p>

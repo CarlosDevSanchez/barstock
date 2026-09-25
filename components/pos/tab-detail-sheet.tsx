@@ -22,6 +22,7 @@ import {
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { PaymentDialog } from '@/components/pos/payment-dialog'
+import { DeferTabDialog } from '@/components/pos/defer-tab-dialog'
 import { errorMessage } from '@/lib/api/client'
 import { tabsApi, type TabDetail } from '@/lib/api/tabs'
 import { groupOrderItemsByPromotion, type GroupableOrderItem } from '@/lib/order-item-groups'
@@ -626,7 +627,7 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                                             </div>
                                         )}
 
-                                        {isOpen && tab.customer && tab.totals.balance > 0 && (
+                                        {isOpen && tab.totals.balance > 0 && (
                                             <OfflineDisabledButton
                                                 variant="secondary"
                                                 className="w-full"
@@ -691,9 +692,9 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                 />
             )}
 
-            {deferring && tabId && (
+            {deferring && tab && (
                 <DeferTabDialog
-                    tabId={tabId}
+                    tab={tab}
                     onClose={() => setDeferring(false)}
                     onDeferred={orderId => {
                         setDeferring(false)
@@ -704,85 +705,5 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                 />
             )}
         </>
-    )
-}
-
-function DeferTabDialog({
-    tabId,
-    onClose,
-    onDeferred
-}: {
-    tabId: string
-    onClose: () => void
-    onDeferred: (orderId: string) => void
-}) {
-    const t = useTranslations('tabs')
-    const tc = useTranslations('common')
-    const [dueDate, setDueDate] = useState('')
-    const [reminder, setReminder] = useState(false)
-    const [note, setNote] = useState('')
-    const [submitting, setSubmitting] = useState(false)
-
-    const submit = async () => {
-        setSubmitting(true)
-        try {
-            const order = await tabsApi.defer(tabId, {
-                due_date: dueDate || null,
-                reminder_enabled: reminder,
-                reminder_note: note || null
-            })
-            toast.success(t('deferSuccess'))
-            onDeferred(order.id)
-        } catch (error) {
-            toast.error(errorMessage(error, t('deferFailed')))
-        } finally {
-            setSubmitting(false)
-        }
-    }
-
-    return (
-        <Dialog open onOpenChange={next => !submitting && !next && onClose()}>
-            <DialogContent className="sm:max-w-sm">
-                <DialogHeader>
-                    <DialogTitle>{t('deferTitle')}</DialogTitle>
-                    <DialogDescription>{t('deferDescription')}</DialogDescription>
-                </DialogHeader>
-                <div className="space-y-3">
-                    <div className="space-y-1">
-                        <Label htmlFor="defer-due">{t('dueDate')}</Label>
-                        <Input
-                            id="defer-due"
-                            type="date"
-                            value={dueDate}
-                            onChange={event => setDueDate(event.target.value)}
-                        />
-                    </div>
-                    <div className="space-y-1">
-                        <Label htmlFor="defer-reminder">{t('reminder')}</Label>
-                        <select
-                            id="defer-reminder"
-                            className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
-                            value={reminder ? 'yes' : 'no'}
-                            onChange={event => setReminder(event.target.value === 'yes')}
-                        >
-                            <option value="yes">{t('reminderYes')}</option>
-                            <option value="no">{t('reminderNo')}</option>
-                        </select>
-                    </div>
-                    <div className="space-y-1">
-                        <Label htmlFor="defer-note">{t('note')}</Label>
-                        <Input id="defer-note" value={note} onChange={event => setNote(event.target.value)} />
-                    </div>
-                </div>
-                <DialogFooter>
-                    <Button variant="outline" disabled={submitting} onClick={onClose}>
-                        {tc('cancel')}
-                    </Button>
-                    <Button disabled={submitting} onClick={() => void submit()}>
-                        {t('deferConfirm')}
-                    </Button>
-                </DialogFooter>
-            </DialogContent>
-        </Dialog>
     )
 }

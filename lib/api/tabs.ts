@@ -33,6 +33,9 @@ export const tabsApi = {
             headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
         }),
     void: (id: string, body: VoidTabInput) => apiPost<TabDetail>(`tabs/${id}/void`, body),
-    /** Close an open tab as a pending receivable (customer required). */
-    defer: (id: string, body: DeferTabInput) => apiPost<OrderDetail>(`tabs/${id}/defer`, body)
+    /** Close an open tab as a pending receivable. Idempotency-Key is required. */
+    defer: (id: string, body: DeferTabInput, idempotencyKey: string) =>
+        apiPost<OrderDetail>(`tabs/${id}/defer`, body, {
+            headers: { 'Idempotency-Key': idempotencyKey }
+        })
 }

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { CreditCard, DollarSign, Smartphone } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
@@ -94,27 +94,21 @@ export function PaymentDialog({
     )
 }
 
-interface PaymentDialogBodyProps {
+export interface PaymentFieldsProps {
     amountDue: number
-    amountEditable: boolean
-    submitLabel: string
-    processing: boolean
-    disabled: boolean
-    disabledReason?: string
-    onCancel: () => void
-    onSubmit: (payments: Array<{ method: PaymentMethod; amount: number }>) => void
+    amountEditable?: boolean
+    /** When true the amount must be strictly less than `amountDue` (a defer abono, not a full pay-off). */
+    exclusiveMax?: boolean
+    onPaymentsChange?: (payments: Array<{ method: PaymentMethod; amount: number }> | null) => void
 }
 
-function PaymentDialogBody({
+/** Method / split / cash-received fields shared by PaymentDialog and DeferTabDialog. */
+export function PaymentFields({
     amountDue,
-    amountEditable,
-    submitLabel,
-    processing,
-    disabled,
-    disabledReason,
-    onCancel,
-    onSubmit
-}: PaymentDialogBodyProps) {
+    amountEditable = false,
+    exclusiveMax = false,
+    onPaymentsChange
+}: PaymentFieldsProps) {
     const t = useTranslations('pos')
     const tc = useTranslations('common')
     const money = useMoney()
@@ -133,7 +127,9 @@ function PaymentDialogBody({
     const [amount2Draft, setAmount2Draft] = useState<number | null>(null)
     const [amount2Touched, setAmount2Touched] = useState(false)
     const [received, setReceived] = useState<number | null>(null)
-    const [editableAmount, setEditableAmount] = useState<number | null>(amountEditable ? amountDue : null)
+    const [editableAmount, setEditableAmount] = useState<number | null>(
+        amountEditable && !exclusiveMax ? amountDue : null
+    )
 
     // Cash received and the split amounts only make sense for the current method/split choice: clear them
     // whenever either changes, right where the change happens — same intent as the old `resetSplit()`.
@@ -168,8 +164,8 @@ function PaymentDialogBody({
     }
 
     const amountToPay = amountEditable ? (editableAmount ?? 0) : amountDue
-    const editableValid =
-        !amountEditable || (editableAmount !== null && editableAmount > 0 && editableAmount <= amountDue)
+    const amountWithinMax = exclusiveMax ? amountToPay > 0 && amountToPay < amountDue : amountToPay <= amountDue
+    const editableValid = !amountEditable || (editableAmount !== null && amountToPay > 0 && amountWithinMax)
 
     const firstAmount = amount1 ?? 0
     const autoSecondAmount = split ? splitRemainder(amountToPay, firstAmount, decimals) : 0
@@ -184,36 +180,36 @@ function PaymentDialogBody({
           : 0
     const { change, short } = cashDifference(received ?? 0, cashDue, decimals)
 
-    const canSubmit = !disabled && !processing && editableValid && (split ? splitBalanced : amountToPay > 0)
+    const paymentsValid = editableValid && (split ? splitBalanced : amountToPay > 0)
+    const payments = split
+        ? [
+              { method: method1, amount: firstAmount },
+              { method: method2, amount: secondAmount }
+          ]
+        : [{ method: method1, amount: amountToPay }]
 
-    const handleSubmit = () => {
-        if (!canSubmit) return
-        onSubmit(
-            split
-                ? [
-                      { method: method1, amount: firstAmount },
-                      { method: method2, amount: secondAmount }
-                  ]
-                : [{ method: method1, amount: amountToPay }]
-        )
-    }
+    useEffect(() => {
+        onPaymentsChange?.(paymentsValid ? payments : null)
+        // payments is rebuilt every render; the primitives below are the actual inputs.
+        // eslint-disable-next-line react-hooks/exhaustive-deps -- notify parent when the derived payment set changes
+    }, [paymentsValid, split, method1, method2, firstAmount, secondAmount, amountToPay])
 
     return (
-        <>
-            <div className="space-y-4 py-4">
-                {amountEditable && (
-                    <div className="space-y-1">
-                        <Label htmlFor="payment-amount-due">{t('paymentAmount')}</Label>
-                        <div className="flex items-center gap-2">
-                            <MoneyInput
-                                id="payment-amount-due"
-                                aria-label={t('paymentAmount')}
-                                value={editableAmount}
-                                onChange={setEditableAmount}
-                                decimals={decimals}
-                                locale={locale}
-                                className="flex-1"
-                            />
+        <div className="space-y-4 py-4">
+            {amountEditable && (
+                <div className="space-y-1">
+                    <Label htmlFor="payment-amount-due">{t('paymentAmount')}</Label>
+                    <div className="flex items-center gap-2">
+                        <MoneyInput
+                            id="payment-amount-due"
+                            aria-label={t('paymentAmount')}
+                            value={editableAmount}
+                            onChange={setEditableAmount}
+                            decimals={decimals}
+                            locale={locale}
+                            className="flex-1"
+                        />
+                        {!exclusiveMax && (
                             <Button
                                 type="button"
                                 variant="outline"
@@ -222,138 +218,175 @@ function PaymentDialogBody({
                             >
                                 {t('fullBalance')}
                             </Button>
-                        </div>
-                        {!editableValid && <p className="text-sm text-red-600">{t('invalidAmount')}</p>}
+                        )}
                     </div>
-                )}
-
-                <div className="flex items-center gap-1.5">
-                    <Button
-                        type="button"
-                        variant={split ? 'default' : 'outline'}
-                        aria-pressed={split}
-                        onClick={toggleSplit}
-                    >
-                        {t('splitPayment')}
-                    </Button>
+                    {!editableValid && <p className="text-sm text-red-600">{t('invalidAmount')}</p>}
                 </div>
-                {split ? (
-                    <div className="space-y-3">
-                        {[
-                            {
-                                label: t('firstPayment'),
-                                method: method1,
-                                onMethod: selectMethod1,
-                                options: PAYMENT_METHODS,
-                                amount: amount1,
-                                onAmount: (value: number | null) => setAmount1(value)
-                            },
-                            {
-                                label: t('secondPayment'),
-                                method: method2,
-                                onMethod: selectMethod2,
-                                options: PAYMENT_METHODS.filter(candidate => candidate !== method1),
-                                amount: secondAmount,
-                                onAmount: (value: number | null) => {
-                                    setAmount2Touched(true)
-                                    setAmount2Draft(value)
-                                }
-                            }
-                        ].map(row => (
-                            <div key={row.label} className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                    <Label>{row.label}</Label>
-                                    <Select
-                                        value={row.method}
-                                        onValueChange={value => row.onMethod(value as PaymentMethod)}
-                                    >
-                                        <SelectTrigger aria-label={row.label}>
-                                            <SelectValue />
-                                        </SelectTrigger>
-                                        <SelectContent>
-                                            {row.options.map(value => (
-                                                <SelectItem key={value} value={value}>
-                                                    {tc(`payment.${value}`)}
-                                                </SelectItem>
-                                            ))}
-                                        </SelectContent>
-                                    </Select>
-                                </div>
-                                <div className="space-y-1">
-                                    <Label>{t('paymentAmount')}</Label>
-                                    <MoneyInput
-                                        aria-label={`${row.label} ${t('paymentAmount')}`}
-                                        value={row.amount}
-                                        onChange={row.onAmount}
-                                        decimals={decimals}
-                                        locale={locale}
-                                    />
-                                </div>
-                            </div>
-                        ))}
-                        {gap !== 0 && (
-                            <p className="text-sm text-red-600">
-                                {gap > 0
-                                    ? t('paymentShort', { amount: money(gap) })
-                                    : t('paymentOver', { amount: money(Math.abs(gap)) })}
-                            </p>
-                        )}
-                    </div>
-                ) : (
-                    <div className="space-y-2">
-                        <Label className="text-foreground font-semibold">{t('paymentMethod')}</Label>
-                        <div className="grid grid-cols-3 gap-2">
-                            {PAYMENT_ICONS.map(({ value, icon: Icon }) => (
-                                <Button
-                                    key={value}
-                                    type="button"
-                                    variant={method1 === value ? 'default' : 'outline'}
-                                    aria-pressed={method1 === value}
-                                    className="flex flex-col h-auto py-4"
-                                    onClick={() => selectMethod1(value)}
-                                >
-                                    <Icon className="h-6 w-6 mb-1" />
-                                    <span className="text-xs">{tc(`payment.${value}`)}</span>
-                                </Button>
-                            ))}
-                        </div>
-                    </div>
-                )}
-                {cashDue > 0 && (
-                    <div className="space-y-1">
-                        <Label htmlFor="cash-received">{t('cashReceived')}</Label>
-                        <MoneyInput
-                            id="cash-received"
-                            aria-label={t('cashReceived')}
-                            value={received}
-                            onChange={setReceived}
-                            decimals={decimals}
-                            locale={locale}
-                        />
-                        {received !== null && (
-                            <p
-                                className={cn(
-                                    'text-sm',
-                                    change > 0 && 'font-semibold text-emerald-600',
-                                    short > 0 && 'text-amber-700 dark:text-amber-400'
-                                )}
-                            >
-                                {change > 0
-                                    ? t('cashChangeAmount', { amount: money(change) })
-                                    : short > 0
-                                      ? t('paymentShort', { amount: money(short) })
-                                      : t('noChange')}
-                            </p>
-                        )}
-                    </div>
-                )}
+            )}
+
+            <div className="flex items-center gap-1.5">
+                <Button
+                    type="button"
+                    variant={split ? 'default' : 'outline'}
+                    aria-pressed={split}
+                    onClick={toggleSplit}
+                >
+                    {t('splitPayment')}
+                </Button>
             </div>
+            {split ? (
+                <div className="space-y-3">
+                    {[
+                        {
+                            label: t('firstPayment'),
+                            method: method1,
+                            onMethod: selectMethod1,
+                            options: PAYMENT_METHODS,
+                            amount: amount1,
+                            onAmount: (value: number | null) => setAmount1(value)
+                        },
+                        {
+                            label: t('secondPayment'),
+                            method: method2,
+                            onMethod: selectMethod2,
+                            options: PAYMENT_METHODS.filter(candidate => candidate !== method1),
+                            amount: secondAmount,
+                            onAmount: (value: number | null) => {
+                                setAmount2Touched(true)
+                                setAmount2Draft(value)
+                            }
+                        }
+                    ].map(row => (
+                        <div key={row.label} className="grid grid-cols-2 gap-2">
+                            <div className="space-y-1">
+                                <Label>{row.label}</Label>
+                                <Select
+                                    value={row.method}
+                                    onValueChange={value => row.onMethod(value as PaymentMethod)}
+                                >
+                                    <SelectTrigger aria-label={row.label}>
+                                        <SelectValue />
+                                    </SelectTrigger>
+                                    <SelectContent>
+                                        {row.options.map(value => (
+                                            <SelectItem key={value} value={value}>
+                                                {tc(`payment.${value}`)}
+                                            </SelectItem>
+                                        ))}
+                                    </SelectContent>
+                                </Select>
+                            </div>
+                            <div className="space-y-1">
+                                <Label>{t('paymentAmount')}</Label>
+                                <MoneyInput
+                                    aria-label={`${row.label} ${t('paymentAmount')}`}
+                                    value={row.amount}
+                                    onChange={row.onAmount}
+                                    decimals={decimals}
+                                    locale={locale}
+                                />
+                            </div>
+                        </div>
+                    ))}
+                    {gap !== 0 && (
+                        <p className="text-sm text-red-600">
+                            {gap > 0
+                                ? t('paymentShort', { amount: money(gap) })
+                                : t('paymentOver', { amount: money(Math.abs(gap)) })}
+                        </p>
+                    )}
+                </div>
+            ) : (
+                <div className="space-y-2">
+                    <Label className="text-foreground font-semibold">{t('paymentMethod')}</Label>
+                    <div className="grid grid-cols-3 gap-2">
+                        {PAYMENT_ICONS.map(({ value, icon: Icon }) => (
+                            <Button
+                                key={value}
+                                type="button"
+                                variant={method1 === value ? 'default' : 'outline'}
+                                aria-pressed={method1 === value}
+                                className="flex flex-col h-auto py-4"
+                                onClick={() => selectMethod1(value)}
+                            >
+                                <Icon className="h-6 w-6 mb-1" />
+                                <span className="text-xs">{tc(`payment.${value}`)}</span>
+                            </Button>
+                        ))}
+                    </div>
+                </div>
+            )}
+            {cashDue > 0 && (
+                <div className="space-y-1">
+                    <Label htmlFor="cash-received">{t('cashReceived')}</Label>
+                    <MoneyInput
+                        id="cash-received"
+                        aria-label={t('cashReceived')}
+                        value={received}
+                        onChange={setReceived}
+                        decimals={decimals}
+                        locale={locale}
+                    />
+                    {received !== null && (
+                        <p
+                            className={cn(
+                                'text-sm',
+                                change > 0 && 'font-semibold text-emerald-600',
+                                short > 0 && 'text-amber-700 dark:text-amber-400'
+                            )}
+                        >
+                            {change > 0
+                                ? t('cashChangeAmount', { amount: money(change) })
+                                : short > 0
+                                  ? t('paymentShort', { amount: money(short) })
+                                  : t('noChange')}
+                        </p>
+                    )}
+                </div>
+            )}
+        </div>
+    )
+}
+
+interface PaymentDialogBodyProps {
+    amountDue: number
+    amountEditable: boolean
+    submitLabel: string
+    processing: boolean
+    disabled: boolean
+    disabledReason?: string
+    onCancel: () => void
+    onSubmit: (payments: Array<{ method: PaymentMethod; amount: number }>) => void
+}
+
+function PaymentDialogBody({
+    amountDue,
+    amountEditable,
+    submitLabel,
+    processing,
+    disabled,
+    disabledReason,
+    onCancel,
+    onSubmit
+}: PaymentDialogBodyProps) {
+    const t = useTranslations('pos')
+    const tc = useTranslations('common')
+    const [payments, setPayments] = useState<Array<{ method: PaymentMethod; amount: number }> | null>(null)
+    const canSubmit = !disabled && !processing && payments !== null
+
+    return (
+        <>
+            <PaymentFields amountDue={amountDue} amountEditable={amountEditable} onPaymentsChange={setPayments} />
             <DialogFooter className="flex-col items-stretch gap-1 sm:flex-row sm:items-center">
                 <Button variant="outline" disabled={processing} onClick={onCancel}>
                     {tc('cancel')}
                 </Button>
                 <div className="flex flex-1 flex-col gap-1 sm:items-end">
-                    <Button className="w-full sm:w-auto" disabled={!canSubmit} onClick={handleSubmit}>
+                    <Button
+                        className="w-full sm:w-auto"
+                        disabled={!canSubmit}
+                        onClick={() => payments && onSubmit(payments)}
+                    >
                         {processing ? t('processing') : submitLabel}
                     </Button>
                     {disabled && disabledReason && <p className="text-xs text-muted-foreground">{disabledReason}</p>}

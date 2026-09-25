@@ -293,3 +293,194 @@ describe('receivables', () => {
         expect(data.net_profit - baseline.net_profit).toBe(-10)
     })
 })
+
+describe('defer_tab v2', () => {
+    test('debtor_name without a customer creates a pending order', async () => {
+        const { tabId } = await openTabWithItem(null, 40)
+        const deferred = await rpc(cashier, 'defer_tab', {
+            p_tab_id: tabId,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null,
+            p_customer_id: null,
+            p_debtor_name: 'Juan Pérez',
+            p_payments: null
+        })
+        expect(deferred.error).toBeNull()
+        const order = await service()
+            .from('orders')
+            .select('status, debtor_name, customer_id')
+            .eq('id', deferred.data as string)
+            .single()
+        expect(order.data).toMatchObject({
+            status: 'pending',
+            debtor_name: 'Juan Pérez',
+            customer_id: null
+        })
+    })
+
+    test('no customer and no name → P0001', async () => {
+        const { tabId } = await openTabWithItem(null)
+        const denied = await rpc(cashier, 'defer_tab', {
+            p_tab_id: tabId,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null
+        })
+        expect(denied.error?.code).toBe('P0001')
+    })
+
+    test('inactive or soft-deleted customer → P0001', async () => {
+        const inactive = await createCustomer({ is_active: false })
+        const { tabId: inactiveTab } = await openTabWithItem(null, 20)
+        const inactiveDenied = await rpc(cashier, 'defer_tab', {
+            p_tab_id: inactiveTab,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null,
+            p_customer_id: inactive.id
+        })
+        expect(inactiveDenied.error?.code).toBe('P0001')
+
+        const deleted = await createCustomer({ deleted_at: new Date().toISOString() })
+        const { tabId: deletedTab } = await openTabWithItem(null, 20)
+        const deletedDenied = await rpc(cashier, 'defer_tab', {
+            p_tab_id: deletedTab,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null,
+            p_customer_id: deleted.id
+        })
+        expect(deletedDenied.error?.code).toBe('P0001')
+    })
+
+    test('initial split payment copies methods and cash_session_id onto the order', async () => {
+        const users = await ensureTestUsers()
+        const register = await service().from('cash_registers').select('id').eq('name', 'Caja 1').single()
+        if (register.error) throw register.error
+        await service()
+            .from('cash_sessions')
+            .update({ status: 'closed', closed_at: new Date().toISOString() })
+            .eq('status', 'open')
+        await service()
+            .from('business_days')
+            .update({ closed_at: new Date().toISOString(), close_kind: 'manual' })
+            .is('closed_at', null)
+        expect((await cashier.rpc('open_business_day', {})).error).toBeNull()
+        const session = await cashier.rpc('open_cash_session', {
+            p_register_id: register.data.id,
+            p_opening_float: 0,
+            p_user_ids: [users.cashier.id]
+        })
+        expect(session.error).toBeNull()
+
+        const { tabId, total } = await openTabWithItem(null, 100)
+        const deferred = await rpc(cashier, 'defer_tab', {
+            p_tab_id: tabId,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null,
+            p_debtor_name: 'Split debtor',
+            p_payments: [
+                { method: 'cash', amount: 30 },
+                { method: 'card', amount: 20 }
+            ]
+        })
+        expect(deferred.error).toBeNull()
+        const orderId = deferred.data as string
+        const payments = await service()
+            .from('payments')
+            .select('payment_method, amount, cash_session_id')
+            .eq('order_id', orderId)
+            .order('payment_method')
+        expect(payments.error).toBeNull()
+        expect(payments.data).toHaveLength(2)
+        expect(payments.data).toEqual(
+            expect.arrayContaining([
+                { payment_method: 'card', amount: 20, cash_session_id: session.data },
+                { payment_method: 'cash', amount: 30, cash_session_id: session.data }
+            ])
+        )
+        const listed = await rpc(cashier, 'list_receivables', {
+            p_status: 'pending',
+            p_customer_id: null,
+            p_q: 'Split debtor'
+        })
+        expect(listed.error).toBeNull()
+        const row = (listed.data as Array<{ order_id: string; balance: number; debtor_name: string | null }>).find(
+            item => item.order_id === orderId
+        )
+        expect(row).toMatchObject({ balance: total - 50, debtor_name: 'Split debtor' })
+    })
+
+    test('an abono >= balance → P0001', async () => {
+        const { tabId, total } = await openTabWithItem(null, 50)
+        const denied = await rpc(cashier, 'defer_tab', {
+            p_tab_id: tabId,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null,
+            p_debtor_name: 'Too much',
+            p_payments: [{ method: 'cash', amount: total }]
+        })
+        expect(denied.error?.code).toBe('P0001')
+    })
+
+    test('a past due date → P0001', async () => {
+        const { tabId } = await openTabWithItem(null, 25)
+        const denied = await rpc(cashier, 'defer_tab', {
+            p_tab_id: tabId,
+            p_due_date: '2000-01-01',
+            p_reminder: false,
+            p_note: null,
+            p_debtor_name: 'Late date'
+        })
+        expect(denied.error?.code).toBe('P0001')
+    })
+
+    test('retrying the same idempotency key does not create a second order', async () => {
+        const { tabId } = await openTabWithItem(null, 35)
+        const key = crypto.randomUUID()
+        const args = {
+            p_tab_id: tabId,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null,
+            p_debtor_name: 'Idempotent',
+            p_idempotency_key: key
+        }
+        const first = await rpc(cashier, 'defer_tab', args)
+        expect(first.error).toBeNull()
+        const second = await rpc(cashier, 'defer_tab', args)
+        expect(second.error).toBeNull()
+        expect(second.data).toBe(first.data)
+        const orders = await service()
+            .from('orders')
+            .select('id')
+            .eq('id', first.data as string)
+        expect(orders.data).toHaveLength(1)
+        const tabs = await service().from('tabs').select('id').eq('id', tabId).eq('status', 'closed')
+        expect(tabs.data).toHaveLength(1)
+    })
+
+    test('list_receivables p_q matches a debtor name', async () => {
+        const needle = uniq('Qdebtor')
+        const { tabId } = await openTabWithItem(null, 15)
+        const deferred = await rpc(cashier, 'defer_tab', {
+            p_tab_id: tabId,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null,
+            p_debtor_name: needle
+        })
+        expect(deferred.error).toBeNull()
+        const listed = await rpc(cashier, 'list_receivables', {
+            p_status: 'pending',
+            p_customer_id: null,
+            p_q: needle.slice(0, 8)
+        })
+        expect(listed.error).toBeNull()
+        const rows = listed.data as Array<{ debtor_name: string | null; customer_name: string | null }>
+        expect(rows.some(row => row.debtor_name === needle && row.customer_name === needle)).toBe(true)
+    })
+})

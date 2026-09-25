@@ -936,6 +936,15 @@
     "deferTitle": "Close as receivable",
     "deferDescription": "The tab closes and the balance stays outstanding.",
     "dueDate": "Due date",
+    "debtor": "Debtor",
+    "debtorCustomer": "Customer",
+    "debtorNameOnly": "Name only",
+    "debtorName": "Name",
+    "remainder": "What stays pending",
+    "payAllBalance": "Entire balance",
+    "payPartialNow": "Pay part now",
+    "payingNow": "Paying now",
+    "remaining": "Remaining",
     "reminder": "Reminder",
     "reminderYes": "Yes",
     "reminderNo": "No",
@@ -1035,6 +1044,7 @@
     "statusPending": "Pending",
     "statusWrittenOff": "Written off",
     "openBalance": "Open balance",
-    "noOpenBalance": "No open balance"
+    "noOpenBalance": "No open balance",
+    "noCustomer": "No customer"
   }
 }
