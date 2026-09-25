@@ -58,7 +58,11 @@ Con `CI=true`, Playwright no reutiliza un servidor existente y arranca `bun run 
   cada archivo de componentes necesita su propio proceso (`test:components` los lanza uno a uno). Misma razón: la suite del degradado sin
   `indexedDB` vive en `test/offline/` (fuera de `lib/`), lanzada en un segundo `bun test` tras el batch `lib stores` — si compartiera proceso con
   `outbox.test.ts`/`sync.test.ts`, su `mock.module('@/lib/offline/db')` sustituiría el módulo real (falla cuando el orden es sync → db, como en
-  CI Linux). Consecuencia: no se usa `coverageThreshold` de `bunfig.toml` (juzgaría cada proceso por separado).
+  CI Linux). Por la misma razón, `test/integration/notifications-dispatch.test.ts` (`mock.module('resend'|'web-push')`, `dispatchOutbox`
+  end-to-end) corre en su **propio** `bun test` separado del resto de `test/integration/`: `test:integration` y `test:coverage` lo excluyen del
+  batch principal (`find ... ! -name 'notifications-dispatch.test.ts'`) y lo lanzan aparte; cada uno restaura con `try/finally` cualquier
+  `process.env.*` que toque. Consecuencia: no se usa `coverageThreshold` de `bunfig.toml` (juzgaría cada proceso por separado) y
+  `scripts/coverage-check.ts` fusiona tres informes lcov, no dos.
 - **Bun en CI.** `supabase/setup-cli` reinstala Bun según su propio `.bun-version` y lo pone delante en `PATH`; el workflow vuelve a pinnear
   1.4.1 justo después para que `test:coverage` / e2e no corran con una versión distinta a `packageManager`.
 - **Cobertura** (`scripts/coverage-check.ts`): fusiona los informes lcov de unitarias e integración y exige **≥ 80 % de líneas** en `lib/server/**` y
@@ -76,6 +80,7 @@ Una carrera se puede colar sin ser detectada. Se comprobó **rompiendo a propós
 | Guarda `quantity >= n` del `UPDATE` de stock | Dos ventas de la última unidad |
 | `REVOKE`/políticas de escritura sobre `orders` | `rls.test.ts` (3 roles) |
 | Trigger `protect_profile_columns` | Escalada de rol de un cajero |
+| `for update skip locked` en `_claim_outbox` | `test/integration/outbox-claim-pg.test.ts`, ×20: dos conexiones **Postgres reales** (`Bun.SQL`, no supabase-js) donde una mantiene su transacción abierta sin `COMMIT` mientras la otra reclama — el escenario que dos llamadas RPC vía supabase-js no pueden ejercitar, porque cada una hace `commit` antes de que la otra empiece. Sin el `skip locked` (o con un `for update` a secas), ambas conexiones esperarían la misma fila en vez de repartírselas |
 
 Para repetir el ejercicio: aplicar la mutación con `docker exec supabase_db_barstock psql …` (p. ej. `pg_get_functiondef` + `sed`), ejecutar la prueba y
 volver al estado sano con `bun run db:reset`.

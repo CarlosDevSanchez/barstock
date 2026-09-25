@@ -1713,6 +1713,11 @@ export type Database = {
         }[]
       }
       _enqueue_due_receivables: { Args: never; Returns: undefined }
+      _mark_outbox_delivery: {
+        Args: { p_ids: number[]; p_recipient: string }
+        Returns: undefined
+      }
+      _purge_outbox: { Args: never; Returns: undefined }
       _session_cash: { Args: { p_session_id: string }; Returns: Json }
       _tab_totals: {
         Args: { p_tab_id: string }
@@ -1865,6 +1870,29 @@ export type Database = {
       refund_order: {
         Args: { p_order_id: string; p_reason: string }
         Returns: undefined
+      }
+      register_push_subscription: {
+        Args: {
+          p_auth: string
+          p_endpoint: string
+          p_p256dh: string
+          p_user_agent?: string
+        }
+        Returns: {
+          auth: string
+          created_at: string
+          endpoint: string
+          id: string
+          p256dh: string
+          user_agent: string | null
+          user_id: string
+        }
+        SetofOptions: {
+          from: "*"
+          to: "push_subscriptions"
+          isOneToOne: true
+          isSetofReturn: false
+        }
       }
       sales_report: {
         Args: { p_from: string; p_to: string; p_tz?: string }

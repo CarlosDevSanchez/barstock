@@ -28,7 +28,7 @@ Backfill: órdenes `completed`/`refunded` existentes reciben `settled_at = coale
 | `pay_receivable` | 1–2 pagos (`method`/`amount`, métodos distintos). `FOR UPDATE` de la orden. Suma ≤ saldo. Idempotencia como `create_sale`, pero la cabecera `Idempotency-Key` es **obligatoria** en `POST /receivables/{id}/payments` (400 si falta) — un cobro nunca debe poder reintentarse sin ella. Al llegar a 0: `completed`, `settled_at = now()`; `business_day_id` se actualiza con la jornada activa **solo si hay una abierta**, si no conserva el que ya tenía (no se pierde el vínculo con la jornada donde se difirió). |
 | `update_receivable` | Solo `pending`. |
 | `write_off_receivable` | Solo `pending` → `written_off`. **No** pone `settled_at`. |
-| `list_receivables` | Filas con saldo, `days_overdue`, etc. `p_status` null = pending + written_off. |
+| `list_receivables` | Filas con saldo, `days_overdue`, `reminder_note`, etc. `p_status` acepta **solo** `null` (pending + written_off), `'pending'` o `'written_off'`: cualquier otro valor es `P0001` (S1 — antes era texto libre y `SECURITY DEFINER`, así que un cajero podía leer estados que no debía). `p_limit` 1–500 (default 200), orden por `due_date nulls last`. |
 | `refund_order` | Rechaza `pending` con `P0001` antes del chequeo genérico. |
 
 `create_sale` ahora escribe `settled_at = coalesce(occurred_at, now())`.
@@ -44,6 +44,13 @@ Backfill: órdenes `completed`/`refunded` existentes reciben `settled_at = coale
 
 - POS: «Cerrar como cuenta por cobrar» solo si la tab tiene cliente.
 - `/receivables`: lista, pago (1–2 métodos), editar (gerente), castigar (admin).
+  - Editar preserva `reminder_note` como valor inicial del diálogo (antes se perdía porque `list_receivables` no
+    la devolvía).
+  - El diálogo de pago dividido reutiliza la misma lógica pura del POS (`lib/tab-split.ts`:
+    `splitRemainder`/`paymentGap`): el segundo monto se autocompleta con lo que falta del saldo, muestra
+    «Falta»/«Sobra» mientras no cuadre y el botón queda deshabilitado si los montos no suman el saldo o si se
+    repite el método (antes había que calcular el segundo monto a mano y no había ninguna validación en el
+    cliente).
 - Cliente: bloque «Saldo pendiente».
 - Ticket: línea «PENDIENTE DE PAGO» si `status = pending`.
 - Dashboard: tarjeta «Por cobrar».

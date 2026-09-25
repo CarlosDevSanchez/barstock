@@ -6,15 +6,6 @@ import type { AppSupabaseClient } from '@/lib/server/supabase'
 /** push_subscriptions is not in generated Database yet (regen with bun run db:types after merge). */
 function pushTable(supabase: AppSupabaseClient) {
     return supabase.from('push_subscriptions' as 'profiles') as unknown as {
-        insert: (row: Record<string, unknown>) => PromiseLike<{ error: { message: string; code?: string } | null }>
-        update: (row: Record<string, unknown>) => {
-            eq: (
-                column: string,
-                value: unknown
-            ) => {
-                eq: (column: string, value: unknown) => PromiseLike<{ error: { message: string } | null }>
-            }
-        }
         delete: () => {
             eq: (
                 column: string,
@@ -26,26 +17,35 @@ function pushTable(supabase: AppSupabaseClient) {
     }
 }
 
+/** Call an RPC that is not yet in the generated Database types (regen with `bun run db:types` after merge). */
+async function callRpc(
+    supabase: AppSupabaseClient,
+    fn: string,
+    args: Record<string, unknown>
+): Promise<{ data: unknown; error: Parameters<typeof assertNoError>[0] }> {
+    const result = await (
+        supabase as unknown as {
+            rpc: (
+                name: string,
+                params: Record<string, unknown>
+            ) => PromiseLike<{ data: unknown; error: Parameters<typeof assertNoError>[0] }>
+        }
+    ).rpc(fn, args)
+    return result
+}
+
 export const POST = route({
     role: 'cashier',
     body: pushSubscriptionSchema,
-    handler: async ({ supabase, user, body }) => {
-        const table = pushTable(supabase)
-        // Drop a previous subscription for this endpoint owned by the caller, then insert (or refresh keys).
-        const { error: delError } = await table.delete().eq('endpoint', body.endpoint).eq('user_id', user.id)
-        assertNoError(delError)
-
-        const { error } = await table.insert({
-            user_id: user.id,
-            endpoint: body.endpoint,
-            p256dh: body.p256dh,
-            auth: body.auth,
-            user_agent: body.user_agent ?? null
+    handler: async ({ supabase, body }) => {
+        // U5: register_push_subscription upserts by endpoint and reassigns user_id to the caller, so a shared
+        // device where a different user previously subscribed with this same browser endpoint does not 409.
+        const { error } = await callRpc(supabase, 'register_push_subscription', {
+            p_endpoint: body.endpoint,
+            p_p256dh: body.p256dh,
+            p_auth: body.auth,
+            p_user_agent: body.user_agent ?? null
         })
-        if (error?.code === '23505') {
-            // Endpoint still taken (another user): refresh is not allowed.
-            assertNoError(error)
-        }
         assertNoError(error)
         return ok({ ok: true as const })
     }

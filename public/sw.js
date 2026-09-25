@@ -153,6 +153,35 @@ self.addEventListener('push', event => {
     )
 })
 
+// U5: the push service can rotate a subscription's endpoint at any time (key rotation, browser-side reasons). If
+// this fires and the app never re-registers, the server keeps sending to a dead endpoint forever. Best-effort:
+// the SW has no session cookie access for a normal fetch, so this relies on the browser sending its existing
+// cookies with same-origin POSTs, same as any other fetch from this origin.
+self.addEventListener('pushsubscriptionchange', event => {
+    event.waitUntil(
+        (async () => {
+            try {
+                const options = event.oldSubscription?.options ?? { userVisibleOnly: true }
+                const sub = await self.registration.pushManager.subscribe(options)
+                const json = sub.toJSON()
+                if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) return
+                await fetch('/api/v1/me/push-subscriptions', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({
+                        endpoint: json.endpoint,
+                        p256dh: json.keys.p256dh,
+                        auth: json.keys.auth,
+                        user_agent: self.navigator ? self.navigator.userAgent : undefined
+                    })
+                })
+            } catch {
+                // Best-effort: nothing else this SW event can do; the user will re-subscribe on next login.
+            }
+        })()
+    )
+})
+
 self.addEventListener('notificationclick', event => {
     event.notification.close()
     const url = event.notification.data?.url || '/'

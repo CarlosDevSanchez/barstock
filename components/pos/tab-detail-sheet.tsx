@@ -767,13 +767,13 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                                         )}
 
                                         {isOpen && tab.customer && tab.totals.balance > 0 && (
-                                            <Button
+                                            <OfflineDisabledButton
                                                 variant="secondary"
                                                 className="w-full"
                                                 onClick={() => setDeferring(true)}
                                             >
                                                 {t('deferAsReceivable')}
-                                            </Button>
+                                            </OfflineDisabledButton>
                                         )}
 
                                         {isManager && isOpen && tab.payments.length === 0 && (

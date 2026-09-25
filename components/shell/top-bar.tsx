@@ -11,7 +11,7 @@ import { SyncCenter } from '@/components/offline/sync-center'
 import { AccountMenu } from '@/components/shell/account-menu'
 import { findNavItem } from '@/components/shell/nav-config'
 import type { SessionUser } from '@/components/session-provider'
-import { inventoryApi } from '@/lib/api/inventory'
+import { dashboardApi } from '@/lib/api/reports'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { cn } from '@/lib/utils'
 
@@ -33,11 +33,10 @@ export function TopBar({ user, storeName, pendingOutboxCount, onSyncNow }: TopBa
     const isDetailRoute = DETAIL_ROUTE_PREFIXES.some(
         prefix => pathname.startsWith(prefix) && pathname !== prefix.slice(0, -1)
     )
-    const lowStock = useApiQuery(
-        signal => inventoryApi.list({ page: 1, pageSize: 1, low: true }, signal),
-        'topbar-low-stock'
-    )
-    const lowCount = lowStock.data?.summary?.low_stock_count ?? 0
+    // E4: a single scalar count from the dashboard summary, not a full/paginated inventory fetch, and refetched on
+    // every route change (a low-stock threshold crossed on another screen should update the bell without a reload).
+    const lowStock = useApiQuery(signal => dashboardApi.get(signal), `topbar-low-stock#${pathname}`)
+    const lowCount = lowStock.data?.low_stock_count ?? 0
 
     return (
         <header

@@ -13,7 +13,9 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
-import { useMoney } from '@/components/session-provider'
+import { useMoney, useSession } from '@/components/session-provider'
+import { currencyDecimals } from '@/lib/money'
+import { sumMoney } from '@/lib/tab-split'
 import { ApiError } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
 import { ordersApi } from '@/lib/api/orders'
@@ -30,6 +32,7 @@ export default function CustomerDetailPage() {
     const params = useParams<{ id: string }>()
     const router = useRouter()
     const money = useMoney()
+    const { settings } = useSession()
     const { page, pageSize, setPage, setPageSize } = usePagination()
     const [editing, setEditing] = useState(false)
 
@@ -94,7 +97,11 @@ export default function CustomerDetailPage() {
     const orders = ordersQuery.data.data
     const totalOrders = ordersQuery.data.total
     const completedOrders = completedQuery.data.total
-    const openBalance = receivablesQuery.data.reduce((sum, row) => sum + row.balance, 0)
+    // E7: sum in minor units so a float remainder never off-by-a-cent the displayed total.
+    const openBalance = sumMoney(
+        receivablesQuery.data.map(row => row.balance),
+        currencyDecimals(settings.currency)
+    )
 
     return (
         <div className="space-y-6">
