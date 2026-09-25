@@ -1,4 +1,4 @@
-import { expect, test } from '@playwright/test'
+import { expect, test, type Page } from '@playwright/test'
 import {
     adminClient,
     createCustomer,
@@ -23,6 +23,12 @@ function rpc(client: Db, fn: string, args: Record<string, unknown>) {
             ) => PromiseLike<{ data: unknown; error: { message: string } | null }>
         }
     ).rpc(fn, args)
+}
+
+/** Integration leftovers can fill the default 10-row page; 50 is enough to see the row this test just created. */
+async function showAllReceivableRows(page: Page) {
+    await page.getByLabel('Rows per page').click()
+    await page.getByRole('option', { name: '50' }).click()
 }
 
 // Money assertions below expect two decimals; the seed defaults to COP (whole pesos).
@@ -65,7 +71,7 @@ test('a split-payment sale can be completed and printed', async ({ browser }) =>
     const payDialog = till.getByRole('dialog', { name: 'Complete Payment' })
     await payDialog.getByRole('button', { name: 'Split payment' }).click()
     // Default split: first leg keeps the cart's payment method (cash), second leg defaults to card.
-    await payDialog.getByLabel('Payment Method Amount').fill('8')
+    await payDialog.getByLabel('First payment Amount').fill('8')
     // The second amount auto-completes to the remainder (20 - 8 = 12); leave it untouched.
     await expect(payDialog.getByLabel('Second payment Amount')).toHaveValue('12.00')
 
@@ -119,9 +125,13 @@ test('receiving a purchase raises stock, and a deferred tab appears in receivabl
     await inv.getByRole('button', { name: `Adjust stock of ${product.name}` }).click()
     await inv.getByLabel('Change (units) *').fill('10')
     await inv.getByRole('button', { name: 'Supplier intake' }).click()
-    await inv.locator('#adj-supplier-search').fill(supplier.name)
-    await expect(inv.locator('#adj-supplier')).toContainText(supplier.name)
-    await inv.getByRole('button', { name: 'Save purchase' }).click()
+    const adj = inv.getByRole('dialog', { name: 'Supplier intake' })
+    await adj.locator('#adj-supplier').click()
+    await adj.getByPlaceholder('Search').fill(supplier.name)
+    await expect(adj.getByRole('button', { name: supplier.name })).toBeVisible()
+    await adj.getByRole('button', { name: supplier.name }).click()
+    await expect(adj.locator('#adj-supplier')).toContainText(supplier.name)
+    await adj.getByRole('button', { name: 'Save purchase' }).click()
     await expect(inv.locator('[data-sonner-toast]').filter({ hasText: 'Purchase recorded' })).toBeVisible()
     expect(await stockOf(product.id)).toBe(15)
 
@@ -151,6 +161,7 @@ test('receiving a purchase raises stock, and a deferred tab appears in receivabl
 
     const recv = await newSession(browser, 'manager')
     await recv.goto('/receivables')
+    await showAllReceivableRows(recv)
     const row = recv.getByRole('row', { name: new RegExp(customer.name) })
     await expect(row).toBeVisible()
     await expect(row).toContainText('30.00')
@@ -160,4 +171,68 @@ test('receiving a purchase raises stock, and a deferred tab appears in receivabl
     await payDialog.getByRole('button', { name: 'Record payment' }).click()
     await expect(recv.locator('[data-sonner-toast]').filter({ hasText: 'Payment recorded' })).toBeVisible()
     await expect(recv.getByRole('row', { name: new RegExp(customer.name) })).toHaveCount(0)
+})
+
+test('a walk-in tab can show cash change, defer with a debtor name and a partial abono, then be paid off', async ({
+    browser
+}) => {
+    const product = await createProduct({ name: uniq('E2E Walkin'), selling_price: 30, tax_rate: 0, stock: 5 })
+    const tabLabel = uniq('E2E Mesa')
+    const debtorName = uniq('E2E Debtor')
+    const cashier: Db = await signedInClient('cashier')
+    const opened = await rpc(cashier, 'open_tab', {
+        p_label: tabLabel,
+        p_customer_id: null,
+        p_members: []
+    })
+    if (opened.error) throw opened.error
+    const tabId = opened.data as string
+    const added = await rpc(cashier, 'tab_add_items', {
+        p_tab_id: tabId,
+        p_items: [{ product_id: product.id, quantity: 1 }]
+    })
+    if (added.error) throw added.error
+
+    const till = await newSession(browser, 'manager')
+    await till.goto('/pos')
+    await till.getByRole('button', { name: /^Cart:/ }).click()
+    const cartSheet = till.getByRole('dialog', { name: /^Cart/ })
+    await cartSheet.getByRole('tab', { name: /Tabs/ }).click()
+    await cartSheet.getByRole('button', { name: new RegExp(tabLabel) }).click()
+
+    const tabSheet = till.getByRole('dialog', { name: new RegExp(tabLabel) })
+    await tabSheet.getByRole('button', { name: /Pay full balance/ }).click()
+
+    const payDialog = till.getByRole('dialog', { name: 'Collect payment' })
+    await payDialog.getByLabel('Amount').fill('10')
+    await payDialog.getByLabel('Cash received').fill('15')
+    await expect(payDialog.getByText('Change: $5.00')).toBeVisible()
+    await payDialog.getByRole('button', { name: 'Pay', exact: true }).click()
+    await expect(till.locator('[data-sonner-toast]').filter({ hasText: 'Payment recorded' })).toBeVisible()
+
+    await tabSheet.getByRole('button', { name: 'Close as receivable' }).click()
+    const defer = till.getByRole('dialog', { name: 'Close as receivable' })
+    await defer.getByRole('button', { name: 'Name only' }).click()
+    await defer.getByLabel('Name').fill(debtorName)
+    await defer.getByLabel('Due date').fill('2099-01-15')
+    await defer.getByRole('button', { name: 'Pay part now' }).click()
+    await defer.getByLabel('Amount').fill('5')
+    await defer.getByRole('button', { name: 'Close as receivable' }).click()
+
+    const registered = till.getByRole('dialog', { name: 'Receivable registered' })
+    await expect(registered).toBeVisible()
+    await registered.getByRole('button', { name: 'New sale' }).click()
+
+    await till.goto('/receivables')
+    await showAllReceivableRows(till)
+    const row = till.getByRole('row', { name: new RegExp(debtorName) })
+    await expect(row).toBeVisible()
+    await expect(row).toContainText('No customer')
+    await expect(row).toContainText('15.00')
+
+    await row.getByRole('button', { name: 'Record payment' }).click()
+    const recvPay = till.getByRole('dialog', { name: 'Record payment' })
+    await recvPay.getByRole('button', { name: 'Record payment' }).click()
+    await expect(till.locator('[data-sonner-toast]').filter({ hasText: 'Payment recorded' })).toBeVisible()
+    await expect(till.getByRole('row', { name: new RegExp(debtorName) })).toHaveCount(0)
 })

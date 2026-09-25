@@ -1031,20 +1031,11 @@
     "note": "Nota",
     "save": "Guardar",
     "cancel": "Cancelar",
-    "paymentMethod": "Método",
-    "amount": "Monto",
-    "splitPayment": "Dividir pago",
-    "secondPayment": "Segundo método",
-    "paymentShort": "Falta {amount}",
-    "paymentOver": "Sobra {amount}",
-    "sameMethodTwice": "Elige dos métodos distintos",
     "filterAll": "Pendientes y castigadas",
     "filterPending": "Pendientes",
     "filterWrittenOff": "Castigadas",
     "statusPending": "Pendiente",
     "statusWrittenOff": "Castigada",
-    "openBalance": "Saldo pendiente",
-    "noOpenBalance": "Sin saldo pendiente",
     "noCustomer": "Sin cliente"
   }
 }

@@ -1031,20 +1031,11 @@
     "note": "Note",
     "save": "Save",
     "cancel": "Cancel",
-    "paymentMethod": "Method",
-    "amount": "Amount",
-    "splitPayment": "Split payment",
-    "secondPayment": "Second method",
-    "paymentShort": "Short {amount}",
-    "paymentOver": "Over by {amount}",
-    "sameMethodTwice": "Choose two different methods",
     "filterAll": "Pending and written off",
     "filterPending": "Pending",
     "filterWrittenOff": "Written off",
     "statusPending": "Pending",
     "statusWrittenOff": "Written off",
-    "openBalance": "Open balance",
-    "noOpenBalance": "No open balance",
     "noCustomer": "No customer"
   }
 }
