@@ -494,8 +494,8 @@ describe('POS cart', () => {
         const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
         fireEvent.click(within(dialog).getByRole('button', { name: 'Split payment' }))
 
-        const first = within(dialog).getByRole('spinbutton', { name: 'First payment Amount' })
-        const second = within(dialog).getByRole('spinbutton', { name: 'Second payment Amount' })
+        const first = within(dialog).getByRole('textbox', { name: 'First payment Amount' })
+        const second = within(dialog).getByRole('textbox', { name: 'Second payment Amount' })
         fireEvent.change(first, { target: { value: '10' } })
         await waitFor(() => expect((second as HTMLInputElement).value).toBe('22.99'))
         expect((within(dialog).getByRole('button', { name: 'Complete Order' }) as HTMLButtonElement).disabled).toBe(
@@ -512,7 +512,7 @@ describe('POS cart', () => {
         expect(within(dialog).getByText(/Over by/)).toBeTruthy()
 
         fireEvent.change(within(dialog).getByLabelText('Cash received'), { target: { value: '50' } })
-        expect(within(dialog).getByText('Change').closest('.space-y-1')?.textContent).toMatch(/40/)
+        expect(within(dialog).getByText(/Change: \$40/)).toBeTruthy()
     })
 
     test('a completed sale offers print, the order and a new sale', async () => {

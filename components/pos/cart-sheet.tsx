@@ -1,18 +1,10 @@
 'use client'
 
-import { useState, type ComponentProps } from 'react'
-import { Trash2, Plus, Minus, ShoppingCart, CreditCard, DollarSign, Smartphone, Info } from 'lucide-react'
+import { type ComponentProps } from 'react'
+import { Trash2, Plus, Minus, ShoppingCart, CreditCard } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle
-} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
@@ -21,8 +13,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
-import { moneyStep, currencyDecimals } from '@/lib/money'
-import { cashChange, paymentGap, splitRemainder } from '@/lib/tab-split'
+import { PaymentDialog } from '@/components/pos/payment-dialog'
+import { moneyStep } from '@/lib/money'
 import type { PromotionListItem } from '@/lib/api/promotions'
 import type { ProductListItem } from '@/lib/api/products'
 import type { TabListItem } from '@/lib/api/tabs'
@@ -45,33 +37,10 @@ interface CustomerOption {
     phone: string | null
 }
 
-const PAYMENT_METHODS: PaymentMethod[] = ['cash', 'card', 'ewallet']
-
 export interface CheckoutPayment {
     payment_method: PaymentMethod
     payments?: Array<{ method: PaymentMethod; amount: number }>
 }
-
-/** Small (i) icon that explains a field on hover/focus, for labels whose meaning isn't obvious from the
- * name alone (e.g. "Cash received" only makes sense once you know it's for calculating change). */
-function FieldHint({ text }: { text: string }) {
-    return (
-        <Tooltip>
-            <TooltipTrigger asChild>
-                <button type="button" tabIndex={-1} className="text-muted-foreground hover:text-foreground">
-                    <Info className="h-3.5 w-3.5" />
-                </button>
-            </TooltipTrigger>
-            <TooltipContent className="max-w-64">{text}</TooltipContent>
-        </Tooltip>
-    )
-}
-
-const PAYMENT_ICONS: Array<{ value: PaymentMethod; icon: typeof DollarSign }> = [
-    { value: 'cash', icon: DollarSign },
-    { value: 'card', icon: CreditCard },
-    { value: 'ewallet', icon: Smartphone }
-]
 
 interface CartSheetProps {
     open: boolean
@@ -94,8 +63,6 @@ interface CartSheetProps {
     offlineWindowExpired: boolean
     showPaymentDialog: boolean
     onShowPaymentDialog: (show: boolean) => void
-    paymentMethod: PaymentMethod
-    onPaymentMethodChange: (method: PaymentMethod) => void
     processing: boolean
     onCheckout: (payment: CheckoutPayment) => void
     openTabs: TabListItem[]
@@ -151,8 +118,6 @@ export function CartSheet({
     offlineWindowExpired,
     showPaymentDialog,
     onShowPaymentDialog,
-    paymentMethod,
-    onPaymentMethodChange,
     processing,
     onCheckout,
     openTabs,
@@ -165,35 +130,10 @@ export function CartSheet({
     const t = useTranslations('pos')
     const tTabs = useTranslations('tabs')
     const tc = useTranslations('common')
+    const tConn = useTranslations('connection')
     const money = useMoney()
     const { settings } = useSession()
     const priceStep = moneyStep(settings.currency)
-    const decimals = currencyDecimals(settings.currency)
-    const [split, setSplit] = useState(false)
-    const [method2, setMethod2] = useState<PaymentMethod>('card')
-    const [amount1, setAmount1] = useState('')
-    const [amount2Draft, setAmount2Draft] = useState<string | null>(null)
-    const [received, setReceived] = useState('')
-    const amount2 =
-        amount2Draft ?? (split ? splitRemainder(totals.total, Number(amount1) || 0, decimals).toFixed(decimals) : '')
-
-    const resetSplit = () => {
-        setSplit(false)
-        setAmount1('')
-        setAmount2Draft(null)
-        setReceived('')
-    }
-
-    const firstAmount = Number(amount1) || 0
-    const secondAmount = Number(amount2) || 0
-    const gap = split ? paymentGap(totals.total, [firstAmount, secondAmount], decimals) : 0
-    const splitBalanced = gap === 0 && firstAmount > 0 && secondAmount > 0
-    const cashDue = split
-        ? (paymentMethod === 'cash' ? firstAmount : 0) + (method2 === 'cash' ? secondAmount : 0)
-        : paymentMethod === 'cash'
-          ? totals.total
-          : 0
-    const change = cashChange(Number(received) || 0, cashDue, decimals)
 
     return (
         <>
@@ -394,10 +334,7 @@ export function CartSheet({
                                             offlineWindowExpired={offlineWindowExpired}
                                             className="w-full"
                                             size="lg"
-                                            onClick={() => {
-                                                resetSplit()
-                                                onShowPaymentDialog(true)
-                                            }}
+                                            onClick={() => onShowPaymentDialog(true)}
                                             disabled={lines.length === 0 || blocked}
                                         >
                                             <CreditCard className="mr-2 h-5 w-5" />
@@ -419,168 +356,23 @@ export function CartSheet({
                 </SheetContent>
             </Sheet>
 
-            <Dialog open={showPaymentDialog} onOpenChange={next => !processing && onShowPaymentDialog(next)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>{t('completePayment')}</DialogTitle>
-                        <DialogDescription>
-                            {t('estimatedTotal')}{' '}
-                            <span className="text-lg font-bold text-emerald-600">{money(totals.total)}</span>
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="flex items-center gap-1.5">
-                            <Button
-                                type="button"
-                                variant={split ? 'default' : 'outline'}
-                                aria-pressed={split}
-                                onClick={() => {
-                                    setSplit(on => {
-                                        const next = !on
-                                        if (next) {
-                                            setAmount2Draft(null)
-                                            setMethod2(paymentMethod === 'cash' ? 'card' : 'cash')
-                                        }
-                                        return next
-                                    })
-                                }}
-                            >
-                                {t('splitPayment')}
-                            </Button>
-                            <FieldHint text={t('splitPaymentHint')} />
-                        </div>
-                        {split ? (
-                            <div className="space-y-3">
-                                <p className="text-xs text-muted-foreground">{t('splitPaymentHint')}</p>
-                                {[
-                                    {
-                                        label: t('firstPayment'),
-                                        method: paymentMethod,
-                                        onMethod: onPaymentMethodChange,
-                                        amount: amount1,
-                                        onAmount: (value: string) => setAmount1(value)
-                                    },
-                                    {
-                                        label: t('secondPayment'),
-                                        method: method2,
-                                        onMethod: setMethod2,
-                                        amount: amount2,
-                                        onAmount: (value: string) => setAmount2Draft(value)
-                                    }
-                                ].map(row => (
-                                    <div key={row.label} className="grid grid-cols-2 gap-2">
-                                        <div className="space-y-1">
-                                            <Label>{row.label}</Label>
-                                            <Select
-                                                value={row.method}
-                                                onValueChange={value => row.onMethod(value as PaymentMethod)}
-                                            >
-                                                <SelectTrigger aria-label={row.label}>
-                                                    <SelectValue />
-                                                </SelectTrigger>
-                                                <SelectContent>
-                                                    {PAYMENT_METHODS.map(value => (
-                                                        <SelectItem key={value} value={value}>
-                                                            {tc(`payment.${value}`)}
-                                                        </SelectItem>
-                                                    ))}
-                                                </SelectContent>
-                                            </Select>
-                                        </div>
-                                        <div className="space-y-1">
-                                            <Label>{t('paymentAmount')}</Label>
-                                            <Input
-                                                type="number"
-                                                inputMode="decimal"
-                                                min="0"
-                                                step={priceStep}
-                                                aria-label={`${row.label} ${t('paymentAmount')}`}
-                                                value={row.amount}
-                                                onChange={event => row.onAmount(event.target.value)}
-                                            />
-                                        </div>
-                                    </div>
-                                ))}
-                                {gap !== 0 && (
-                                    <p className="text-sm text-red-600">
-                                        {gap > 0
-                                            ? t('paymentShort', { amount: money(gap) })
-                                            : t('paymentOver', { amount: money(Math.abs(gap)) })}
-                                    </p>
-                                )}
-                            </div>
-                        ) : (
-                            <div className="space-y-2">
-                                <Label className="text-foreground font-semibold">{t('paymentMethod')}</Label>
-                                <div className="grid grid-cols-3 gap-2">
-                                    {PAYMENT_ICONS.map(({ value, icon: Icon }) => (
-                                        <Button
-                                            key={value}
-                                            variant={paymentMethod === value ? 'default' : 'outline'}
-                                            aria-pressed={paymentMethod === value}
-                                            className="flex flex-col h-auto py-4"
-                                            onClick={() => onPaymentMethodChange(value)}
-                                        >
-                                            <Icon className="h-6 w-6 mb-1" />
-                                            <span className="text-xs">{tc(`payment.${value}`)}</span>
-                                        </Button>
-                                    ))}
-                                </div>
-                            </div>
-                        )}
-                        {cashDue > 0 && (
-                            <div className="grid grid-cols-2 gap-2">
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-1">
-                                        <Label htmlFor="cash-received">{t('cashReceived')}</Label>
-                                        <FieldHint text={t('cashReceivedHint')} />
-                                    </div>
-                                    <Input
-                                        id="cash-received"
-                                        type="number"
-                                        inputMode="decimal"
-                                        min="0"
-                                        step={priceStep}
-                                        value={received}
-                                        onChange={event => setReceived(event.target.value)}
-                                    />
-                                </div>
-                                <div className="space-y-1">
-                                    <div className="flex items-center gap-1">
-                                        <Label>{t('cashChange')}</Label>
-                                        <FieldHint text={t('cashChangeHint')} />
-                                    </div>
-                                    <p className="h-9 flex items-center font-medium">{money(change)}</p>
-                                </div>
-                            </div>
-                        )}
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" disabled={processing} onClick={() => onShowPaymentDialog(false)}>
-                            {tc('cancel')}
-                        </Button>
-                        <CheckoutButton
-                            offlineWindowExpired={offlineWindowExpired}
-                            onClick={() =>
-                                onCheckout(
-                                    split
-                                        ? {
-                                              payment_method: paymentMethod,
-                                              payments: [
-                                                  { method: paymentMethod, amount: firstAmount },
-                                                  { method: method2, amount: secondAmount }
-                                              ]
-                                          }
-                                        : { payment_method: paymentMethod }
-                                )
-                            }
-                            disabled={processing || (split && !splitBalanced)}
-                        >
-                            {processing ? t('processing') : t('completeOrder')}
-                        </CheckoutButton>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <PaymentDialog
+                open={showPaymentDialog}
+                onOpenChange={onShowPaymentDialog}
+                title={t('completePayment')}
+                amountDue={totals.total}
+                submitLabel={t('completeOrder')}
+                processing={processing}
+                disabled={offlineWindowExpired}
+                disabledReason={offlineWindowExpired ? tConn('offlineWindowExpired') : undefined}
+                onSubmit={payments =>
+                    onCheckout(
+                        payments.length === 2
+                            ? { payment_method: payments[0]!.method, payments }
+                            : { payment_method: payments[0]!.method }
+                    )
+                }
+            />
         </>
     )
 }

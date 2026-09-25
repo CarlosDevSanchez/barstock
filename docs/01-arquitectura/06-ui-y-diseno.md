@@ -37,6 +37,9 @@ Además de `components/ui/*` (17 archivos; `tabs.tsx` sin uso):
 | `QueryError`, `PageSpinner` | Error con "Try again" y spinner (antes copiado en 5 archivos) |
 | `SearchableSelect` (`components/searchable-select.tsx`) | Dropdown de selección única con el buscador **integrado en el propio popup** (`Popover` + lista filtrable), en vez de un `<Input>` de búsqueda suelto encima de un `<select>`. `search`/`onSearchChange` quedan en el caller (normalmente contra una API con debounce); el componente solo pinta `options` |
 | `MultiSelectDropdown` (`components/multi-select-dropdown.tsx`) | Selección múltiple compacta: un dropdown con checkboxes en vez de una fila de casillas sueltas (ocupa una sola línea; muestra "N seleccionados" cuando hay más de una) |
+| `MoneyInput` (`components/money-input.tsx`) | Campo de dinero controlado (`lib/money-input.ts`): formatea con los separadores del locale al perder el foco y parsea cada tecla mientras se escribe. Usado en el pago del POS (`PaymentDialog`) y reutilizable por otros diálogos de pago/abono |
+
+**Sin tooltips dentro de modales:** el POS corre en tablets, donde un tooltip por hover no se abre con el dedo ni es accesible por teclado (`tabIndex={-1}`). `PaymentDialog` no usa `Tooltip`; el texto que antes iba en un tooltip va inline.
 
 ## Layout del dashboard
 
