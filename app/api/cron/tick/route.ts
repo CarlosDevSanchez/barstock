@@ -56,6 +56,13 @@ export async function GET(request: Request) {
         )
     }
 
+    // E3: best-effort purge of old, already-processed outbox rows. Never blocks the cron response: a purge
+    // failure just means the table grows a bit more until the next tick.
+    const purge = await (admin.rpc as unknown as (fn: string) => PromiseLike<{ error: { message: string } | null }>)(
+        '_purge_outbox'
+    )
+    if (purge.error) console.error('[cron] outbox purge failed', purge.error)
+
     afterResponse(() => dispatchOutbox())
     return Response.json({ data: { ok: true } }, { headers: noStore })
 }
