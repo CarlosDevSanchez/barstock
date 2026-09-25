@@ -25,10 +25,15 @@ function rpc(client: Db, fn: string, args: Record<string, unknown>) {
     ).rpc(fn, args)
 }
 
-/** Integration leftovers can fill the default 10-row page; 50 is enough to see the row this test just created. */
-async function showAllReceivableRows(page: Page) {
-    await page.getByLabel('Rows per page').click()
-    await page.getByRole('option', { name: '50' }).click()
+/** `list_receivables` sorts `due_date ASC` and the table pages client-side (10/page). A late date like
+ * 2099-01-15 lands at the end — walk forward instead of hoping one page is big enough. */
+async function receivableRow(page: Page, name: string) {
+    const row = page.getByRole('row', { name: new RegExp(name) })
+    const next = page.getByRole('button', { name: 'Next page' })
+    while ((await row.count()) === 0 && (await next.isEnabled())) {
+        await next.click()
+    }
+    return row
 }
 
 // Money assertions below expect two decimals; the seed defaults to COP (whole pesos).
@@ -161,8 +166,7 @@ test('receiving a purchase raises stock, and a deferred tab appears in receivabl
 
     const recv = await newSession(browser, 'manager')
     await recv.goto('/receivables')
-    await showAllReceivableRows(recv)
-    const row = recv.getByRole('row', { name: new RegExp(customer.name) })
+    const row = await receivableRow(recv, customer.name)
     await expect(row).toBeVisible()
     await expect(row).toContainText('30.00')
 
@@ -224,8 +228,7 @@ test('a walk-in tab can show cash change, defer with a debtor name and a partial
     await registered.getByRole('button', { name: 'New sale' }).click()
 
     await till.goto('/receivables')
-    await showAllReceivableRows(till)
-    const row = till.getByRole('row', { name: new RegExp(debtorName) })
+    const row = await receivableRow(till, debtorName)
     await expect(row).toBeVisible()
     await expect(row).toContainText('No customer')
     await expect(row).toContainText('15.00')
