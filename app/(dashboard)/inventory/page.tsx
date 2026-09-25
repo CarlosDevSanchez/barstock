@@ -78,6 +78,8 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     const [fromTill, setFromTill] = useState(false)
     const [sessionId, setSessionId] = useState('')
     const [pendingPurchase, setPendingPurchase] = useState(false)
+    // U3: generated once per dialog instance, reused on every retry.
+    const [purchaseKey] = useState(() => crypto.randomUUID())
 
     const form = useForm<AdjustInput, unknown, AdjustOutput>({
         resolver: zodResolver(inventoryAdjustSchema),
@@ -121,7 +123,7 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
         }
         setPendingPurchase(true)
         try {
-            await purchasesApi.receive(parsed.data)
+            await purchasesApi.receive(parsed.data, purchaseKey)
             toast.success(t('purchaseSaved'))
             onSaved()
         } catch (error: unknown) {
@@ -350,6 +352,8 @@ function RegisterPurchaseDialog({
     const [fromTill, setFromTill] = useState(false)
     const [sessionId, setSessionId] = useState('')
     const [pending, setPending] = useState(false)
+    // U3: generated once per dialog instance, reused on every retry.
+    const [purchaseKey] = useState(() => crypto.randomUUID())
     const [lines, setLines] = useState<PurchaseLine[]>([
         {
             product_id: products[0]?.product.id ?? '',
@@ -383,7 +387,7 @@ function RegisterPurchaseDialog({
         }
         setPending(true)
         try {
-            await purchasesApi.receive(parsed.data)
+            await purchasesApi.receive(parsed.data, purchaseKey)
             toast.success(t('purchaseSaved'))
             onSaved()
         } catch (error: unknown) {

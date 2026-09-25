@@ -3,6 +3,7 @@ import { Resend } from 'resend'
 import webpush, { WebPushError } from 'web-push'
 import { serverEnv } from '@/lib/env/server'
 import { createSupabaseAdminClient } from '@/lib/server/supabase-admin'
+import { isAllowedPushEndpoint } from '@/lib/validation/notifications'
 
 type DbResult<T = unknown> = { data: T; error: { message: string } | null }
 
@@ -163,10 +164,17 @@ async function sendPush(db: UntypedAdmin, subs: PushRow[], title: string, body: 
     webpush.setVapidDetails(subject, publicKey, privateKey)
     const payload = JSON.stringify({ title, body, url })
     for (const sub of subs) {
+        // Re-validate at dispatch time too: the allowlist in lib/validation/notifications.ts may have
+        // narrowed since the subscription was stored, and this is the point that actually makes the request.
+        if (!isAllowedPushEndpoint(sub.endpoint)) {
+            console.error('[notifications] skipping disallowed push endpoint', sub.id)
+            continue
+        }
         try {
             await webpush.sendNotification(
                 { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-                payload
+                payload,
+                { TTL: 60, timeout: 10_000 }
             )
         } catch (error: unknown) {
             const status =

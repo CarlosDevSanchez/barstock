@@ -112,6 +112,7 @@
     "atMostFourDecimals": "Como máximo 4 decimales",
     "noDecimals": "Usa montos enteros (sin centavos)",
     "reasonRequired": "El motivo es obligatorio",
+    "pushEndpointNotAllowed": "Este servicio de notificaciones push no es compatible",
     "positive": "Debe ser mayor que 0",
     "tillExpenseCash": "Un gasto pagado de la caja debe ser en efectivo",
     "invalidRange": "La fecha final es anterior a la inicial",

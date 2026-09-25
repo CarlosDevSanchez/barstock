@@ -7,9 +7,10 @@ import { payReceivableSchema } from '@/lib/validation/receivables'
 
 const idempotencyKeySchema = z.uuid()
 
-function readIdempotencyKey(request: Request): string | null {
+/** U3: mandatory here — a paid receivable can never safely be replayed without one. */
+function readIdempotencyKey(request: Request): string {
     const header = request.headers.get('Idempotency-Key')
-    if (!header) return null
+    if (!header) throw badRequest('Idempotency-Key is required')
     const parsed = idempotencyKeySchema.safeParse(header)
     if (!parsed.success) throw badRequest('Idempotency-Key must be a UUID')
     return parsed.data

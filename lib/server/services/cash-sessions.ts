@@ -1,5 +1,7 @@
 import 'server-only'
+import { roleAtLeast } from '@/lib/auth/roles'
 import { assertNoError, notFound } from '@/lib/server/errors'
+import type { SessionUser } from '@/lib/server/auth'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import type { CashMovementInput, CloseCashSessionInput, OpenCashSessionInput } from '@/lib/validation/cash'
 import { assertMoneyScale } from './_shared'
@@ -10,9 +12,17 @@ export interface DeskSession {
     register_id: string
     register_name: string
     opening_float: number
-    expected_cash: number
+    /** R-1: null while open for a cashier (blind cash count); manager+ and closed sessions always get a number. */
+    expected_cash: number | null
     users: { id: string; full_name: string | null }[]
     movements: { id: string; kind: string; amount: number; reason: string; created_at: string }[]
+}
+
+export interface CloseCashSessionResult {
+    expected_cash: number
+    counted_cash: number
+    difference: number
+    needs_review: boolean
 }
 
 export interface CashDesk {
@@ -29,7 +39,7 @@ function settingNumber(rows: { key: string; value: Json }[] | null, key: string)
 }
 
 /** Closes a day left open more than 24h, then returns the till the cashier is looking at. */
-export async function getCashDesk(supabase: AppSupabaseClient): Promise<CashDesk> {
+export async function getCashDesk(supabase: AppSupabaseClient, user: SessionUser): Promise<CashDesk> {
     const { error: refreshError } = await supabase.rpc('refresh_business_days')
     assertNoError(refreshError)
 
@@ -71,23 +81,29 @@ export async function getCashDesk(supabase: AppSupabaseClient): Promise<CashDesk
         assertNoError(links.error)
         assertNoError(movements.error)
         const staffById = new Map((staffResult.data ?? []).map(person => [person.id, person.full_name]))
+        const isManager = roleAtLeast(user.role, 'manager')
         for (const session of openSessions ?? []) {
-            const { data: summary, error: summaryError } = await supabase.rpc('cash_session_summary', {
-                p_session_id: session.id
-            })
-            assertNoError(summaryError)
-            const expected =
-                summary && typeof summary === 'object' && !Array.isArray(summary) ? summary.expected_cash : 0
+            const sessionUsers = (links.data ?? []).filter(link => link.session_id === session.id)
+            const isOwnSession = sessionUsers.some(link => link.user_id === user.id)
+            // P1-a: a plain cashier is not a manager and cash_session_summary 42501s on a session they don't own
+            // (A3) — never call it for a till that is not theirs; just show it without an expected_cash figure.
+            let expected: unknown = null
+            if (isManager || isOwnSession) {
+                const { data: summary, error: summaryError } = await supabase.rpc('cash_session_summary', {
+                    p_session_id: session.id
+                })
+                assertNoError(summaryError)
+                expected =
+                    summary && typeof summary === 'object' && !Array.isArray(summary) ? summary.expected_cash : null
+            }
             const registerName = names.data?.find(register => register.id === session.register_id)?.name ?? ''
             sessions.push({
                 id: session.id,
                 register_id: session.register_id,
                 register_name: registerName,
                 opening_float: session.opening_float,
-                expected_cash: typeof expected === 'number' ? expected : 0,
-                users: (links.data ?? [])
-                    .filter(link => link.session_id === session.id)
-                    .map(link => ({ id: link.user_id, full_name: staffById.get(link.user_id) ?? null })),
+                expected_cash: typeof expected === 'number' ? expected : null,
+                users: sessionUsers.map(link => ({ id: link.user_id, full_name: staffById.get(link.user_id) ?? null })),
                 movements: (movements.data ?? [])
                     .filter(movement => movement.session_id === session.id)
                     .map(movement => ({
@@ -158,12 +174,17 @@ export async function addCashMovement(supabase: AppSupabaseClient, id: string, i
     return { id: data }
 }
 
-export async function closeCashSession(supabase: AppSupabaseClient, id: string, input: CloseCashSessionInput) {
+export async function closeCashSession(
+    supabase: AppSupabaseClient,
+    id: string,
+    input: CloseCashSessionInput
+): Promise<CloseCashSessionResult> {
     await assertMoneyScale(supabase, { counted_cash: input.counted_cash })
-    const { error } = await supabase.rpc('close_cash_session', {
+    const { data, error } = await supabase.rpc('close_cash_session', {
         p_session_id: id,
         p_counted_cash: input.counted_cash,
         p_notes: input.notes ?? undefined
     })
     assertNoError(error)
+    return data as unknown as CloseCashSessionResult
 }

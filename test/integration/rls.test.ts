@@ -576,3 +576,166 @@ describe('data integrity rules the database enforces on its own', () => {
         expect(item.error?.code).toBe('23502')
     })
 })
+
+// R-A adversarial fixes (S1, A3): see docs/04-auditoria/hallazgos/H6-revision-adversarial-a-f.md
+describe('R-A: list_receivables status allowlist (S1)', () => {
+    const noStatus = null as unknown as string // the generated type says `string`; the function accepts NULL
+    const noCustomer = null as unknown as string
+
+    test('an arbitrary p_status is rejected instead of matching every order', async () => {
+        const bogus = await cashier.rpc('list_receivables', { p_status: 'completed', p_customer_id: noCustomer })
+        expect(bogus.error?.code).toBe('P0001')
+    })
+
+    test('null and the two allowed statuses still work', async () => {
+        expect(
+            (await cashier.rpc('list_receivables', { p_status: noStatus, p_customer_id: noCustomer })).error
+        ).toBeNull()
+        expect(
+            (await cashier.rpc('list_receivables', { p_status: 'pending', p_customer_id: noCustomer })).error
+        ).toBeNull()
+        expect(
+            (await cashier.rpc('list_receivables', { p_status: 'written_off', p_customer_id: noCustomer })).error
+        ).toBeNull()
+    })
+
+    test('p_limit outside 1..500 is rejected', async () => {
+        const tooBig = await cashier.rpc('list_receivables', {
+            p_status: noStatus,
+            p_customer_id: noCustomer,
+            p_limit: 501
+        })
+        expect(tooBig.error?.code).toBe('P0001')
+        const zero = await cashier.rpc('list_receivables', {
+            p_status: noStatus,
+            p_customer_id: noCustomer,
+            p_limit: 0
+        })
+        expect(zero.error?.code).toBe('P0001')
+    })
+})
+
+describe('R-A: cash_session_summary ownership (A3)', () => {
+    async function registerId() {
+        const { data, error } = await service().from('cash_registers').select('id').eq('name', 'Caja 1').single()
+        if (error) throw error
+        return data.id
+    }
+    async function closeAnyOpenDay() {
+        const { data: day } = await service()
+            .from('business_days')
+            .select('id, opened_at')
+            .is('closed_at', null)
+            .maybeSingle()
+        if (!day) return
+        await service()
+            .from('cash_sessions')
+            .update({ status: 'closed', closed_at: new Date().toISOString() })
+            .eq('business_day_id', day.id)
+            .eq('status', 'open')
+        await service()
+            .from('business_days')
+            .update({ closed_at: new Date().toISOString(), close_kind: 'manual' })
+            .eq('id', day.id)
+    }
+
+    test('a cashier not assigned to the session cannot read it; a manager can', async () => {
+        await closeAnyOpenDay()
+        expect((await cashier.rpc('open_business_day', {})).error).toBeNull()
+        const session = await manager.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 1000,
+            p_user_ids: [users.manager.id]
+        })
+        expect(session.error).toBeNull()
+
+        const asOtherCashier = await cashier.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(asOtherCashier.error?.code).toBe('42501')
+
+        const asManager = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(asManager.error).toBeNull()
+        expect(asManager.data).toMatchObject({ session_id: session.data })
+
+        await closeAnyOpenDay()
+    })
+})
+
+describe('R-B/R-C: inactive users are rejected by every new/redefined RPC (42501)', () => {
+    const nullText = null as unknown as string
+    const nullUuid = null as unknown as string
+
+    test('caja y jornada', async () => {
+        expect((await inactive.rpc('open_business_day', {})).error?.code).toBe(PERMISSION_DENIED)
+        expect((await inactive.rpc('close_business_day', { p_id: nullUuid })).error?.code).toBe(PERMISSION_DENIED)
+        expect(
+            (
+                await inactive.rpc('adjust_business_day', {
+                    p_id: nullUuid,
+                    p_opened_at: nullText,
+                    p_closed_at: nullText
+                })
+            ).error?.code
+        ).toBe(PERMISSION_DENIED)
+        expect(
+            (
+                await inactive.rpc('open_cash_session', {
+                    p_register_id: nullUuid,
+                    p_opening_float: 0,
+                    p_user_ids: []
+                })
+            ).error?.code
+        ).toBe(PERMISSION_DENIED)
+        expect((await inactive.rpc('cash_session_summary', { p_session_id: nullUuid })).error?.code).toBe(
+            PERMISSION_DENIED
+        )
+        expect(
+            (await inactive.rpc('close_cash_session', { p_session_id: nullUuid, p_counted_cash: 0 })).error?.code
+        ).toBe(PERMISSION_DENIED)
+    })
+
+    test('reembolsos y compras', async () => {
+        expect((await inactive.rpc('refund_order', { p_order_id: nullUuid, p_reason: 'x' })).error?.code).toBe(
+            PERMISSION_DENIED
+        )
+        expect(
+            (
+                await inactive.rpc('receive_purchase', {
+                    p_supplier_id: nullUuid,
+                    p_items: [],
+                    p_invoice: nullText,
+                    p_notes: nullText,
+                    p_cash_session_id: nullUuid
+                })
+            ).error?.code
+        ).toBe(PERMISSION_DENIED)
+    })
+
+    test('cuentas por cobrar y reportes', async () => {
+        expect(
+            (await inactive.rpc('list_receivables', { p_status: nullText, p_customer_id: nullUuid })).error?.code
+        ).toBe(PERMISSION_DENIED)
+        expect(
+            (
+                await inactive.rpc('sales_report', {
+                    p_from: '2026-01-01',
+                    p_to: '2026-01-02'
+                } as never)
+            ).error?.code
+        ).toBe(PERMISSION_DENIED)
+    })
+})
+
+describe('R-D: internal (_-prefixed) RPCs reject `authenticated`, only service_role may call them', () => {
+    test('_claim_outbox, _enqueue_due_receivables, _current_assignment, _session_cash all error for a real user', async () => {
+        for (const client of [cashier, manager, admin]) {
+            expect((await client.rpc('_claim_outbox', { p_limit: 10 })).error).not.toBeNull()
+            expect((await client.rpc('_enqueue_due_receivables')).error).not.toBeNull()
+            expect(
+                (await client.rpc('_current_assignment', { p_user: users.cashier.id, p_at: new Date().toISOString() }))
+                    .error
+            ).not.toBeNull()
+            expect((await client.rpc('_session_cash', { p_session_id: crypto.randomUUID() })).error).not.toBeNull()
+            expect((await client.rpc('_auto_close_stale_business_days')).error).not.toBeNull()
+        }
+    })
+})

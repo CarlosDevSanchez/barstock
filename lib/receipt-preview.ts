@@ -118,6 +118,8 @@ export function buildProvisionalOrder(input: ProvisionalOrderInput): OrderDetail
         created_by: null,
         business_day_id: null,
         cash_session_id: null,
+        refund_cash_session_id: null,
+        refund_after_close: false,
         created_at: input.occurredAt,
         updated_at: input.occurredAt,
         refunded_at: null,
