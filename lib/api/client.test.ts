@@ -1,5 +1,5 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
-import { ApiError, apiDelete, apiGet, apiList, apiPatch, apiPost, isStale } from './client'
+import { ApiError, apiDelete, apiGet, apiList, apiPatch, apiPost, isStale, setSigningOut } from './client'
 
 const realFetch = globalThis.fetch
 const calls: Array<{ url: string; init: RequestInit }> = []
@@ -76,6 +76,46 @@ describe('api client', () => {
         ) as unknown as typeof fetch
         const error = await apiGet('me').catch((e: unknown) => e)
         expect(error).toMatchObject({ status: 502, code: 'unknown_error' })
+    })
+})
+
+describe('401 redirect', () => {
+    const assigned: string[] = []
+    const g = globalThis as { window?: unknown }
+    const realWindow = g.window
+
+    function fakeWindow(pathname: string) {
+        g.window = { location: { pathname, search: '', assign: (url: string) => assigned.push(url) } }
+    }
+
+    afterEach(() => {
+        g.window = realWindow
+        assigned.length = 0
+        setSigningOut(false)
+    })
+
+    test('a 401 sends the user to /login with the current page as next', async () => {
+        fakeWindow('/customers')
+        respond(401, { error: { code: 'unauthorized', message: 'Not signed in' } })
+        await expect(apiGet('customers')).rejects.toMatchObject({ status: 401 })
+        expect(assigned).toEqual(['/login?next=%2Fcustomers'])
+    })
+
+    test('a 401 from a request still in flight during sign-out does not redirect', async () => {
+        fakeWindow('/dashboard')
+        setSigningOut(true)
+        respond(401, { error: { code: 'unauthorized', message: 'Not signed in' } })
+        await expect(apiGet('dashboard')).rejects.toMatchObject({ status: 401 })
+        expect(assigned).toEqual([])
+    })
+
+    test('a failed sign-out turns the redirect back on', async () => {
+        fakeWindow('/dashboard')
+        setSigningOut(true)
+        setSigningOut(false)
+        respond(401, { error: { code: 'unauthorized', message: 'Not signed in' } })
+        await expect(apiGet('dashboard')).rejects.toMatchObject({ status: 401 })
+        expect(assigned).toEqual(['/login?next=%2Fdashboard'])
     })
 })
 

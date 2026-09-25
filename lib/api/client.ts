@@ -65,9 +65,19 @@ function toApiError(status: number, payload: unknown): ApiError {
     )
 }
 
+/** True while a deliberate sign-out runs (components/shell/account-menu.tsx). Requests already in flight come back 401
+ * once the session is gone; redirecting on them raced the logout's own navigation and landed on `/login?next=<page>`,
+ * so the NEXT person on a shared till was sent to the previous user's page. The logout ends in a full page load,
+ * which resets this module state. */
+let signingOut = false
+
+export function setSigningOut(value: boolean) {
+    signingOut = value
+}
+
 /** Sends the user to /login when the session is gone (except for the auth endpoints themselves, where 401 means "bad credentials"). */
 function handleUnauthorized(path: string) {
-    if (typeof window === 'undefined' || path.startsWith('auth/')) return
+    if (typeof window === 'undefined' || signingOut || path.startsWith('auth/')) return
     const next = window.location.pathname + window.location.search
     // A full navigation is intentional: it discards in-memory client state (cart, auth store) tied to the dead session.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination

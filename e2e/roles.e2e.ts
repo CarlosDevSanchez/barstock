@@ -1,6 +1,6 @@
 import { expect, test } from '@playwright/test'
 import { ensureTestUsers } from '../test/helpers/integration'
-import { navLinks, newSession, signInWith } from './helpers'
+import { navLinks, newSession, signInAs, signInWith } from './helpers'
 import { TEST_PASSWORD } from '../test/helpers/integration'
 
 const CASHIER_NAV = [
@@ -99,6 +99,43 @@ test('signing out ends the session', async ({ browser }) => {
     await page.waitForURL('**/login**')
     const status = await page.evaluate(async () => (await fetch('/api/v1/me')).status)
     expect(status).toBe(401)
+})
+
+test('a request answered 401 mid sign-out does not redirect to /login?next=<previous page>', async ({ browser }) => {
+    // CI flake on 'signing out ends the session': a dashboard fetch sent just before the logout came back 401 after
+    // it, and the API client's 401 redirect beat the logout's own navigation. Pin that timing: hold the fetch until
+    // the logout succeeded and the app starts heading to /login. Service workers are blocked so `page.route` sees it.
+    const page = await (await browser.newContext({ serviceWorkers: 'block' })).newPage()
+    await signInAs(page, 'cashier')
+    let signedOut = false
+    let release!: () => void
+    const released = new Promise<void>(resolve => (release = resolve))
+    let answered!: () => void
+    const answered401 = new Promise<void>(resolve => (answered = resolve))
+    page.on('response', response => {
+        if (response.url().endsWith('/api/v1/auth/logout') && response.ok()) signedOut = true
+    })
+    page.on('request', request => {
+        if (signedOut && new URL(request.url()).pathname === '/login') release()
+    })
+    await page.route('**/api/v1/dashboard**', async route => {
+        await released
+        await route.fulfill({
+            status: 401,
+            contentType: 'application/json',
+            body: JSON.stringify({ error: { code: 'unauthorized', message: 'Not signed in' } })
+        })
+        answered()
+    })
+
+    await page.reload()
+    await page.locator('header').getByRole('button', { name: 'Account menu' }).click()
+    await page.getByRole('menuitem', { name: 'Sign out' }).click()
+    await answered401
+    await page.waitForLoadState('networkidle')
+    const url = new URL(page.url())
+    expect(url.pathname + url.search).toBe('/login')
+    await expect(page.getByRole('button', { name: 'Sign In' })).toBeVisible()
 })
 
 test('an admin sees every section and settings persist across a reload', async ({ browser }) => {
