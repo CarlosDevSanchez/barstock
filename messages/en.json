@@ -484,6 +484,7 @@
     "asPurchase": "Supplier intake",
     "supplier": "Supplier",
     "pickSupplier": "Choose a supplier",
+    "pickProduct": "Choose a product",
     "unitCost": "Unit cost",
     "invoice": "Invoice",
     "invoicePlaceholder": "Invoice number (optional)",

@@ -484,6 +484,7 @@
     "asPurchase": "Entrada de proveedor",
     "supplier": "Proveedor",
     "pickSupplier": "Elige un proveedor",
+    "pickProduct": "Elige un producto",
     "unitCost": "Costo unitario",
     "invoice": "Factura",
     "invoicePlaceholder": "Número de factura (opcional)",

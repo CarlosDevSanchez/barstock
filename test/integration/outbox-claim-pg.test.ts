@@ -60,15 +60,17 @@ describe('_claim_outbox with two real Postgres connections', () => {
                     // supabase-js-only test cannot exercise: two RPC calls each auto-commit before the other
                     // even starts, so `for update skip locked` never actually has to skip a row someone else
                     // is mid-transaction on.
+                    // Limit (6) is half of the seeded rows (12) so T1 can never grab everything on its own —
+                    // T2 must actually contend for the same eligible set instead of being left with nothing.
                     const claimed1 = (await t1.unsafe(
                         'select id from public._claim_outbox($1)',
-                        [50]
+                        [6]
                     )) as unknown as Array<{ id: number }>
 
                     // T2 runs on a separate pooled connection while T1's transaction is still open.
                     const claimed2 = (await sql.unsafe(
                         'select id from public._claim_outbox($1)',
-                        [50]
+                        [6]
                     )) as unknown as Array<{ id: number }>
 
                     await t1.unsafe('COMMIT')

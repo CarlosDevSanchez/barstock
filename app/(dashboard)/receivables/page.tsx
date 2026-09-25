@@ -314,7 +314,9 @@ function PayDialog({
     const secondAmount = Number(amount2) || 0
     const gap = split ? paymentGap(row.balance, [firstAmount, secondAmount], decimals) : 0
     const sameMethod = split && method1 === method2
-    const canSubmit = split ? gap === 0 && firstAmount > 0 && secondAmount > 0 && !sameMethod : firstAmount > 0
+    // `pay_receivable` accepts a partial abono (sum <= balance), not just an exact match — `gap === 0` blocked a
+    // deliberate partial split payment that the server would happily take. Block only an overpay (gap < 0).
+    const canSubmit = split ? gap >= 0 && firstAmount > 0 && secondAmount > 0 && !sameMethod : firstAmount > 0
 
     const submit = async () => {
         setSubmitting(true)
