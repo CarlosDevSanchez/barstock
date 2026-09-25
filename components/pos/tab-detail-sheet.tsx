@@ -182,6 +182,26 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
         idempotencyKey: string
     } | null>(null)
     const [processingPayment, setProcessingPayment] = useState(false)
+    // Tracks the last `tabId` this component rendered for, so the state reset below can happen DURING render
+    // (React's documented "adjust state when a prop changes" pattern) instead of in a `useEffect` — the lint
+    // rule (react-hooks/set-state-in-effect) flags a bare setState-in-effect for exactly this "derive state from
+    // a changed prop" case, since it causes an extra visible render; a render-time reset lets React redo this
+    // render immediately with the reset state before anything commits or paints.
+    const [tabIdForState, setTabIdForState] = useState(tabId)
+
+    // `useApiQuery` deliberately keeps showing the PREVIOUS tab's `data` while a new one loads ("so lists do not
+    // flash empty" — see hooks/use-api-query.ts), so this component is never naturally remounted when the parent
+    // swaps which tab is open (app/(dashboard)/pos/page.tsx doesn't key TabDetailSheet by tabId either). Without
+    // this, a payment dialog left open across a tab switch could submit a stale amountDue/memberId against the
+    // NEW tab. Reset every bit of local payment/split state whenever `tabId` itself changes.
+    if (tabId !== tabIdForState) {
+        setTabIdForState(tabId)
+        setSplitMode(null)
+        setSelectedMembers([])
+        setCustomAmounts({})
+        setPayingFor(null)
+        setProcessingPayment(false)
+    }
 
     const tab = tabQuery.data
     const itemGroups = useMemo(() => {
@@ -285,11 +305,7 @@ export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: Tab
                             )
 
                             return (
-                                // Keyed on `tabId`: the parent can swap which tab is open without unmounting
-                                // `TabDetailSheet` itself, and `useApiQuery` keeps showing the previous tab's
-                                // `data` while the new one loads — this forces the split/pay local state below to
-                                // reset instead of leaking into the newly selected tab.
-                                <div key={tabId} className="flex flex-col h-full overflow-y-auto">
+                                <div className="flex flex-col h-full overflow-y-auto">
                                     <SheetHeader>
                                         <SheetTitle className="flex items-center gap-2 flex-wrap">
                                             {tab.label}

@@ -318,6 +318,46 @@ describe('tab payment hardening (idempotency, duplicate methods, listTabs balanc
         const row = list.data.find(candidate => candidate.id === tab.id)
         expect(row?.balance).toBe(15)
     })
+
+    test('public.balance(tabs) has its own role check — it is not just an authenticated-only gate', async () => {
+        // PostgREST exposes a computed-column function both embedded in a select AND as a direct /rpc/<name>
+        // endpoint, so a bare `grant execute ... to authenticated` (with no has_min_role check inside the
+        // function body) would let ANY signed-in user read ANY tab's balance, bypassing the `tabs` RLS policy
+        // (`using (select public.has_min_role('cashier'))`) entirely. An inactive user has a valid session
+        // (authenticated) but `has_min_role` returns false for them (see 20260921000003_roles_rls.sql), which is
+        // exactly the gap a bare `authenticated` grant would miss.
+        const product = await createProduct({ selling_price: 25, tax_rate: 0, stock: 5 })
+        const tab = dataOf<Tab>(await open(cashier, { label: uniq('BalanceRole') }))
+        await addItems(cashier, tab.id, [{ product_id: product.id, quantity: 1 }])
+
+        const inactive = await signedInClient('inactive')
+        // The `tabs` table keeps its SELECT grant for `authenticated` (only insert/update/delete are revoked —
+        // see 20260922000002_tabs.sql) and relies on its own RLS policy to filter rows by role; an inactive
+        // user's `tabs_select` policy check fails, so this returns an empty result, not an error — `balance()`
+        // is never even reached this way. The real gap this migration closes is the direct RPC call below, which
+        // bypasses that table RLS entirely.
+        const viaEmbed = await inactive.from('tabs').select('id, balance').eq('id', tab.id)
+        expect(viaEmbed.error).toBeNull()
+        expect(viaEmbed.data).toEqual([])
+
+        // The precise vector the fix closes: `/rpc/balance` called directly bypasses the `tabs` table's own RLS
+        // policy entirely (a SECURITY DEFINER function never goes through the caller's row-level security on the
+        // table it queries) — only `balance()`'s own `has_min_role('cashier')` check stands between an inactive
+        // (but authenticated) session and any tab's balance.
+        const inactiveUntyped = inactive as unknown as {
+            rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ error: { code?: string } | null }>
+        }
+        const viaDirectRpc = await inactiveUntyped.rpc('balance', { t: { id: tab.id } })
+        expect(viaDirectRpc.error?.code).toBe('42501')
+
+        const { createClient } = await import('@supabase/supabase-js')
+        const anonClient = createClient(
+            process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+        )
+        const viaAnon = await anonClient.from('tabs').select('id, balance').eq('id', tab.id)
+        expect(viaAnon.error?.code).toBe('42501')
+    })
 })
 
 describe('overpaying and voiding', () => {

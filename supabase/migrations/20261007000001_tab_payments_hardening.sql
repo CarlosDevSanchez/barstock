@@ -272,14 +272,22 @@ grant execute on function public.tab_pay_split(uuid, uuid, jsonb, uuid) to authe
 -- listTabs balance: a PostgREST "computed column" on `tabs` (a function taking the table's row type), so
 -- lib/server/services/tabs.ts can select it in the same query as the `customer` FK embed — no per-row RPC loop.
 -- SECURITY DEFINER because `_tab_totals` itself is revoked from authenticated/anon (only SECURITY DEFINER RPCs
--- may call it, same reasoning as tab_summary/tab_pay above it).
+-- may call it). PostgREST auto-exposes any single-table-arg function both as a computed column AND as a direct
+-- `/rpc/balance` endpoint, so — same as `tab_summary`/`tab_pay`/`tab_pay_split` above it — it needs its OWN
+-- `has_min_role('cashier')` check: without one, a grant to `authenticated` alone would let any signed-in user
+-- read any tab's balance straight through `/rpc/balance`, bypassing the `tabs` RLS policy entirely.
 -- ---------------------------------------------------------------------------
 create or replace function public.balance(t public.tabs)
 returns numeric
-language sql stable security definer
+language plpgsql stable security definer
 set search_path = ''
 as $$
-  select balance from public._tab_totals(t.id)
+begin
+  if (select auth.uid()) is null or not public.has_min_role('cashier') then
+    raise exception 'Not allowed' using errcode = '42501';
+  end if;
+  return (select balance from public._tab_totals(t.id));
+end;
 $$;
 
 revoke all on function public.balance(public.tabs) from public, anon;
