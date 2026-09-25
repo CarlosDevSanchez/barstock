@@ -22,9 +22,7 @@ export const POST = route({
     body: saleSchema,
     handler: async ({ request, supabase, body }) => {
         const order = await createSale(supabase, body, readIdempotencyKey(request))
-        afterResponse(() => {
-            void dispatchOutbox()
-        })
+        afterResponse(() => dispatchOutbox())
         return created(order)
     }
 })
