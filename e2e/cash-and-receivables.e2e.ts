@@ -25,13 +25,18 @@ function rpc(client: Db, fn: string, args: Record<string, unknown>) {
     ).rpc(fn, args)
 }
 
-/** `list_receivables` sorts `due_date ASC` and the table pages client-side (10/page). A late date like
- * 2099-01-15 lands at the end — walk forward instead of hoping one page is big enough. */
+/** `list_receivables` sorts `due_date ASC NULLS LAST` and the table pages client-side (10/page), so the row can be
+ * on any page — walk forward. Wait for the list first: the pager only renders once rows arrive, and checking the
+ * row against the still-empty table made the loop click past page 1 (CI: 11 rows, target on page 1, shown page 2). */
 async function receivableRow(page: Page, name: string) {
     const row = page.getByRole('row', { name: new RegExp(name) })
     const next = page.getByRole('button', { name: 'Next page' })
+    const showing = page.getByText(/^Showing \d+–\d+ of \d+$/)
+    await expect(showing).toBeVisible()
     while ((await row.count()) === 0 && (await next.isEnabled())) {
+        const before = await showing.textContent()
         await next.click()
+        await expect(showing).not.toHaveText(before ?? '')
     }
     return row
 }
