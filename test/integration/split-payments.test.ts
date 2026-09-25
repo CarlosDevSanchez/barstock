@@ -5,18 +5,20 @@ import {
     ensureTestUsers,
     pinStoreCurrency,
     signedInClient,
-    type Db
+    type Db,
+    type TestUsers
 } from '../helpers/integration'
 
 let cashier: Db
 let manager: Db
+let users: TestUsers
 const service = () => adminClient()
 const walkIn = null as unknown as string
 
 let restoreCurrency: () => Promise<void>
 
 beforeAll(async () => {
-    await ensureTestUsers()
+    users = await ensureTestUsers()
     restoreCurrency = await pinStoreCurrency('USD')
     ;[cashier, manager] = await Promise.all([signedInClient('cashier'), signedInClient('manager')])
 })
@@ -123,7 +125,13 @@ describe('split payments', () => {
             .select('sync_issues')
             .eq('id', orderId ?? '')
             .single()
-        expect(order?.sync_issues).toMatchObject({ payment_adjusted: { before: 8, after: 10 } })
+        // payment_adjusted logs the complete before/after payment arrays (B7 fix-of-the-fix), not a bare scalar.
+        expect(order?.sync_issues).toMatchObject({
+            payment_adjusted: {
+                before: [{ method: 'cash', amount: 8 }],
+                after: [{ method: 'cash', amount: 10 }]
+            }
+        })
         const { data: payments } = await service()
             .from('payments')
             .select('amount')
@@ -152,12 +160,16 @@ describe('split payments', () => {
 
         const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 5 })
         const sold = await sell(cashier, [{ product_id: product.id, quantity: 1 }], {
-            payments: [
-                { method: 'cash', amount: 5 },
-                { method: 'cash', amount: 5 }
-            ]
+            payments: [{ method: 'cash', amount: 10 }]
         })
         expect(sold.error).toBeNull()
+        // create_sale itself now rejects two payments with the same method (B7/U4), so this second cash row
+        // (an order with more than one cash payment, e.g. a top-up) is inserted directly to exercise the
+        // report's distinct-order counting rather than a naive sum-of-payment-rows count.
+        const extraPayment = await service()
+            .from('payments')
+            .insert({ order_id: sold.data as string, payment_method: 'cash', amount: 0, created_by: users.cashier.id })
+        expect(extraPayment.error).toBeNull()
 
         const after = await manager.rpc('sales_report', { p_from: day, p_to: day, p_tz: 'UTC' })
         const cashAfter =

@@ -220,4 +220,76 @@ describe('receivables', () => {
         })
         expect(ok.status).toBe(204)
     })
+
+    // C1 (M5): see docs/04-auditoria/hallazgos/H6-revision-adversarial-a-f.md
+    test('C1: net_profit deducts only the cost of a written-off order, and a later collected payment counts as revenue', async () => {
+        const customer = await createCustomer()
+        // cost_price defaults to 0 on createProduct unless set; use an explicit cost so COGS is non-zero and checkable.
+        const product = await service()
+            .from('products')
+            .insert({ name: uniq('C1'), sku: uniq('SKU'), selling_price: 100, cost_price: 40, tax_rate: 0 })
+            .select('id')
+            .single()
+        expect(product.error).toBeNull()
+        await service().from('inventory').update({ quantity: 5 }).eq('product_id', product.data!.id)
+
+        const opened = await cashier.rpc('open_tab', {
+            p_label: uniq('C1'),
+            p_customer_id: customer.id,
+            p_members: []
+        })
+        expect(opened.error).toBeNull()
+        const tabId = opened.data as string
+        expect(
+            (
+                await cashier.rpc('tab_add_items', {
+                    p_tab_id: tabId,
+                    p_items: [{ product_id: product.data!.id, quantity: 1 }]
+                })
+            ).error
+        ).toBeNull()
+        const deferred = await rpc(cashier, 'defer_tab', {
+            p_tab_id: tabId,
+            p_due_date: null,
+            p_reminder: false,
+            p_note: null
+        })
+        expect(deferred.error).toBeNull()
+        const orderId = deferred.data as string
+
+        const today = await todayInStoreTz()
+        const before = await manager.rpc('sales_report', {
+            p_from: today,
+            p_to: today,
+            p_tz: null as unknown as string
+        })
+        expect(before.error).toBeNull()
+        const baseline = before.data as { written_off_total: number; net_profit: number; total_revenue: number }
+
+        // Collect a partial payment BEFORE writing off: this must count as revenue on today's report.
+        const partial = await rpc(cashier, 'pay_receivable', {
+            p_order_id: orderId,
+            p_payments: [{ method: 'cash', amount: 30 }]
+        })
+        expect(partial.error).toBeNull()
+
+        const written = await adminHttp.post(writeOffRoute, `receivables/${orderId}/write-off`, {
+            params: { id: orderId },
+            body: { reason: 'C1 test' }
+        })
+        expect(written.status).toBe(204)
+
+        const after = await manager.rpc('sales_report', { p_from: today, p_to: today, p_tz: null as unknown as string })
+        expect(after.error).toBeNull()
+        const data = after.data as { written_off_total: number; net_profit: number; total_revenue: number }
+
+        // Balance left uncollected: 100 - 30 = 70, shown for visibility only (not subtracted from net_profit).
+        expect(data.written_off_total - baseline.written_off_total).toBe(70)
+        // The 30 already collected is counted as revenue, same as any other sale.
+        expect(data.total_revenue - baseline.total_revenue).toBe(30)
+        // net_profit contribution = payments collected (30) - full cost of goods (40) = -10. The old formula
+        // (subtract the whole uncollected balance, 70, from net_profit with no matching COGS charge) would have
+        // shown -70 here instead.
+        expect(data.net_profit - baseline.net_profit).toBe(-10)
+    })
 })

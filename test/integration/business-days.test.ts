@@ -1,4 +1,6 @@
 import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
+import { createClient } from '@supabase/supabase-js'
+import type { Database } from '@/types/database'
 import { GET as cronTick } from '@/app/api/cron/tick/route'
 import { GET as getDay, PATCH as adjustDay } from '@/app/api/v1/business-days/[id]/route'
 import { POST as closeDay } from '@/app/api/v1/business-days/[id]/close/route'
@@ -14,6 +16,7 @@ import {
     createProduct,
     ensureTestUsers,
     signedInClient,
+    uniq,
     type Db,
     type TestUsers
 } from '../helpers/integration'
@@ -40,25 +43,25 @@ function justAfter(openedAt: string): string {
 
 async function closeAnyDay() {
     const now = new Date().toISOString()
+    // Close every open session directly first, not just the ones under an open/future day: B5 (adjust_business_day)
+    // can move a day's closed_at into the past while a session opened against it stays 'open' — a day-scoped
+    // query alone would never see that session again, permanently wedging its register for every later test.
+    const openSessions = await service().from('cash_sessions').select('id, opened_at').eq('status', 'open')
+    if (openSessions.error) throw openSessions.error
+    for (const session of openSessions.data ?? []) {
+        const closedSession = await service()
+            .from('cash_sessions')
+            .update({ status: 'closed', closed_at: justAfter(session.opened_at) })
+            .eq('id', session.id)
+        if (closedSession.error) throw closedSession.error
+    }
+
     const open = await service().from('business_days').select('id, opened_at').is('closed_at', null)
     if (open.error) throw open.error
     const future = await service().from('business_days').select('id, opened_at').gt('closed_at', now)
     if (future.error) throw future.error
     const data = [...(open.data ?? []), ...(future.data ?? [])]
     for (const day of data) {
-        const openSessions = await service()
-            .from('cash_sessions')
-            .select('id, opened_at')
-            .eq('business_day_id', day.id)
-            .eq('status', 'open')
-        if (openSessions.error) throw openSessions.error
-        for (const session of openSessions.data ?? []) {
-            const sessions = await service()
-                .from('cash_sessions')
-                .update({ status: 'closed', closed_at: justAfter(session.opened_at) })
-                .eq('id', session.id)
-            if (sessions.error) throw sessions.error
-        }
         const closed = await service()
             .from('business_days')
             .update({ closed_at: justAfter(day.opened_at), close_kind: 'manual' })
@@ -117,7 +120,10 @@ describe('business days and cash sessions', () => {
             p_reason: 'safe drop'
         })
         expect(movement.error).toBeNull()
-        const summary = await cashier.rpc('cash_session_summary', { p_session_id: session.data! })
+        // R-1: a cashier is blind to the till's expected cash while it is open; a manager still sees it live.
+        const cashierSummary = await cashier.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect((cashierSummary.data as Record<string, unknown> | null)?.expected_cash).toBeUndefined()
+        const summary = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
         expect(summary.data).toMatchObject({ expected_cash: 120000 })
         expect(
             (await cashier.rpc('close_cash_session', { p_session_id: session.data!, p_counted_cash: 120000 })).error
@@ -182,7 +188,7 @@ describe('business days and cash sessions', () => {
                 })
             ).error
         ).toBeNull()
-        const open = await cashier.rpc('cash_session_summary', { p_session_id: session.data! })
+        const open = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
         expect(open.data).toMatchObject({ expected_cash: 40, cash_sales: 0, open_tab_cash: 40 })
         expect(
             (
@@ -194,7 +200,7 @@ describe('business days and cash sessions', () => {
                 })
             ).error
         ).toBeNull()
-        const closed = await cashier.rpc('cash_session_summary', { p_session_id: session.data! })
+        const closed = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
         expect(closed.data).toMatchObject({ expected_cash: 80, cash_sales: 80, open_tab_cash: 0 })
     })
 
@@ -234,16 +240,22 @@ describe('business days and cash sessions', () => {
     test('a cashier cannot adjust a business day', async () => {
         await closeAnyDay()
         const opened = await cashier.rpc('open_business_day', {})
+        // A random window far in the past (B5's overlap check compares against every other business day,
+        // including the many opened/closed within this same test run at "now", and against this same window
+        // from a previous run of this test against the same local DB) so it cannot collide with anything else.
+        const daysAgo = 100 + Math.floor(Math.random() * 10_000)
+        const farPastOpen = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000).toISOString()
+        const farPastClose = new Date(Date.now() - daysAgo * 24 * 60 * 60 * 1000 + 60_000).toISOString()
         const denied = await cashier.rpc('adjust_business_day', {
             p_id: opened.data!,
-            p_opened_at: new Date(Date.now() - 60_000).toISOString(),
-            p_closed_at: new Date().toISOString()
+            p_opened_at: farPastOpen,
+            p_closed_at: farPastClose
         })
         expect(denied.error?.code).toBe('42501')
         const allowed = await admin.rpc('adjust_business_day', {
             p_id: opened.data!,
-            p_opened_at: new Date(Date.now() - 60_000).toISOString(),
-            p_closed_at: new Date(Date.now() + 60_000).toISOString(),
+            p_opened_at: farPastOpen,
+            p_closed_at: farPastClose,
             p_notes: 'reviewed'
         })
         expect(allowed.error).toBeNull()
@@ -286,11 +298,16 @@ describe('business days and cash sessions', () => {
         })
         expect(movement.status).toBe(201)
 
-        const live = dataOf<{ sessions: { expected_cash: number; movements: { reason: string }[] }[] }>(
+        // R-1: the cashier's own live view is blind to the till's expected cash; a manager's is not.
+        const live = dataOf<{ sessions: { expected_cash: number | null; movements: { reason: string }[] }[] }>(
             await cashierHttp.get(current, 'business-days/current')
         )
-        expect(live.sessions[0]?.expected_cash).toBe(800)
+        expect(live.sessions[0]?.expected_cash).toBeNull()
         expect(live.sessions[0]?.movements[0]?.reason).toBe('cambio')
+        const liveAsManager = dataOf<{ sessions: { expected_cash: number | null }[] }>(
+            await managerHttp.get(current, 'business-days/current')
+        )
+        expect(liveAsManager.sessions[0]?.expected_cash).toBe(800)
         expect(
             (await cashierHttp.get(getSession, `cash-sessions/${sessionId}`, { params: { id: sessionId } })).status
         ).toBe(200)
@@ -299,7 +316,15 @@ describe('business days and cash sessions', () => {
             params: { id: sessionId },
             body: { counted_cash: 800 }
         })
-        expect(counted.status).toBe(204)
+        expect(counted.status).toBe(200)
+        expect(
+            dataOf<{ expected_cash: number; counted_cash: number; difference: number; needs_review: boolean }>(counted)
+        ).toEqual({
+            expected_cash: 800,
+            counted_cash: 800,
+            difference: 0,
+            needs_review: false
+        })
         expect(
             (
                 await cashierHttp.get(getSession, 'cash-sessions/00000000-0000-4000-8000-000000000000', {
@@ -347,5 +372,533 @@ describe('business days and cash sessions', () => {
 
         const { data } = await service().from('business_days').select('close_kind').eq('id', opened.data!).single()
         expect(data?.close_kind).toBe('auto')
+    })
+})
+
+// R-B adversarial fixes (B1-B9): see docs/04-auditoria/hallazgos/H6-revision-adversarial-a-f.md
+describe('R-B: cash assignment, concurrency and reconciliation fixes', () => {
+    test('B1: an offline sale keeps the session that was open when it happened, never one opened later', async () => {
+        await closeAnyDay()
+        expect((await cashier.rpc('open_business_day', {})).error).toBeNull()
+        const registerB = await service()
+            .from('cash_registers')
+            .insert({ name: `B1-${Date.now()}` })
+            .select('id')
+            .single()
+        expect(registerB.error).toBeNull()
+
+        const sessionX = await cashier.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 0,
+            p_user_ids: [users.cashier.id]
+        })
+        expect(sessionX.error).toBeNull()
+        const occurredWhileXOpen = new Date().toISOString()
+        expect(
+            (await cashier.rpc('close_cash_session', { p_session_id: sessionX.data!, p_counted_cash: 0 })).error
+        ).toBeNull()
+
+        const sessionY = await cashier.rpc('open_cash_session', {
+            p_register_id: registerB.data!.id,
+            p_opening_float: 0,
+            p_user_ids: [users.cashier.id]
+        })
+        expect(sessionY.error).toBeNull()
+
+        const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 1 })
+        const sold = await cashier.rpc('create_sale', {
+            p_customer_id: null as unknown as string,
+            p_items: [{ product_id: product.id, quantity: 1 }],
+            p_payment_method: 'cash',
+            p_discount: 0,
+            p_occurred_at: occurredWhileXOpen
+        })
+        expect(sold.error).toBeNull()
+        const { data: order } = await service().from('orders').select('cash_session_id').eq('id', sold.data!).single()
+        // X was already closed by the time the sale is inserted, so B2's own recheck nulls it out too — but it
+        // must never be Y, which was not even open when the sale happened.
+        expect(order?.cash_session_id).not.toBe(sessionY.data)
+        await closeAnyDay()
+    })
+
+    test('B2: a sale racing a close never lands in a session whose reconciled figure excludes it', async () => {
+        for (let attempt = 0; attempt < 20; attempt++) {
+            await closeAnyDay()
+            expect((await cashier.rpc('open_business_day', {})).error).toBeNull()
+            const session = await cashier.rpc('open_cash_session', {
+                p_register_id: await registerId(),
+                p_opening_float: 0,
+                p_user_ids: [users.cashier.id]
+            })
+            expect(session.error).toBeNull()
+            const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 5 })
+
+            const [saleResult, closeResult] = await Promise.all([
+                sell(cashier, product.id),
+                cashier.rpc('close_cash_session', { p_session_id: session.data!, p_counted_cash: 0 })
+            ])
+            expect(saleResult.error).toBeNull()
+            expect(closeResult.error).toBeNull()
+
+            const { data: order } = await service()
+                .from('orders')
+                .select('cash_session_id')
+                .eq('id', saleResult.data!)
+                .single()
+            if (order?.cash_session_id === session.data) {
+                const { data: closed } = await service()
+                    .from('cash_sessions')
+                    .select('expected_cash')
+                    .eq('id', session.data!)
+                    .single()
+                // The frozen expected_cash was computed inside the same lock that admitted this sale to the
+                // session, so it must already include it.
+                expect(closed?.expected_cash).toBe(10)
+            }
+        }
+    })
+
+    test('B3: a manager with no session of their own refunds cash into the ORIGINAL (still open) till, owned by a different cashier', async () => {
+        await closeAnyDay()
+        expect((await cashier.rpc('open_business_day', {})).error).toBeNull()
+        const session = await cashier.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 0,
+            // Only the cashier is responsible for this till — the manager has no session of their own at all.
+            p_user_ids: [users.cashier.id]
+        })
+        expect(session.error).toBeNull()
+        const product = await createProduct({ selling_price: 100, tax_rate: 0, stock: 1 })
+        const sold = await sell(cashier, product.id)
+        expect(sold.error).toBeNull()
+
+        expect(
+            (await manager.rpc('refund_order', { p_order_id: sold.data!, p_reason: 'B3 adversarial test' })).error
+        ).toBeNull()
+
+        const { data: order } = await service()
+            .from('orders')
+            .select('refund_cash_session_id, refund_after_close')
+            .eq('id', sold.data!)
+            .single()
+        expect(order).toEqual({ refund_cash_session_id: session.data, refund_after_close: false })
+
+        const summary = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(summary.data).toMatchObject({ refunded_cash: 100, expected_cash: 0 })
+        await closeAnyDay()
+    })
+
+    test('B3: if the original till has since closed, nothing is subtracted from any till and the order is flagged', async () => {
+        await closeAnyDay()
+        expect((await cashier.rpc('open_business_day', {})).error).toBeNull()
+        const session = await cashier.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 0,
+            p_user_ids: [users.cashier.id]
+        })
+        expect(session.error).toBeNull()
+        const product = await createProduct({ selling_price: 100, tax_rate: 0, stock: 1 })
+        const sold = await sell(cashier, product.id)
+        expect(sold.error).toBeNull()
+        expect(
+            (await cashier.rpc('close_cash_session', { p_session_id: session.data!, p_counted_cash: 100 })).error
+        ).toBeNull()
+
+        expect(
+            (await manager.rpc('refund_order', { p_order_id: sold.data!, p_reason: 'B3 closed-till test' })).error
+        ).toBeNull()
+
+        const { data: order } = await service()
+            .from('orders')
+            .select('refund_cash_session_id, refund_after_close')
+            .eq('id', sold.data!)
+            .single()
+        expect(order).toEqual({ refund_cash_session_id: null, refund_after_close: true })
+
+        // The already-closed, already-reconciled session must be completely untouched.
+        const { data: sessionRow } = await service()
+            .from('cash_sessions')
+            .select('expected_cash, counted_cash, difference')
+            .eq('id', session.data!)
+            .single()
+        expect(sessionRow).toEqual({ expected_cash: 100, counted_cash: 100, difference: 0 })
+        await closeAnyDay()
+    })
+
+    test('B4: closing a day and opening a session on it race safely — no open session survives in a closed day', async () => {
+        for (let attempt = 0; attempt < 20; attempt++) {
+            await closeAnyDay()
+            const opened = await cashier.rpc('open_business_day', {})
+            expect(opened.error).toBeNull()
+            const registerIdValue = await registerId()
+            const [closeResult, openResult] = await Promise.all([
+                cashier.rpc('close_business_day', { p_id: opened.data! }),
+                cashier.rpc('open_cash_session', {
+                    p_register_id: registerIdValue,
+                    p_opening_float: 0,
+                    p_user_ids: [users.cashier.id]
+                })
+            ])
+            expect(closeResult.error === null || openResult.error === null).toBe(true)
+            const { data: openSessions, error } = await service()
+                .from('cash_sessions')
+                .select('id')
+                .eq('business_day_id', opened.data!)
+                .eq('status', 'open')
+            expect(error).toBeNull()
+            expect(openSessions ?? []).toHaveLength(0)
+        }
+    })
+
+    test('B6 + R-2: voiding a cash expense changes the till only while it is still open', async () => {
+        await closeAnyDay()
+        expect((await manager.rpc('open_business_day', {})).error).toBeNull()
+        const session = await manager.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 100,
+            p_user_ids: [users.manager.id]
+        })
+        expect(session.error).toBeNull()
+        const category = await service().from('expense_categories').select('id').eq('name', 'Otros').single()
+        expect(category.error).toBeNull()
+
+        const expense = await manager.rpc('create_expense', {
+            p_category_id: category.data!.id,
+            p_description: 'B6 adversarial test',
+            p_amount: 50,
+            p_payment_method: 'cash',
+            p_occurred_at: null as unknown as string,
+            p_supplier_id: null as unknown as string,
+            p_cash_session_id: session.data!
+        })
+        expect(expense.error).toBeNull()
+        const whileOpen = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(whileOpen.data).toMatchObject({ expected_cash: 50 })
+
+        expect(
+            (await manager.rpc('close_cash_session', { p_session_id: session.data!, p_counted_cash: 50 })).error
+        ).toBeNull()
+        const afterClose = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(afterClose.data).toMatchObject({ expected_cash: 50 })
+
+        // Voiding AFTER close must not change what was already reconciled (R-2).
+        expect(
+            (await admin.rpc('void_expense', { p_id: expense.data!, p_reason: 'oops, after close' })).error
+        ).toBeNull()
+        const afterVoid = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(afterVoid.data).toMatchObject({ expected_cash: 50 })
+        const { data: expenseRow } = await service()
+            .from('expenses')
+            .select('deleted_at, voided_after_close')
+            .eq('id', expense.data!)
+            .single()
+        expect(expenseRow?.voided_after_close).toBe(true)
+        expect(expenseRow?.deleted_at).not.toBeNull()
+    })
+
+    test('B6: voiding a cash expense while its till is still open restores the amount immediately', async () => {
+        await closeAnyDay()
+        expect((await manager.rpc('open_business_day', {})).error).toBeNull()
+        const session = await manager.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 100,
+            p_user_ids: [users.manager.id]
+        })
+        expect(session.error).toBeNull()
+        const category = await service().from('expense_categories').select('id').eq('name', 'Otros').single()
+        const expense = await manager.rpc('create_expense', {
+            p_category_id: category.data!.id,
+            p_description: 'B6 open-till test',
+            p_amount: 30,
+            p_payment_method: 'cash',
+            p_occurred_at: null as unknown as string,
+            p_supplier_id: null as unknown as string,
+            p_cash_session_id: session.data!
+        })
+        expect(expense.error).toBeNull()
+        expect((await manager.rpc('cash_session_summary', { p_session_id: session.data! })).data).toMatchObject({
+            expected_cash: 70
+        })
+        expect(
+            (await admin.rpc('void_expense', { p_id: expense.data!, p_reason: 'voided while open' })).error
+        ).toBeNull()
+        expect((await manager.rpc('cash_session_summary', { p_session_id: session.data! })).data).toMatchObject({
+            expected_cash: 100
+        })
+        const { data: expenseRow } = await service()
+            .from('expenses')
+            .select('voided_after_close')
+            .eq('id', expense.data!)
+            .single()
+        expect(expenseRow?.voided_after_close).toBe(false)
+        await closeAnyDay()
+    })
+
+    test('B7: an offline card+cash sale never drops the card payment when the cash leg is adjusted to zero', async () => {
+        const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 1 })
+        const sold = await cashier.rpc('create_sale', {
+            p_customer_id: null as unknown as string,
+            p_items: [{ product_id: product.id, quantity: 1 }],
+            p_discount: 0,
+            p_occurred_at: new Date().toISOString(),
+            // Client-declared payments sum to 12 (stale price); the server total is 10. The cash leg (2) must
+            // absorb the whole adjustment; the 10 already charged to the card must survive untouched.
+            p_payments: [
+                { method: 'cash', amount: 2 },
+                { method: 'card', amount: 10 }
+            ]
+        })
+        expect(sold.error).toBeNull()
+        const { data: payments } = await service()
+            .from('payments')
+            .select('payment_method, amount')
+            .eq('order_id', sold.data!)
+            .order('payment_method')
+        expect(payments).toEqual([{ payment_method: 'card', amount: 10 }])
+        const { data: order } = await service().from('orders').select('sync_issues').eq('id', sold.data!).single()
+        // payment_adjusted logs the complete before/after payment arrays, not just the touched scalar.
+        expect(order?.sync_issues).toMatchObject({
+            payment_adjusted: {
+                before: [
+                    { method: 'cash', amount: 2 },
+                    { method: 'card', amount: 10 }
+                ],
+                after: [{ method: 'card', amount: 10 }]
+            }
+        })
+    })
+
+    test('B7: two non-cash payments never collapse into one when the excess drains from the last leg', async () => {
+        const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 1 })
+        const sold = await cashier.rpc('create_sale', {
+            p_customer_id: null as unknown as string,
+            p_items: [{ product_id: product.id, quantity: 1 }],
+            p_discount: 0,
+            p_occurred_at: new Date().toISOString(),
+            // Sum is 15 (stale price), server total is 10. Neither leg is cash, so the LAST one (ewallet) drains
+            // first; it absorbs the whole -5 adjustment and survives at 5. The card payment must be untouched.
+            p_payments: [
+                { method: 'card', amount: 7 },
+                { method: 'ewallet', amount: 8 }
+            ]
+        })
+        expect(sold.error).toBeNull()
+        const { data: payments } = await service()
+            .from('payments')
+            .select('payment_method, amount')
+            .eq('order_id', sold.data!)
+            .order('payment_method')
+        expect(payments).toEqual([
+            { payment_method: 'card', amount: 7 },
+            { payment_method: 'ewallet', amount: 3 }
+        ])
+    })
+
+    // P1-a: see docs/04-auditoria/hallazgos/H6-revision-adversarial-a-f.md (second-pass adversarial review)
+    test('P1-a: two cashiers with two different open tills in the same day can both use /cash without error', async () => {
+        await closeAnyDay()
+        expect((await cashier.rpc('open_business_day', {})).error).toBeNull()
+
+        const registerA = await registerId()
+        const registerB = await service()
+            .from('cash_registers')
+            .insert({ name: `P1a-${Date.now()}` })
+            .select('id')
+            .single()
+        expect(registerB.error).toBeNull()
+
+        const otherEmail = `${uniq('p1a-cashier')}@barstock.test`
+        const otherPassword = 'barstock-test-password-1'
+        const created = await service().auth.admin.createUser({
+            email: otherEmail,
+            password: otherPassword,
+            email_confirm: true,
+            app_metadata: { role: 'cashier' }
+        })
+        expect(created.error).toBeNull()
+        const otherId = created.data.user!.id
+        const otherClient = createClient<Database>(
+            process.env.NEXT_PUBLIC_SUPABASE_URL ?? '',
+            process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? ''
+        )
+        const signIn = await otherClient.auth.signInWithPassword({ email: otherEmail, password: otherPassword })
+        expect(signIn.error).toBeNull()
+
+        const sessionA = await cashier.rpc('open_cash_session', {
+            p_register_id: registerA,
+            p_opening_float: 100,
+            p_user_ids: [users.cashier.id]
+        })
+        expect(sessionA.error).toBeNull()
+        const sessionB = await otherClient.rpc('open_cash_session', {
+            p_register_id: registerB.data!.id,
+            p_opening_float: 200,
+            p_user_ids: [otherId]
+        })
+        expect(sessionB.error).toBeNull()
+
+        // Each cashier reads THEIR OWN session through cash_session_summary without error...
+        const ownA = await cashier.rpc('cash_session_summary', { p_session_id: sessionA.data! })
+        expect(ownA.error).toBeNull()
+        const ownB = await otherClient.rpc('cash_session_summary', { p_session_id: sessionB.data! })
+        expect(ownB.error).toBeNull()
+
+        // ...and cashier A's own /cash desk view does not blow up now that a SECOND, unrelated till (B) is open.
+        const httpA = await loginAs('cashier')
+        const desk = await httpA.get(current, 'business-days/current')
+        expect(desk.status).toBe(200)
+        const body = dataOf<{ sessions: { id: string; expected_cash: number | null }[] }>(desk)
+        expect(body.sessions.map(s => s.id).sort()).toEqual([sessionA.data as string, sessionB.data as string].sort())
+        // R-1 (blind cash count) applies to a cashier's OWN till too, not just other people's: neither is shown.
+        const mine = body.sessions.find(s => s.id === sessionA.data)
+        const theirs = body.sessions.find(s => s.id === sessionB.data)
+        expect(mine?.expected_cash).toBeNull()
+        expect(theirs?.expected_cash).toBeNull()
+
+        await service().from('cash_sessions').delete().eq('id', sessionB.data!)
+        await service().from('cash_sessions').delete().eq('id', sessionA.data!)
+        await service().auth.admin.deleteUser(otherId)
+        await service().from('cash_registers').delete().eq('id', registerB.data!.id)
+        await closeAnyDay()
+    })
+
+    // P1-b: cash_session_summary must not leak the components that sum to expected_cash while a cashier's own
+    // till is still open — only opening_float may survive.
+    test('P1-b: an open till hides every money-derivable component from its own cashier, not just expected_cash', async () => {
+        await closeAnyDay()
+        expect((await cashier.rpc('open_business_day', {})).error).toBeNull()
+        const session = await cashier.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 50,
+            p_user_ids: [users.cashier.id]
+        })
+        expect(session.error).toBeNull()
+        const product = await createProduct({ selling_price: 30, tax_rate: 0, stock: 1 })
+        expect((await sell(cashier, product.id)).error).toBeNull()
+
+        const summary = await cashier.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(summary.error).toBeNull()
+        const keys = Object.keys(summary.data as Record<string, unknown>).sort()
+        expect(keys).not.toContain('expected_cash')
+        expect(keys).not.toContain('cash_sales')
+        expect(keys).not.toContain('open_tab_cash')
+        expect(keys).not.toContain('deposits')
+        expect(keys).not.toContain('withdrawals')
+        expect(keys).not.toContain('refunded_cash')
+        expect(keys).not.toContain('expenses')
+        expect(keys).not.toContain('purchases')
+        expect((summary.data as { opening_float: number }).opening_float).toBe(50)
+
+        // A manager still sees everything live.
+        const managerView = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(managerView.data).toMatchObject({ expected_cash: 80, cash_sales: 30 })
+        await closeAnyDay()
+    })
+
+    test('B7: create_sale rejects two payments with the same method, matching pay_receivable', async () => {
+        const product = await createProduct({ selling_price: 10, tax_rate: 0, stock: 1 })
+        const sold = await cashier.rpc('create_sale', {
+            p_customer_id: null as unknown as string,
+            p_items: [{ product_id: product.id, quantity: 1 }],
+            p_discount: 0,
+            p_payments: [
+                { method: 'cash', amount: 5 },
+                { method: 'cash', amount: 5 }
+            ]
+        })
+        expect(sold.error?.code).toBe('P0001')
+    })
+
+    test('B5: adjust_business_day rejects a future close and an overlap, and reassigns expenses/purchases/sessions', async () => {
+        await closeAnyDay()
+        const opened = await cashier.rpc('open_business_day', {})
+        expect(opened.error).toBeNull()
+
+        const future = await admin.rpc('adjust_business_day', {
+            p_id: opened.data!,
+            p_opened_at: new Date(Date.now() - 60_000).toISOString(),
+            p_closed_at: new Date(Date.now() + 60_000).toISOString()
+        })
+        expect(future.error?.code).toBe('P0001')
+
+        // A second, disjoint day far in the past, so an overlap attempt below has something concrete to hit. The
+        // offset is randomized (and cleaned up at the end) so a repeat run against the same local DB — this test
+        // is not the only place that leaves history around at "N days ago" — cannot collide with a leftover.
+        const otherDayId = crypto.randomUUID()
+        const anchor = Date.now() - (2_000 + Math.floor(Math.random() * 2_000)) * 24 * 60 * 60 * 1000
+        const otherOpen = new Date(anchor).toISOString()
+        const otherClose = new Date(anchor + 60 * 60 * 1000).toISOString()
+        const otherDay = await service().from('business_days').insert({
+            id: otherDayId,
+            opened_at: otherOpen,
+            closed_at: otherClose,
+            close_kind: 'manual',
+            opened_by: users.cashier.id
+        })
+        expect(otherDay.error).toBeNull()
+
+        const overlap = await admin.rpc('adjust_business_day', {
+            p_id: opened.data!,
+            p_opened_at: new Date(anchor + 30 * 60 * 1000).toISOString(),
+            p_closed_at: new Date(anchor + 90 * 60 * 1000).toISOString()
+        })
+        expect(overlap.error?.code).toBe('P0001')
+
+        // A cash session opened now (real time) cannot itself be moved into the past — cash_sessions.opened_at is
+        // not a caller-supplied parameter — so it exercises the NOT NULL fallback (B5 note in the migration): it
+        // stays on the day being adjusted rather than being orphaned.
+        const session = await cashier.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 0,
+            p_user_ids: [users.cashier.id]
+        })
+        expect(session.error).toBeNull()
+
+        const newAnchor = Date.now() - (4_000 + Math.floor(Math.random() * 2_000)) * 24 * 60 * 60 * 1000
+        const newOpen = new Date(newAnchor).toISOString()
+        const newClose = new Date(newAnchor + 60 * 60 * 1000).toISOString()
+        // The expense's occurred_at is set inside the day's new (past) window, so it genuinely follows the move.
+        const category = await service().from('expense_categories').select('id').eq('name', 'Otros').single()
+        const expense = await manager.rpc('create_expense', {
+            p_category_id: category.data!.id,
+            p_description: 'B5 reassignment test',
+            p_amount: 5,
+            p_payment_method: 'card',
+            p_occurred_at: new Date(newAnchor + 30 * 60 * 1000).toISOString(),
+            p_supplier_id: null as unknown as string,
+            p_cash_session_id: null as unknown as string
+        })
+        expect(expense.error).toBeNull()
+
+        const adjusted = await admin.rpc('adjust_business_day', {
+            p_id: opened.data!,
+            p_opened_at: newOpen,
+            p_closed_at: newClose,
+            p_notes: 'moved into the past'
+        })
+        expect(adjusted.error).toBeNull()
+        const dayId = opened.data as string
+
+        const { data: expenseRow } = await service()
+            .from('expenses')
+            .select('business_day_id')
+            .eq('id', expense.data!)
+            .single()
+        expect(expenseRow?.business_day_id).toBe(dayId)
+        const { data: sessionRow } = await service()
+            .from('cash_sessions')
+            .select('business_day_id')
+            .eq('id', session.data!)
+            .single()
+        expect(sessionRow?.business_day_id).toBe(dayId)
+
+        // This day now sits at a fixed offset in the past (for a deterministic, collision-free window) — leaving
+        // it behind would collide with the identical window the next run of this same test picks, and it is
+        // otherwise invisible to closeAnyDay() (its closed_at is in the past, not null or future). Delete it and
+        // everything hung off it outright rather than leaving fabricated history around.
+        await service().from('cash_sessions').delete().eq('id', session.data!)
+        await service().from('expenses').update({ business_day_id: null }).eq('id', expense.data!)
+        await service().from('business_days').delete().eq('id', dayId)
+        await service().from('business_days').delete().eq('id', otherDayId)
     })
 })

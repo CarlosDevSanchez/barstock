@@ -34,6 +34,7 @@ describe('purchases', () => {
         const managerHttp = await loginAs('manager')
 
         const created = await managerHttp.post(receivePurchaseRoute, 'purchases', {
+            headers: { 'Idempotency-Key': crypto.randomUUID() },
             body: {
                 supplier_id: supplierId,
                 items: [
@@ -78,6 +79,7 @@ describe('purchases', () => {
         const product = await createProduct({ cost_price: 50, selling_price: 100, tax_rate: 0, stock: 1 })
         const managerHttp = await loginAs('manager')
         const created = await managerHttp.post(receivePurchaseRoute, 'purchases', {
+            headers: { 'Idempotency-Key': crypto.randomUUID() },
             body: {
                 supplier_id: supplierId,
                 items: [{ product_id: product.id, quantity: 5, unit_cost: 40 }],
@@ -112,6 +114,7 @@ describe('purchases', () => {
             [2, 200]
         ] as const) {
             const created = await managerHttp.post(receivePurchaseRoute, 'purchases', {
+                headers: { 'Idempotency-Key': crypto.randomUUID() },
                 body: {
                     supplier_id: supplierId,
                     items: [{ product_id: product.id, quantity, unit_cost }],
