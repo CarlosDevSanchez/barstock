@@ -5,8 +5,8 @@
 | **Severidad** | Alta (seguridad y dinero) a Baja, según el ID |
 | **Área** | Caja y jornada, cuentas por cobrar, reportes, notificaciones, compras |
 | **Esfuerzo** | Grande |
-| **Estado** | Parcial — ver tabla. Corregido y probado en local (`fix/adversarial-a-f`); **no aplicado a la base real** |
-| **Confianza** | Lo marcado "Corregido" **[Verificado]** con pruebas de integración; lo marcado "No implementado" es hallazgo sin corregir |
+| **Estado** | Corregido — ver tabla (todo el alcance del plan, salvo M3/B9, omitido por decisión explícita del usuario). Probado en local (`fix/adversarial-a-f`, `fix/h6-pendientes`); **no aplicado a la base real** |
+| **Confianza** | Lo marcado "Corregido" **[Verificado]** con pruebas de integración/E2E |
 
 ## Contexto
 
@@ -43,17 +43,17 @@ protección" en más hallazgos de los que realmente las tenían; la tabla de aba
 | M10/B5 | Media, datos | `adjust_business_day` no reasignaba `expenses`/`purchase_orders`/`cash_sessions`, aceptaba fechas inválidas | **Corregido**: rechaza cierre futuro y solapes; reasigna las tres tablas (con `coalesce(...,p_id)` para `cash_sessions`, que es `NOT NULL`); pagos reasignados por la fecha de su orden |
 | F1/D1 | Alta, fiabilidad | `afterResponse` no devolvía la promesa a `after()` | **Corregido**: `nextAfter(() => task())` sin `void` ni envoltura |
 | F2/D2 | Alta, fiabilidad | `_claim_outbox` no volvía a reclamar filas atascadas | **Corregido**, y reforzado en la 2ª pasada: `_claim_outbox` ahora también incrementa `attempts` al reclamar (antes solo `markFailure` lo hacía, así que una fila que solo se reclamaba y nunca fallaba explícitamente podía reclamarse cada 10 min para siempre sin agotar el límite); `_enqueue_due_receivables` no encola un segundo recordatorio mientras el de un día anterior siga sin procesar |
-| F3 | Media, fiabilidad | Un destinatario fallido reenvía a todos | No implementado |
-| F4 | Media, despliegue | Orden de despliegue código/migración | **Parcial**: la UI de `/cash` tolera que `close_cash_session` devuelva `null`/`void` (código nuevo contra migración vieja) sin lanzar; falta documentar el orden migración→deploy en `verificar-checkout.md` |
+| F3 | Media, fiabilidad | Un destinatario fallido reenvía a todos | **Corregido**: cada fila del outbox guarda `payload.delivered_to` (RPC interna `_mark_outbox_delivery`); un reintento solo alcanza a los destinatarios que faltan en esa lista, no a todo el lote. `sendPush` recorre todas las suscripciones del usuario acumulando errores en vez de cortar en la primera. Sin ningún canal configurado, `dispatchOutbox` no reclama filas (D4) |
+| F4 | Media, despliegue | Orden de despliegue código/migración | **Corregido**: la UI de `/cash` tolera que `close_cash_session` devuelva `null`/`void` (código nuevo contra migración vieja) sin lanzar; el orden migración→deploy y la tolerancia de `lib/server/auth.ts`/esquemas de reportes quedaron documentados en `verificar-checkout.md` §D |
 | U1/R-1 | Media, negocio | El cajero veía el esperado en vivo | **Corregido**, y reforzado en la 2ª pasada: la 1ª versión solo ocultaba `expected_cash`, pero `opening_float + cash_sales + open_tab_cash + deposits − withdrawals − refunded_cash − expenses − purchases` daba el mismo número — ahora, con la caja abierta y sin ser manager+, `cash_session_summary` solo devuelve `opening_float` (nada más se filtra, ni siquiera al propio dueño de la caja) |
 | A3 | Alta, seguridad | Regresión: `/cash` rompía para cualquier cajero en cuanto había otra caja abierta | **Corregido en la 2ª pasada** (bug introducido por la propia corrección de A3): `getCashDesk` llamaba `cash_session_summary` sobre TODAS las cajas abiertas de la jornada, y esa función lanza 42501 si el cajero no es responsable de una de ellas. Ahora `getCashDesk` solo llama la RPC para la caja del propio cajero (o todas, si es manager+); para las demás, muestra la caja sin `expected_cash`, sin llamar la RPC |
 | U2 | Media | Editar una cuenta por cobrar borraba `reminder_note` | **Corregido**: `list_receivables` la devuelve; el diálogo la usa como valor inicial |
 | U3 | Media, dinero | Idempotencia opcional en `pay_receivable`; sin idempotencia en compras | **Corregido**: cabecera `Idempotency-Key` obligatoria en `pay_receivable` (400 si falta) y en `POST /purchases`/`receive_purchase` (mismo patrón `idempotency_keys` que `create_sale`); ambos diálogos generan la clave una sola vez al abrirse y la reutilizan en reintentos |
-| U4 | Media | POS acepta pagos duplicados por método; diálogo de `/receivables` no autocompleta | **Parcial**: `create_sale` rechaza dos pagos con el mismo método; el diálogo de `/receivables` no se tocó (C6) |
-| U5 | Media | Push en equipo compartido | No implementado |
-| U6 | Media | Variables de entorno de correo/push acopladas | No implementado |
-| B1/E1 | Baja | Índices, `unit_cost` de variantes, `ORDER_STATUSES`, locks de compra | **Parcial**: `unit_cost` con variante; `ORDER_STATUSES` incluye `written_off`; índices de C3; `receive_purchase` ahora bloquea inventario en orden determinista (por `product_id`) y rechaza proveedor eliminado. El resto de R-E (backfill de zona horaria, purga de outbox, campana de stock, selectores con búsqueda, textos de diferir, saldos en unidades mínimas) no se tocó |
-| T* | Alta, pruebas | Concurrencia mockeada, sin pruebas de RLS directa | **Parcial, corregido de una afirmación falsa en la 1ª versión de este documento**: solo M8/M9 (vía B2/B4) tienen pruebas de concurrencia real ×20 rompiendo la protección — son los únicos hallazgos que son, en efecto, condiciones de carrera. M1, M2, M4, M7, S1 y A3 son comprobaciones de lógica/autorización deterministas (no carreras) y tienen pruebas de escenario único, que es lo que corresponde a su naturaleza. Añadidas: SSRF (`http://10.0.0.1`, `https://evil.com` → 422), usuario inactivo → 42501 en toda RPC nueva, `_claim_outbox`/`_enqueue_due_receivables`/`_current_assignment`/`_session_cash`/`_auto_close_stale_business_days` como `authenticated` → error. Falta: F3, D3–D9, E2E adicionales, `_claim_outbox` con dos conexiones `pg` reales, aislar `mock.module('resend'\|'web-push')` en su propio proceso |
+| U4 | Media | POS acepta pagos duplicados por método; diálogo de `/receivables` no autocompleta | **Corregido**: `create_sale` rechaza dos pagos con el mismo método; el diálogo de `/receivables` (C6) reutiliza la lógica pura del POS (`lib/tab-split.ts`: `splitRemainder`/`paymentGap`) — autocompleta el restante, muestra «Falta»/«Sobra» y bloquea el envío si no cuadra o se repite el método |
+| U5 | Media | Push en equipo compartido | **Corregido**: `register_push_subscription` (upsert por `endpoint`, reasigna `user_id`) sustituye el insert directo que daba 409; el logout desuscribe el push del navegador antes de cerrar sesión; el interruptor de push refleja si el navegador tiene de verdad una suscripción, no solo la preferencia guardada; `sw.js` escucha `pushsubscriptionchange` |
+| U6 | Media | Variables de entorno de correo/push acopladas | **Corregido**: dos grupos independientes en `lib/env/schema.ts` (correo: `RESEND_API_KEY`+`EMAIL_FROM`; push: los tres `VAPID_*`), cada uno opcional por separado; `VAPID_SUBJECT` valida el prefijo `mailto:`/`https://` |
+| B1/E1 | Baja | Índices, `unit_cost` de variantes, `ORDER_STATUSES`, locks de compra | **Corregido**: `unit_cost` con variante; `ORDER_STATUSES` incluye `written_off`; índices de C3; `receive_purchase` bloquea inventario en orden determinista y rechaza proveedor eliminado (E1). Resto de R-E: E2 (backfill de zona horaria de `expenses.occurred_at`, solo filas sin tocar desde el backfill anterior), E3 (`_purge_outbox`, cron diario), E4 (campana usa `low_stock_count` de `GET /dashboard`, no el inventario completo, y refresca al cambiar de ruta), E5 (selectores de proveedor/producto en compras buscan contra la API con `q` en vez de `pageSize: 100`), E6 (título «Cuenta por cobrar registrada» al diferir, botón con `OfflineDisabledButton`), E7 (sumas del ticket pendiente y de `customers/[id]` en unidades mínimas, `lib/tab-split.ts: sumMoney`) |
+| T* | Alta, pruebas | Concurrencia mockeada, sin pruebas de RLS directa | **Corregido**: solo M8/M9 (vía B2/B4) son condiciones de carrera reales y tienen prueba ×20 rompiendo la protección; ahora se suma `_claim_outbox` con **dos conexiones Postgres reales** (`Bun.SQL`, `test/integration/outbox-claim-pg.test.ts`, ×20: una transacción se mantiene abierta sin commit mientras la otra reclama). `mock.module('resend'\|'web-push')` se aisló en `test/integration/notifications-dispatch.test.ts`, con su propio proceso `bun test` y variables de entorno restauradas con `try/finally` (antes se filtraban al resto de `test/integration`). E2E añadidos: pago dividido + imprimir, gasto en efectivo baja el esperado, compra sube el stock, diferir → aparece en `/receivables` → pagar → desaparece. Pruebas nuevas de F3 (reintento no reenvía a quien ya recibió), D4 (sin claves, las filas quedan sin reclamar) |
 
 ## Qué se verificó y no se tocó
 
@@ -67,12 +67,14 @@ roles de rutas iguales a las RPC; i18n ES/EN; cola offline compatible con entrad
 `20261006000004_fix_reports.sql` (R-C) → `20261006000005_fix_outbox.sql` (R-D) →
 `20261006000007_fix_adversarial_review.sql` (correcciones de la 2ª pasada: P1-a/b/c, `close_business_day`,
 `_current_assignment`, outbox, `sales_report`/`business_day_report`, `create_sale` (B7), `receive_purchase`
-(idempotencia + E1)). No hay migración R-E completa. Ninguna se ha aplicado a la base real.
+(idempotencia + E1)) → `20261006000008_fix_h6_pending.sql` (F3: `_mark_outbox_delivery`; U5:
+`register_push_subscription`; E3: `_purge_outbox`; E2: backfill de `expenses.occurred_at`). R-E queda completo
+(E1–E7). Ninguna migración se ha aplicado a la base real.
 
 ## Pendiente
 
-F3, U5, U6, C6, la mayor parte de R-E (E2–E7), y la matriz completa de pruebas del §4 del plan (E2E adicionales,
-`_claim_outbox` con dos conexiones `pg` reales, aislamiento de `mock.module` de notificaciones en su propio
-proceso). Documentación pendiente en el mismo detalle: `docs/02-base-de-datos/*` (columnas nuevas
-`refund_cash_session_id`, `refund_after_close`, `voided_after_close`), `verificar-checkout.md` (orden
-migración→deploy), `notificaciones.md`, `cuentas-por-cobrar.md` (idempotencia obligatoria).
+Nada del alcance de este documento (§1–§5 del plan) queda pendiente. Fuera de alcance por decisión explícita del
+usuario: M3/B9 (backfill de `orders.status` legado, dependía de la consulta de solo lectura del §2 del plan, que
+nunca se ejecutó contra el proyecto real). Fuera de alcance por el propio plan (§3, "Fuera de alcance"): i18n de
+los textos de correo/push, paginación de `list_receivables` más allá del límite de A1, el N+1 de `getCashDesk`,
+`skipWaiting` del service worker, y crear un producto con umbral de forma atómica.

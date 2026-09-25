@@ -56,6 +56,20 @@ Offline (F2): `client_ref UUID UNIQUE` (nullable; misma clave que la idempotenci
 **`payments`** — `order_id` → `orders` CASCADE NOT NULL, `payment_method` NOT NULL, `amount` (`CHECK ≥ 0`), `reference_number`, `notes`. Una orden nacida de una venta directa tiene un pago; una nacida de una
 cuenta ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)) puede tener varios (uno por cada pago parcial). `orders.tab_id` → `tabs` (NULL en una venta directa).
 
+### Columnas añadidas en la revisión adversarial ([H6](../04-auditoria/hallazgos/H6-revision-adversarial-a-f.md))
+
+- **`orders.refund_cash_session_id`** (`uuid`, nullable, → `cash_sessions`): la caja **original del pago**
+  reembolsado (`payments.cash_session_id`), no la caja de quien reembolsa. La rellena `refund_order` cuando la
+  orden tuvo pagos en efectivo y esa caja sigue abierta.
+- **`orders.refund_after_close`** (`boolean`, default `false`): se pone en `true` cuando la caja del pago original
+  ya está cerrada al reembolsar — el monto no se resta de ninguna caja y la orden queda marcada para revisión
+  manual, en vez de imputarse a un lugar equivocado.
+- **`expenses.voided_after_close`** y **`purchase_orders.voided_after_close`** (`boolean`, default `false`):
+  se ponen en `true` si `void_expense`/`void_purchase` se ejecuta con la caja ya cerrada. `_session_cash` ignora
+  esas anulaciones para cajas cerradas (el monto sigue restado del esperado que ya se guardó al cerrar).
+- **`notification_outbox.payload.delivered_to`** (dentro del `jsonb`, no una columna nueva): array de
+  `profiles.id` que ya recibieron el contenido de esa fila (F3). Ver [notificaciones](../03-modulos/notificaciones.md).
+
 ## Cuentas abiertas (`tabs`)
 Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo. Solo lectura desde la API (`cashier+`); toda escritura pasa por RPC (`0008_tabs.sql`).
 

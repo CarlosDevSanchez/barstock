@@ -17,11 +17,11 @@
 | `R2_BUCKET` | Solo servidor | Bucket privado (nunca público) donde se guardan las imágenes. **Opcional como grupo** |
 | `R2_ENDPOINT_OVERRIDE` | Solo servidor | **Solo desarrollo local, opcional e independiente del grupo anterior.** Sustituye el host real de R2 por un endpoint S3 compatible (el contenedor MinIO de `docker-compose.r2.yml`), usado por el servidor para subir/borrar. Nunca se define en producción |
 | `R2_PUBLIC_ENDPOINT_OVERRIDE` | Solo servidor | **Solo desarrollo local, opcional.** Host que usa el *navegador* para las URLs firmadas (p. ej. `http://localhost:9000`); distinto de `R2_ENDPOINT_OVERRIDE` cuando la app corre dentro de Docker y MinIO se referencia por nombre de contenedor (`http://r2:9000`) para ese tráfico servidor-a-servidor. Si no se define, usa el mismo valor que `R2_ENDPOINT_OVERRIDE` |
-| `RESEND_API_KEY` | Solo servidor | API key de Resend (alertas por correo). **Opcional como grupo** con las otras cuatro de notificaciones |
-| `EMAIL_FROM` | Solo servidor | Remitente de las alertas (p. ej. `Barstock <alerts@ejemplo.com>`). **Opcional como grupo** |
-| `VAPID_PUBLIC_KEY` | Solo servidor | Clave pública VAPID (Web Push). **Opcional como grupo** |
-| `VAPID_PRIVATE_KEY` | Solo servidor | Clave privada VAPID. **Opcional como grupo** |
-| `VAPID_SUBJECT` | Solo servidor | Subject VAPID (`mailto:` o `https:`). **Opcional como grupo** |
+| `RESEND_API_KEY` | Solo servidor | API key de Resend (alertas por correo). **Opcional como grupo** con `EMAIL_FROM` (independiente del grupo de push) |
+| `EMAIL_FROM` | Solo servidor | Remitente de las alertas (p. ej. `Barstock <alerts@ejemplo.com>`). **Opcional como grupo** con `RESEND_API_KEY` |
+| `VAPID_PUBLIC_KEY` | Solo servidor | Clave pública VAPID (Web Push). **Opcional como grupo** con las otras dos VAPID (independiente del grupo de correo) |
+| `VAPID_PRIVATE_KEY` | Solo servidor | Clave privada VAPID. **Opcional como grupo** con las otras dos VAPID |
+| `VAPID_SUBJECT` | Solo servidor | Subject VAPID: debe empezar por `mailto:` o `https://` (regex validada). **Opcional como grupo** con las otras dos VAPID |
 
 Plantilla versionada: [`.env.example`](../../.env.example). Copiarla a `.env.local`.
 
@@ -45,13 +45,16 @@ Docker; `r2` como nombre de host solo existe dentro de esa red). Consola web: `h
 `barstock-local-2026`). Ninguna de las dos variables debe definirse fuera de este flujo local; en Vercel/CI se dejan sin definir para
 hablar con el R2 real.
 
-### Notificaciones (email + push), opcionales como grupo **[Por verificar]**
+### Notificaciones (email y push), dos grupos independientes **[Verificado]**
 
-Las cinco variables `RESEND_API_KEY`, `EMAIL_FROM`, `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` y `VAPID_SUBJECT` se
-validan juntas con `superRefine` en `lib/env/schema.ts`: **las cinco o ninguna**. Sin ellas, `next build` /
-`next dev` siguen funcionando. `dispatchOutbox` omite el correo si faltan Resend/`EMAIL_FROM` y el push si falta
-cualquier `VAPID_*`. Generar VAPID: `bunx web-push generate-vapid-keys`. Detalle del módulo:
-[`03-modulos/notificaciones.md`](../03-modulos/notificaciones.md).
+Correo (`RESEND_API_KEY` + `EMAIL_FROM`) y push (`VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` + `VAPID_SUBJECT`) son **dos grupos
+opcionales independientes** (U6): un negocio puede activar solo correo, solo push, ambos o ninguno. Cada grupo se valida
+con su propio `superRefine` en `lib/env/schema.ts` (todas las variables del grupo o ninguna); `VAPID_SUBJECT` además debe
+empezar por `mailto:` o `https://` (si no, error de validación al arrancar). Sin ninguna variable, `next build`/`next dev`
+siguen funcionando y `dispatchOutbox` retorna sin reclamar filas del outbox (ningún canal configurado). Con solo un grupo
+configurado, `dispatchOutbox` entrega por ese canal y dejas las filas pendientes para el otro (no las marca como
+procesadas por un canal que no tiene credenciales). Generar VAPID: `bunx web-push generate-vapid-keys`. Detalle del
+módulo: [`03-modulos/notificaciones.md`](../03-modulos/notificaciones.md).
 
 ## Validación
 

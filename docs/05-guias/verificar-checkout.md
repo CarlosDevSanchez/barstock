@@ -161,5 +161,25 @@ pegadas (`supabase/templates/`). Ver [autenticación](../01-arquitectura/03-aute
 | 6. Formularios con cadenas vacías (M14) | `resources.test.ts`, `catalog.test.ts` (`''` → `null`) |
 | 7. Otros: escalada de rol (C1), "Low Stock" topado en 5, "Loyalty Points" | `rls.test.ts`, `admin.test.ts`, `rpc.test.ts` |
 
+## D. Orden migración → deploy (F4/D9)
+
+Las migraciones de la fase D–F y de [H6](../04-auditoria/hallazgos/H6-revision-adversarial-a-f.md) añaden columnas
+y RPC que el código nuevo da por hechas (`notify_email`/`notify_push`, `refund_cash_session_id`,
+`refund_after_close`, `voided_after_close`, `register_push_subscription`, `_mark_outbox_delivery`, `_purge_outbox`,
+etc.). El orden correcto en cada despliegue es:
+
+1. **Aplicar las migraciones primero** (`supabase db push` o el pipeline de CI/CD contra el proyecto real),
+   **antes** de desplegar el código nuevo. Nunca al revés: código nuevo contra un esquema viejo es el escenario
+   que F4 cubre como tolerancia (ver 2), no como algo a depender de él.
+2. Tolerancia ya incorporada por si el orden se invierte accidentalmente (nunca sustituye al paso 1):
+   `lib/server/auth.ts` reintenta la sesión sin las columnas `notify_*` si el `select` falla con `42703`
+   (columna inexistente); `dashboardSummarySchema`/`salesReportSchema` tratan los campos añadidos en D–F como
+   `.optional()`; `/cash` tolera que `close_cash_session` devuelva `null`/`void` en vez de la forma `jsonb` nueva.
+3. **Desplegar el código** una vez confirmadas las migraciones (`bun run db:types` regenerado y commiteado).
+4. Ejecutar la consulta de solo lectura de la sección A sobre `orders.status = 'pending'` antes de considerar
+   cualquier backfill de datos legado (ver [H6, M3](../04-auditoria/hallazgos/H6-revision-adversarial-a-f.md):
+   esa migración de backfill sigue sin escribirse, es una decisión de negocio pendiente, no un paso de este
+   checklist).
+
 ## Registrar resultados
 Anotar fecha, entorno, commit y resultado en el hallazgo correspondiente ([`04-auditoria/hallazgos/`](../04-auditoria/hallazgos/)) y no dejar datos de prueba en la base real.
