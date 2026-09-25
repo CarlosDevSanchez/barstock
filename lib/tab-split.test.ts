@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'bun:test'
-import { cashChange, paymentGap, splitEqual, splitRemainder, validateCustom } from './tab-split'
+import { cashChange, cashDifference, paymentGap, splitEqual, splitRemainder, validateCustom } from './tab-split'
 
 describe('splitEqual', () => {
     test('divides evenly when it divides evenly', () => {
@@ -52,6 +52,38 @@ describe('validateCustom', () => {
             remaining: 0,
             valid: true
         })
+    })
+})
+
+describe('cashDifference', () => {
+    test('when received > due: change only, short is 0', () => {
+        const result = cashDifference(50, 32.5, 2)
+        expect(result.change).toBe(17.5)
+        expect(result.short).toBe(0)
+    })
+
+    test('when received < due: short only, change is 0', () => {
+        const result = cashDifference(10, 32.5, 2)
+        expect(result.short).toBe(22.5)
+        expect(result.change).toBe(0)
+    })
+
+    test('when received === due: both are 0', () => {
+        const result = cashDifference(50, 50, 2)
+        expect(result.change).toBe(0)
+        expect(result.short).toBe(0)
+    })
+
+    test('COP (0 decimals): exact in minor units', () => {
+        const result = cashDifference(50_000, 32_500, 0)
+        expect(result.change).toBe(17_500)
+        expect(result.short).toBe(0)
+    })
+
+    test('COP (0 decimals): short when received < due', () => {
+        const result = cashDifference(32_000, 50_000, 0)
+        expect(result.change).toBe(0)
+        expect(result.short).toBe(18_000)
     })
 })
 
