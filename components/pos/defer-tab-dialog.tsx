@@ -65,8 +65,11 @@ export function DeferTabDialog({
             .map(row => ({ value: row.id, label: row.name }))
     ]
 
+    // RPC resolution: p_customer_id → tab.customer → debtor_name. A name-only
+    // POST is discarded when the tab already has a customer, so hide that path.
+    const nameOnlyAllowed = !tab.customer
     const nameOk = debtorName.trim().length >= 2 && debtorName.trim().length <= 120
-    const debtorOk = debtorMode === 'customer' ? Boolean(customerId) : nameOk
+    const debtorOk = !nameOnlyAllowed || debtorMode === 'customer' ? Boolean(customerId) : nameOk
     const abonoSum = remainderMode === 'partial' ? (abono?.reduce((sum, payment) => sum + payment.amount, 0) ?? 0) : 0
     const remaining = Math.round((tab.totals.balance - abonoSum) * 100) / 100
     const canSubmit = !submitting && Boolean(dueDate) && debtorOk && (remainderMode === 'all' || abono !== null)
@@ -81,8 +84,8 @@ export function DeferTabDialog({
                     due_date: dueDate,
                     reminder_enabled: reminder,
                     reminder_note: note || null,
-                    customer_id: debtorMode === 'customer' ? customerId : null,
-                    debtor_name: debtorMode === 'name' ? debtorName.trim() : null,
+                    customer_id: !nameOnlyAllowed || debtorMode === 'customer' ? customerId : null,
+                    debtor_name: nameOnlyAllowed && debtorMode === 'name' ? debtorName.trim() : null,
                     payments: remainderMode === 'partial' && abono ? abono : undefined
                 },
                 idempotencyKey
@@ -106,25 +109,27 @@ export function DeferTabDialog({
                 <div className="space-y-4">
                     <div className="space-y-2">
                         <Label>{t('debtor')}</Label>
-                        <div className="grid grid-cols-2 gap-2">
-                            <Button
-                                type="button"
-                                variant={debtorMode === 'customer' ? 'default' : 'outline'}
-                                aria-pressed={debtorMode === 'customer'}
-                                onClick={() => setDebtorMode('customer')}
-                            >
-                                {t('debtorCustomer')}
-                            </Button>
-                            <Button
-                                type="button"
-                                variant={debtorMode === 'name' ? 'default' : 'outline'}
-                                aria-pressed={debtorMode === 'name'}
-                                onClick={() => setDebtorMode('name')}
-                            >
-                                {t('debtorNameOnly')}
-                            </Button>
-                        </div>
-                        {debtorMode === 'customer' ? (
+                        {nameOnlyAllowed && (
+                            <div className="grid grid-cols-2 gap-2">
+                                <Button
+                                    type="button"
+                                    variant={debtorMode === 'customer' ? 'default' : 'outline'}
+                                    aria-pressed={debtorMode === 'customer'}
+                                    onClick={() => setDebtorMode('customer')}
+                                >
+                                    {t('debtorCustomer')}
+                                </Button>
+                                <Button
+                                    type="button"
+                                    variant={debtorMode === 'name' ? 'default' : 'outline'}
+                                    aria-pressed={debtorMode === 'name'}
+                                    onClick={() => setDebtorMode('name')}
+                                >
+                                    {t('debtorNameOnly')}
+                                </Button>
+                            </div>
+                        )}
+                        {!nameOnlyAllowed || debtorMode === 'customer' ? (
                             <SearchableSelect
                                 id="defer-customer"
                                 value={customerId}

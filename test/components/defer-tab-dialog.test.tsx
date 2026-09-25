@@ -75,6 +75,23 @@ describe('DeferTabDialog', () => {
         expect(within(dialog).getByText('$50.00')).toBeTruthy()
     })
 
+    test('a tab that already has a customer does not offer a name-only path the DB would ignore', async () => {
+        renderDialog({
+            customer: { id: 'cust-1', name: 'Jane Doe', phone: null }
+        })
+        const dialog = await screen.findByRole('dialog', { name: 'Close as receivable' })
+        expect(within(dialog).queryByRole('button', { name: 'Name only' })).toBeNull()
+        expect(within(dialog).queryByLabelText('Name')).toBeNull()
+
+        fireEvent.change(within(dialog).getByLabelText('Due date'), { target: { value: '2099-01-15' } })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Close as receivable' }))
+
+        expect(defer).toHaveBeenCalledTimes(1)
+        const body = defer.mock.calls[0]?.[1] as { customer_id?: string | null; debtor_name?: string | null }
+        expect(body.customer_id).toBe('cust-1')
+        expect(body.debtor_name ?? null).toBeNull()
+    })
+
     test('an abono that covers the whole balance is rejected in the UI', async () => {
         renderDialog({ label: 'Mesa 4' })
         const dialog = await screen.findByRole('dialog', { name: 'Close as receivable' })
