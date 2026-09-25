@@ -102,6 +102,26 @@ describe('PaymentDialog — split payment', () => {
         listbox = await screen.findByRole('listbox')
         expect(within(listbox).queryByText('Card')).toBeNull()
     })
+
+    test('changing the second method also clears received and the split amounts, like changing the first', async () => {
+        renderDialog({ amountDue: 32.99 })
+        const dialog = await screen.findByRole('dialog', { name: 'Complete Payment' })
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Split payment' }))
+
+        const firstAmount = within(dialog).getByRole('textbox', { name: 'First payment Amount' })
+        fireEvent.change(firstAmount, { target: { value: '10' } })
+        fireEvent.change(within(dialog).getByLabelText('Cash received'), { target: { value: '50' } })
+        expect(within(dialog).getByText(/Change:/)).toBeTruthy()
+        expect((firstAmount as HTMLInputElement).value).not.toBe('')
+
+        // Second payment defaults to card; switch it to e-wallet without touching the first method.
+        fireEvent.click(within(dialog).getByRole('combobox', { name: 'Second payment' }))
+        const listbox = await screen.findByRole('listbox')
+        fireEvent.click(within(listbox).getByText('E-Wallet'))
+
+        expect((firstAmount as HTMLInputElement).value).toBe('')
+        expect(within(dialog).queryByLabelText('Cash received')).toBeNull() // cash is no longer involved
+    })
 })
 
 describe('PaymentDialog — reset on open', () => {

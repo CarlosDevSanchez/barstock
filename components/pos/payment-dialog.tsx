@@ -153,6 +153,11 @@ function PaymentDialogBody({
         clearPaymentEntry()
     }
 
+    const selectMethod2 = (value: PaymentMethod) => {
+        setMethod2(value)
+        clearPaymentEntry()
+    }
+
     const toggleSplit = () => {
         setSplit(current => {
             const next = !current
@@ -246,7 +251,7 @@ function PaymentDialogBody({
                             {
                                 label: t('secondPayment'),
                                 method: method2,
-                                onMethod: (value: PaymentMethod) => setMethod2(value),
+                                onMethod: selectMethod2,
                                 options: PAYMENT_METHODS.filter(candidate => candidate !== method1),
                                 amount: secondAmount,
                                 onAmount: (value: number | null) => {
