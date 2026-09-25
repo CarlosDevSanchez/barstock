@@ -80,6 +80,9 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     const [pendingPurchase, setPendingPurchase] = useState(false)
     // U3: generated once per dialog instance, reused on every retry.
     const [purchaseKey] = useState(() => crypto.randomUUID())
+    // E5: search against the API instead of a flat pageSize:100 fetch.
+    const [supplierSearch, setSupplierSearch] = useState('')
+    const debouncedSupplierSearch = useDebouncedValue(supplierSearch)
 
     const form = useForm<AdjustInput, unknown, AdjustOutput>({
         resolver: zodResolver(inventoryAdjustSchema),
@@ -90,7 +93,10 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     const deltaNum = typeof delta === 'number' ? delta : Number(delta)
     const showPurchaseOption = Number.isFinite(deltaNum) && deltaNum > 0
 
-    const suppliers = useApiQuery(signal => suppliersApi.list({ pageSize: 100 }, signal), 'purchase-suppliers')
+    const suppliers = useApiQuery(
+        signal => suppliersApi.list({ pageSize: 50, q: debouncedSupplierSearch }, signal),
+        `purchase-suppliers#${debouncedSupplierSearch}`
+    )
     const desk = useApiQuery(signal => cashApi.current(signal), 'purchase-cash-desk')
     const sessions = desk.data?.sessions ?? []
     const selectedSupplier = supplierId || suppliers.data?.data[0]?.id || ''
@@ -174,6 +180,15 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
                             )}
                             {mode === 'purchase' && showPurchaseOption ? (
                                 <>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="adj-supplier-search">{tc('search')}</Label>
+                                        <Input
+                                            id="adj-supplier-search"
+                                            value={supplierSearch}
+                                            onChange={event => setSupplierSearch(event.target.value)}
+                                            placeholder={tc('search')}
+                                        />
+                                    </div>
                                     <div className="space-y-1">
                                         <Label htmlFor="adj-supplier">{t('supplier')}</Label>
                                         <select
@@ -334,15 +349,7 @@ interface PurchaseLine {
     unit_cost: string
 }
 
-function RegisterPurchaseDialog({
-    products,
-    onClose,
-    onSaved
-}: {
-    products: InventoryListItem[]
-    onClose: () => void
-    onSaved: () => void
-}) {
+function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
     const t = useTranslations('inventory')
     const tc = useTranslations('common')
     const money = useMoney()
@@ -354,6 +361,15 @@ function RegisterPurchaseDialog({
     const [pending, setPending] = useState(false)
     // U3: generated once per dialog instance, reused on every retry.
     const [purchaseKey] = useState(() => crypto.randomUUID())
+    // E5: the dialog searches the catalog against the API (`q`) instead of the parent's flat `pageSize: 100` fetch,
+    // so a catalog bigger than one page stays reachable from every line's product picker.
+    const [productSearch, setProductSearch] = useState('')
+    const debouncedProductSearch = useDebouncedValue(productSearch)
+    const catalogQuery = useApiQuery(
+        signal => inventoryApi.list({ pageSize: 50, q: debouncedProductSearch }, signal),
+        `purchase-dialog-catalog#${debouncedProductSearch}`
+    )
+    const products = useMemo(() => catalogQuery.data?.data ?? [], [catalogQuery.data])
     const [lines, setLines] = useState<PurchaseLine[]>([
         {
             product_id: products[0]?.product.id ?? '',
@@ -362,7 +378,13 @@ function RegisterPurchaseDialog({
         }
     ])
 
-    const suppliers = useApiQuery(signal => suppliersApi.list({ pageSize: 100 }, signal), 'multi-purchase-suppliers')
+    // E5: search against the API instead of a flat pageSize:100 fetch.
+    const [supplierSearch, setSupplierSearch] = useState('')
+    const debouncedSupplierSearch = useDebouncedValue(supplierSearch)
+    const suppliers = useApiQuery(
+        signal => suppliersApi.list({ pageSize: 50, q: debouncedSupplierSearch }, signal),
+        `multi-purchase-suppliers#${debouncedSupplierSearch}`
+    )
     const desk = useApiQuery(signal => cashApi.current(signal), 'multi-purchase-cash-desk')
     const sessions = desk.data?.sessions ?? []
     const selectedSupplier = supplierId || suppliers.data?.data[0]?.id || ''
@@ -405,6 +427,15 @@ function RegisterPurchaseDialog({
                 </DialogHeader>
                 <div className="space-y-3">
                     <div className="space-y-1">
+                        <Label htmlFor="po-supplier-search">{tc('search')}</Label>
+                        <Input
+                            id="po-supplier-search"
+                            value={supplierSearch}
+                            onChange={event => setSupplierSearch(event.target.value)}
+                            placeholder={tc('search')}
+                        />
+                    </div>
+                    <div className="space-y-1">
                         <Label htmlFor="po-supplier">{t('supplier')}</Label>
                         <select
                             id="po-supplier"
@@ -418,6 +449,15 @@ function RegisterPurchaseDialog({
                                 </option>
                             ))}
                         </select>
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="po-product-search">{tc('search')}</Label>
+                        <Input
+                            id="po-product-search"
+                            value={productSearch}
+                            onChange={event => setProductSearch(event.target.value)}
+                            placeholder={tc('search')}
+                        />
                     </div>
                     {lines.map((line, index) => {
                         const catalog = productById.get(line.product_id)
@@ -603,7 +643,6 @@ export default function InventoryPage() {
         signal => inventoryApi.list({ page, pageSize, q: search, low: filterLow }, signal),
         JSON.stringify({ page, pageSize, search, filterLow })
     )
-    const catalog = useApiQuery(signal => inventoryApi.list({ pageSize: 100 }, signal), 'purchase-catalog')
     const summary = inventory.data?.summary
     const sellablePackages = useApiQuery(
         signal => promotionsApi.list({ pageSize: 100, active: true }, signal),
@@ -915,7 +954,6 @@ export default function InventoryPage() {
                     onSaved={() => {
                         setAdjusting(null)
                         inventory.reload()
-                        catalog.reload()
                     }}
                 />
             )}
@@ -932,12 +970,10 @@ export default function InventoryPage() {
             )}
             {buying && (
                 <RegisterPurchaseDialog
-                    products={catalog.data?.data ?? inventory.data?.data ?? []}
                     onClose={() => setBuying(false)}
                     onSaved={() => {
                         setBuying(false)
                         inventory.reload()
-                        catalog.reload()
                     }}
                 />
             )}

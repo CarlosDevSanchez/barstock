@@ -4,8 +4,19 @@
  * so a bug here can never cause an overcharge — at worst it offers a share the server then rejects.
  */
 
-const toMinorUnits = (amount: number, decimals: number) => Math.round(amount * 10 ** decimals)
-const fromMinorUnits = (amountMinor: number, decimals: number) => amountMinor / 10 ** decimals
+export const toMinorUnits = (amount: number, decimals: number) => Math.round(amount * 10 ** decimals)
+export const fromMinorUnits = (amountMinor: number, decimals: number) => amountMinor / 10 ** decimals
+
+/**
+ * Sums money amounts in minor units (cents) so the total is never off by a float-rounding cent, then converts
+ * back. Used for on-screen aggregates (a pending receipt's outstanding balance, a customer's total receivables).
+ */
+export function sumMoney(amounts: number[], decimals: number): number {
+    return fromMinorUnits(
+        amounts.reduce((totalMinor, amount) => totalMinor + toMinorUnits(amount, decimals), 0),
+        decimals
+    )
+}
 
 /**
  * Splits `balance` into `n` equal-as-possible shares, working in the currency's smallest unit (`decimals`: 0 for

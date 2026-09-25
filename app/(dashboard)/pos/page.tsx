@@ -607,7 +607,9 @@ export default function POSPage() {
             <Dialog open={completedSale !== null} onOpenChange={open => !open && setCompletedSale(null)}>
                 <DialogContent className="sm:max-w-md">
                     <DialogHeader>
-                        <DialogTitle>{t('saleCompleted')}</DialogTitle>
+                        <DialogTitle>
+                            {completedSale?.status === 'pending' ? t('receivableRegistered') : t('saleCompleted')}
+                        </DialogTitle>
                         <DialogDescription>
                             {completedSale
                                 ? t('saleCompletedHint', {

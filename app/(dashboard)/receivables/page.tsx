@@ -18,6 +18,7 @@ import { errorMessage } from '@/lib/api/client'
 import { receivablesApi, type ReceivableRow } from '@/lib/api/receivables'
 import { roleAtLeast } from '@/lib/auth/roles'
 import { currencyDecimals } from '@/lib/money'
+import { paymentGap, splitRemainder } from '@/lib/tab-split'
 import { PAYMENT_METHODS } from '@/lib/validation/resources'
 import type { PaymentMethod } from '@/types'
 import { useApiQuery } from '@/hooks/use-api-query'
@@ -294,25 +295,36 @@ function PayDialog({
 }) {
     const t = useTranslations('receivables')
     const tc = useTranslations('common')
+    const money = useMoney()
     const [method1, setMethod1] = useState<PaymentMethod>('cash')
     const [method2, setMethod2] = useState<PaymentMethod>('card')
     const [amount1, setAmount1] = useState(String(row.balance))
     const [split, setSplit] = useState(false)
-    const [amount2, setAmount2] = useState('')
+    // C6: same auto-complete-the-remainder pattern as the POS split payment (lib/tab-split.ts, components/pos/
+    // cart-sheet.tsx) — the second amount defaults to "whatever is left of the balance" and only stops tracking
+    // it once the person types their own value.
+    const [amount2Draft, setAmount2Draft] = useState<string | null>(null)
     const [submitting, setSubmitting] = useState(false)
     // U3/C5: generated once when the dialog opens and reused on every retry, so a double-click or a retry after
     // a dropped response replays the same request instead of paying twice.
     const [idempotencyKey] = useState(() => crypto.randomUUID())
+
+    const firstAmount = Number(amount1) || 0
+    const amount2 = amount2Draft ?? (split ? splitRemainder(row.balance, firstAmount, decimals).toFixed(decimals) : '')
+    const secondAmount = Number(amount2) || 0
+    const gap = split ? paymentGap(row.balance, [firstAmount, secondAmount], decimals) : 0
+    const sameMethod = split && method1 === method2
+    const canSubmit = split ? gap === 0 && firstAmount > 0 && secondAmount > 0 && !sameMethod : firstAmount > 0
 
     const submit = async () => {
         setSubmitting(true)
         try {
             const payments = split
                 ? [
-                      { method: method1, amount: Number(amount1) || 0 },
-                      { method: method2, amount: Number(amount2) || 0 }
+                      { method: method1, amount: firstAmount },
+                      { method: method2, amount: secondAmount }
                   ]
-                : [{ method: method1, amount: Number(amount1) || 0 }]
+                : [{ method: method1, amount: firstAmount }]
             await receivablesApi.pay(row.order_id, { payments }, idempotencyKey)
             toast.success(t('paymentSuccess'))
             onDone()
@@ -357,7 +369,15 @@ function PayDialog({
                             onChange={event => setAmount1(event.target.value)}
                         />
                     </div>
-                    <Button type="button" variant="outline" size="sm" onClick={() => setSplit(current => !current)}>
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        onClick={() => {
+                            setSplit(current => !current)
+                            setAmount2Draft(null)
+                        }}
+                    >
                         {t('splitPayment')}
                     </Button>
                     {split ? (
@@ -383,9 +403,18 @@ function PayDialog({
                                     min="0"
                                     step={decimals === 0 ? 1 : 0.01}
                                     value={amount2}
-                                    onChange={event => setAmount2(event.target.value)}
+                                    onChange={event => setAmount2Draft(event.target.value)}
                                 />
                             </div>
+                            {sameMethod ? (
+                                <p className="text-sm text-red-600">{t('sameMethodTwice')}</p>
+                            ) : gap !== 0 ? (
+                                <p className="text-sm text-muted-foreground">
+                                    {gap > 0
+                                        ? t('paymentShort', { amount: money(gap) })
+                                        : t('paymentOver', { amount: money(-gap) })}
+                                </p>
+                            ) : null}
                         </>
                     ) : null}
                 </div>
@@ -393,7 +422,7 @@ function PayDialog({
                     <Button variant="outline" disabled={submitting} onClick={onClose}>
                         {t('cancel')}
                     </Button>
-                    <Button disabled={submitting} onClick={() => void submit()}>
+                    <Button disabled={submitting || !canSubmit} onClick={() => void submit()}>
                         {t('recordPayment')}
                     </Button>
                 </DialogFooter>
