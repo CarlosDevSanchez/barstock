@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import {
     adminClient,
     createProduct,
@@ -252,99 +252,9 @@ describe('push_subscriptions RLS', () => {
     })
 })
 
-describe('dispatchOutbox', () => {
-    test('sends one summary per recipient; HTTP 410 deletes the subscription', async () => {
-        const emails: string[] = []
-        const pushes: string[] = []
-
-        void mock.module('resend', () => ({
-            Resend: class {
-                emails = {
-                    send: async ({ to }: { to: string }) => {
-                        emails.push(to)
-                        return { data: { id: 'msg' }, error: null }
-                    }
-                }
-            }
-        }))
-
-        void mock.module('web-push', () => ({
-            WebPushError: class extends Error {
-                statusCode: number
-                constructor(message: string, statusCode: number) {
-                    super(message)
-                    this.statusCode = statusCode
-                }
-            },
-            default: {
-                setVapidDetails: () => undefined,
-                sendNotification: async (sub: { endpoint: string }) => {
-                    pushes.push(sub.endpoint)
-                    if (sub.endpoint.includes('gone')) {
-                        const err = new Error('Gone') as Error & { statusCode: number }
-                        err.statusCode = 410
-                        throw err
-                    }
-                    return { statusCode: 201 }
-                }
-            }
-        }))
-
-        process.env.RESEND_API_KEY = 're_test'
-        process.env.EMAIL_FROM = 'Barstock <alerts@example.com>'
-        process.env.VAPID_PUBLIC_KEY = 'vapid-pub'
-        process.env.VAPID_PRIVATE_KEY = 'vapid-priv'
-        process.env.VAPID_SUBJECT = 'mailto:ops@example.com'
-
-        await clearOutbox()
-        await service()
-            .from('notification_outbox')
-            .insert({
-                kind: 'low_stock',
-                payload: {
-                    inventory_id: crypto.randomUUID(),
-                    product_id: crypto.randomUUID(),
-                    quantity: 0,
-                    threshold: 1
-                }
-            })
-
-        const goneEndpoint = `https://fcm.googleapis.com/fcm/send/${uniq('gone')}`
-        const okEndpoint = `https://fcm.googleapis.com/fcm/send/${uniq('ok')}`
-        await service()
-            .from('push_subscriptions')
-            .insert([
-                {
-                    user_id: users.admin.id,
-                    endpoint: goneEndpoint,
-                    p256dh: 'p',
-                    auth: 'a'
-                },
-                {
-                    user_id: users.admin.id,
-                    endpoint: okEndpoint,
-                    p256dh: 'p',
-                    auth: 'a'
-                }
-            ])
-
-        // Fresh import after mocks
-        const { dispatchOutbox } = await import('@/lib/server/services/notifications')
-        await dispatchOutbox()
-
-        expect(emails.length).toBeGreaterThanOrEqual(1)
-        expect(pushes).toContain(okEndpoint)
-        expect(pushes).toContain(goneEndpoint)
-
-        const { data: remaining } = await service()
-            .from('push_subscriptions')
-            .select('endpoint')
-            .in('endpoint', [goneEndpoint, okEndpoint])
-        const endpoints = ((remaining as Array<{ endpoint: string }> | null) ?? []).map(r => r.endpoint)
-        expect(endpoints).toContain(okEndpoint)
-        expect(endpoints).not.toContain(goneEndpoint)
-    })
-})
+// `dispatchOutbox` (mock.module('resend'|'web-push')) moved to notifications-dispatch.test.ts, run in its own
+// bun process (docs/05-guias/testing.md): mock.module is global to the whole bun process, and would otherwise
+// leak its resend/web-push replacements into every other file `bun test test/integration` runs together.
 
 describe('notification preference and push HTTP routes', () => {
     test('PATCH prefs and POST/DELETE push subscription load validation schemas', async () => {

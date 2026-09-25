@@ -1,12 +1,14 @@
 // Merges the lcov reports of the unit and integration test processes and enforces a line-coverage floor on the code where a
-// mistake costs money or security. Two processes are needed (see docs/05-guias/testing.md), so Bun's own
+// mistake costs money or security. Multiple processes are needed (see docs/05-guias/testing.md), so Bun's own
 // `coverageThreshold` cannot be used: it would judge each process on its own.
 import { existsSync, readdirSync, readFileSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 
 const THRESHOLD = 0.8
 const GROUPS = ['lib/server', 'lib/validation'] as const
-const REPORTS = ['coverage/unit/lcov.info', 'coverage/integration/lcov.info']
+// Three processes since testing.md moved the resend/web-push mock.module tests into their own file/process
+// (notifications-dispatch.test.ts), separate from the rest of test/integration.
+const REPORTS = ['coverage/unit/lcov.info', 'coverage/integration/lcov.info', 'coverage/integration-dispatch/lcov.info']
 
 const root = process.cwd()
 const hits = new Map<string, Map<number, number>>() // file -> line -> max hits across reports
