@@ -141,6 +141,16 @@ export async function createProduct(
     return data
 }
 
+export async function createSupplier(overrides: Partial<TablesInsert<'suppliers'>> = {}) {
+    const { data, error } = await adminClient()
+        .from('suppliers')
+        .insert({ name: uniq('Supplier'), ...overrides })
+        .select()
+        .single()
+    if (error) throw error
+    return data
+}
+
 export async function createCustomer(overrides: Partial<TablesInsert<'customers'>> = {}) {
     const { data, error } = await adminClient()
         .from('customers')

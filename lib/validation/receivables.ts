@@ -49,6 +49,7 @@ export const receivableRowSchema = z.object({
     balance: z.number(),
     due_date: z.string().nullable(),
     reminder_enabled: z.boolean(),
+    reminder_note: z.string().nullable(),
     status: z.string(),
     days_overdue: z.number()
 })

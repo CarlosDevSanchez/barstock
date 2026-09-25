@@ -194,9 +194,11 @@ export default function CashPage() {
                         <p>
                             {t('float')}: {money(session.opening_float)}
                         </p>
-                        <p>
-                            {t('expected')}: {money(session.expected_cash)}
-                        </p>
+                        {session.expected_cash !== null ? (
+                            <p>
+                                {t('expected')}: {money(session.expected_cash)}
+                            </p>
+                        ) : null}
                         <ul className="text-muted-foreground">
                             {session.movements.map(movement => (
                                 <li key={movement.id}>
@@ -377,9 +379,12 @@ function CountDialog({
     const t = useTranslations('cash')
     const tc = useTranslations('common')
     const money = useMoney()
+    const { user } = useSession()
+    const canSeeExpected = roleAtLeast(user.role, 'manager')
     const [counted, setCounted] = useState('')
     const [pending, setPending] = useState(false)
-    const difference = counted === '' || !session ? null : Number(counted) - session.expected_cash
+    const difference =
+        counted === '' || !session || session.expected_cash === null ? null : Number(counted) - session.expected_cash
     return (
         <Dialog
             open={session !== null}
@@ -394,9 +399,11 @@ function CountDialog({
                 </DialogHeader>
                 {session ? (
                     <div className="space-y-3 text-sm">
-                        <p>
-                            {t('expected')}: {money(session.expected_cash)}
-                        </p>
+                        {session.expected_cash !== null ? (
+                            <p>
+                                {t('expected')}: {money(session.expected_cash)}
+                            </p>
+                        ) : null}
                         <Input
                             inputMode="decimal"
                             value={counted}
@@ -420,7 +427,15 @@ function CountDialog({
                             if (!session) return
                             setPending(true)
                             try {
-                                await cashApi.closeSession(session.id, { counted_cash: Number(counted) })
+                                const result = await cashApi.closeSession(session.id, {
+                                    counted_cash: Number(counted)
+                                })
+                                // F4: tolerate a deploy where the code shipped before this migration (result
+                                // still `void`/`null` from the old close_cash_session) instead of throwing.
+                                if (!canSeeExpected && typeof result?.difference === 'number') {
+                                    // R-1: the cashier only learns the difference now, after closing.
+                                    toast.info(`${t('difference')}: ${money(result.difference)}`)
+                                }
                                 setCounted('')
                                 onDone()
                             } catch (error) {

@@ -1,6 +1,6 @@
 'use client'
 
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useTheme } from 'next-themes'
@@ -69,8 +69,41 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
     const [notifyEmail, setNotifyEmail] = useState(user.notifyEmail)
     const [notifyPush, setNotifyPush] = useState(user.notifyPush)
     const [prefsBusy, setPrefsBusy] = useState(false)
+    // U5: whether THIS browser actually holds a push subscription, independent of the server-side `notify_push`
+    // preference — a shared/kiosk device must not show "push on" just because some other user enabled it here.
+    const [hasBrowserSub, setHasBrowserSub] = useState(false)
+
+    useEffect(() => {
+        let cancelled = false
+        if (!('serviceWorker' in navigator)) return
+        navigator.serviceWorker.ready
+            .then(reg => reg.pushManager.getSubscription())
+            .then(sub => {
+                if (!cancelled) setHasBrowserSub(Boolean(sub))
+            })
+            .catch(() => {
+                /* no service worker registration yet: treat as no subscription */
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [])
 
     const doLogout = async () => {
+        // U5: drop this browser's push subscription BEFORE logging out, so a shared/kiosk device does not keep
+        // sending the next cashier's push notifications to this session's subscription.
+        try {
+            if ('serviceWorker' in navigator) {
+                const reg = await navigator.serviceWorker.ready
+                const sub = await reg.pushManager.getSubscription()
+                if (sub) {
+                    await notificationsApi.unsubscribe(sub.endpoint).catch(() => {})
+                    await sub.unsubscribe().catch(() => {})
+                }
+            }
+        } catch {
+            /* best-effort: never block logout on push cleanup */
+        }
         try {
             await apiPost('auth/logout')
         } catch {
@@ -134,7 +167,10 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
     }
 
     const togglePush = async () => {
-        if (notifyPush) {
+        // U5: decide the action from what THIS browser actually holds, not just the server preference — otherwise
+        // a device that never had a real subscription (notify_push true from a different device) gets stuck
+        // showing "on" with a switch that does nothing when clicked.
+        if (notifyPush && hasBrowserSub) {
             try {
                 const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.ready : null
                 const sub = await reg?.pushManager.getSubscription()
@@ -142,6 +178,7 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
                     await notificationsApi.unsubscribe(sub.endpoint)
                     await sub.unsubscribe()
                 }
+                setHasBrowserSub(false)
                 await savePrefs(notifyEmail, false)
             } catch (error: unknown) {
                 toast.error(errorMessage(error, tn('prefsFailed')))
@@ -181,6 +218,7 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
                 auth: json.keys.auth,
                 user_agent: navigator.userAgent
             })
+            setHasBrowserSub(true)
             await savePrefs(notifyEmail, true)
         } catch (error: unknown) {
             toast.error(errorMessage(error, tn('pushFailed')))
@@ -273,8 +311,8 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
                     <input
                         type="checkbox"
                         role="switch"
-                        aria-checked={notifyPush}
-                        checked={notifyPush}
+                        aria-checked={notifyPush && hasBrowserSub}
+                        checked={notifyPush && hasBrowserSub}
                         readOnly
                         className="h-4 w-4 accent-emerald-600 pointer-events-none"
                     />

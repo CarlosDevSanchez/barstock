@@ -1,4 +1,4 @@
-import { afterAll, beforeAll, describe, expect, mock, test } from 'bun:test'
+import { afterAll, beforeAll, describe, expect, test } from 'bun:test'
 import {
     adminClient,
     createProduct,
@@ -153,6 +153,39 @@ describe('_claim_outbox', () => {
         const overlap = idsA.filter(id => idsB.includes(id))
         expect(overlap).toEqual([])
     })
+
+    // D2 (F2): see docs/04-auditoria/hallazgos/H6-revision-adversarial-a-f.md
+    test('a row claimed more than 10 minutes ago is reclaimed instead of stuck forever', async () => {
+        await clearOutbox()
+        const productId = crypto.randomUUID()
+        const insertError = await service()
+            .from('notification_outbox')
+            .insert({
+                kind: 'low_stock',
+                payload: { inventory_id: crypto.randomUUID(), product_id: productId, quantity: 0, threshold: 1 }
+            })
+        expect(insertError.error).toBeNull()
+        const inserted = await service().from('notification_outbox').select('id').eq('kind', 'low_stock').single()
+        expect(inserted.error).toBeNull()
+        const id = (inserted.data as { id: number }).id
+
+        // Simulate a dispatch that claimed the row and then crashed before marking success/failure.
+        const staleClaim = await service()
+            .from('notification_outbox')
+            .update({ claimed_at: new Date(Date.now() - 11 * 60_000).toISOString() })
+            .eq('id', id)
+        expect(staleClaim.error).toBeNull()
+
+        const tooSoon = await service().rpc('_claim_outbox', { p_limit: 50 })
+        // A claim from 11 minutes ago is stale (> 10 min) and must be reclaimed.
+        expect(tooSoon.error).toBeNull()
+        expect(((tooSoon.data as Array<{ id: number }> | null) ?? []).map(r => r.id)).toContain(id)
+
+        // A fresh claim (just made, e.g. by the call above) must NOT be immediately reclaimed by another caller.
+        const immediateRetry = await service().rpc('_claim_outbox', { p_limit: 50 })
+        expect(immediateRetry.error).toBeNull()
+        expect(((immediateRetry.data as Array<{ id: number }> | null) ?? []).map(r => r.id)).not.toContain(id)
+    })
 })
 
 describe('receivable_due outbox', () => {
@@ -219,99 +252,9 @@ describe('push_subscriptions RLS', () => {
     })
 })
 
-describe('dispatchOutbox', () => {
-    test('sends one summary per recipient; HTTP 410 deletes the subscription', async () => {
-        const emails: string[] = []
-        const pushes: string[] = []
-
-        void mock.module('resend', () => ({
-            Resend: class {
-                emails = {
-                    send: async ({ to }: { to: string }) => {
-                        emails.push(to)
-                        return { data: { id: 'msg' }, error: null }
-                    }
-                }
-            }
-        }))
-
-        void mock.module('web-push', () => ({
-            WebPushError: class extends Error {
-                statusCode: number
-                constructor(message: string, statusCode: number) {
-                    super(message)
-                    this.statusCode = statusCode
-                }
-            },
-            default: {
-                setVapidDetails: () => undefined,
-                sendNotification: async (sub: { endpoint: string }) => {
-                    pushes.push(sub.endpoint)
-                    if (sub.endpoint.includes('gone')) {
-                        const err = new Error('Gone') as Error & { statusCode: number }
-                        err.statusCode = 410
-                        throw err
-                    }
-                    return { statusCode: 201 }
-                }
-            }
-        }))
-
-        process.env.RESEND_API_KEY = 're_test'
-        process.env.EMAIL_FROM = 'Barstock <alerts@example.com>'
-        process.env.VAPID_PUBLIC_KEY = 'vapid-pub'
-        process.env.VAPID_PRIVATE_KEY = 'vapid-priv'
-        process.env.VAPID_SUBJECT = 'mailto:ops@example.com'
-
-        await clearOutbox()
-        await service()
-            .from('notification_outbox')
-            .insert({
-                kind: 'low_stock',
-                payload: {
-                    inventory_id: crypto.randomUUID(),
-                    product_id: crypto.randomUUID(),
-                    quantity: 0,
-                    threshold: 1
-                }
-            })
-
-        const goneEndpoint = `https://push.example.test/${uniq('gone')}`
-        const okEndpoint = `https://push.example.test/${uniq('ok')}`
-        await service()
-            .from('push_subscriptions')
-            .insert([
-                {
-                    user_id: users.admin.id,
-                    endpoint: goneEndpoint,
-                    p256dh: 'p',
-                    auth: 'a'
-                },
-                {
-                    user_id: users.admin.id,
-                    endpoint: okEndpoint,
-                    p256dh: 'p',
-                    auth: 'a'
-                }
-            ])
-
-        // Fresh import after mocks
-        const { dispatchOutbox } = await import('@/lib/server/services/notifications')
-        await dispatchOutbox()
-
-        expect(emails.length).toBeGreaterThanOrEqual(1)
-        expect(pushes).toContain(okEndpoint)
-        expect(pushes).toContain(goneEndpoint)
-
-        const { data: remaining } = await service()
-            .from('push_subscriptions')
-            .select('endpoint')
-            .in('endpoint', [goneEndpoint, okEndpoint])
-        const endpoints = ((remaining as Array<{ endpoint: string }> | null) ?? []).map(r => r.endpoint)
-        expect(endpoints).toContain(okEndpoint)
-        expect(endpoints).not.toContain(goneEndpoint)
-    })
-})
+// `dispatchOutbox` (mock.module('resend'|'web-push')) moved to notifications-dispatch.test.ts, run in its own
+// bun process (docs/05-guias/testing.md): mock.module is global to the whole bun process, and would otherwise
+// leak its resend/web-push replacements into every other file `bun test test/integration` runs together.
 
 describe('notification preference and push HTTP routes', () => {
     test('PATCH prefs and POST/DELETE push subscription load validation schemas', async () => {
@@ -330,7 +273,7 @@ describe('notification preference and push HTTP routes', () => {
             notify_push: true
         })
 
-        const endpoint = `https://push.example.test/${uniq('http')}`
+        const endpoint = `https://fcm.googleapis.com/fcm/send/${uniq('http')}`
         const created = await http.post(postPush, 'me/push-subscriptions', {
             body: { endpoint, p256dh: 'pk', auth: 'ak', user_agent: 'test' }
         })
@@ -343,5 +286,36 @@ describe('notification preference and push HTTP routes', () => {
 
         const key = await http.get(getKey, 'me/push-key')
         expect([200, 503]).toContain(key.status)
+    })
+
+    // S2 (SSRF allowlist): see docs/04-auditoria/hallazgos/H6-revision-adversarial-a-f.md
+    test('a private-network or non-allowlisted push endpoint is rejected with 400', async () => {
+        const { POST: postPush } = await import('@/app/api/v1/me/push-subscriptions/route')
+        const { loginAs } = await import('../helpers/http')
+        const http = await loginAs('cashier')
+
+        // Rejected by the pushSubscriptionSchema allowlist refine — this codebase's convention for a zod
+        // validation failure is 422, not 400 (see auth.test.ts / currency.test.ts).
+        const privateIp = await http.post(postPush, 'me/push-subscriptions', {
+            body: { endpoint: 'http://10.0.0.1/push', p256dh: 'pk', auth: 'ak' }
+        })
+        expect(privateIp.status).toBe(422)
+
+        const untrustedHost = await http.post(postPush, 'me/push-subscriptions', {
+            body: { endpoint: 'https://evil.com/push', p256dh: 'pk', auth: 'ak' }
+        })
+        expect(untrustedHost.status).toBe(422)
+    })
+
+    // U5-adjacent: deleting a subscription must work even for a host the allowlist no longer covers.
+    test('deleting a push subscription does not apply the endpoint allowlist', async () => {
+        const { DELETE: deletePush } = await import('@/app/api/v1/me/push-subscriptions/route')
+        const { loginAs } = await import('../helpers/http')
+        const http = await loginAs('cashier')
+
+        const removed = await http.delete(deletePush, 'me/push-subscriptions', {
+            body: { endpoint: 'https://evil.com/push' }
+        })
+        expect(removed.status).toBe(200)
     })
 })

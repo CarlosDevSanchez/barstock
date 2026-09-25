@@ -11,9 +11,7 @@ export const POST = route({
     body: inventoryAdjustSchema,
     handler: async ({ supabase, params, body }) => {
         const result = await adjustInventory(supabase, params.id, body.delta, body.reason)
-        afterResponse(() => {
-            void dispatchOutbox()
-        })
+        afterResponse(() => dispatchOutbox())
         return ok(result)
     }
 })

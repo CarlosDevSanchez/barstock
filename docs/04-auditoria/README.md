@@ -16,6 +16,7 @@
 | H4 Flujos incompletos | Recuperar contraseña roto, ajustes falsos, sin alta de stock | En curso: los tres **hechos**; compras y gastos sin UI (etapa 2) |
 | H5 Build sin variables | `supabaseUrl is required` | **Corregido**: validación zod que nombra la variable; build en CI |
 | M1–M18 | Todos abiertos | 11 corregidos o verificados y 7 parciales: [detalle](hallazgos/medios-y-bajos.md) |
+| [H6](hallazgos/H6-revision-adversarial-a-f.md) — revisión adversarial fases A–F (caja, cuentas por cobrar, notificaciones) | Nuevo | En curso: seguridad y dinero de mayor severidad corregidos en local (`fix/adversarial-a-f`); fiabilidad/UI de menor severidad y B9 (omitido por decisión del usuario) quedan sin tocar |
 
 **Sigue abierto y fuera de lo que se ha hecho:** aplicar las migraciones a la **base real** (paso controlado: [guía](../05-guias/verificar-checkout.md)), validar con el negocio las reglas D3/D6/D7/D9, monitoreo de errores,
 la primera ejecución real del CI en GitHub, y la etapa 2 (órdenes de compra, gastos, variantes en el POS). Ver el [plan de remediación](../06-roadmap/plan-de-remediacion.md).

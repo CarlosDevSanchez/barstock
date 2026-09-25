@@ -3,7 +3,8 @@
 import { useLocale, useTranslations } from 'next-intl'
 import { taxBreakdown } from '@/lib/receipt'
 import { groupOrderItemsByPromotion } from '@/lib/order-item-groups'
-import { formatMoney } from '@/lib/money'
+import { currencyDecimals, formatMoney } from '@/lib/money'
+import { sumMoney } from '@/lib/tab-split'
 import { moneyLocale } from '@/lib/i18n/config'
 import type { OrderDetail } from '@/lib/api/orders'
 import type { SettingsWithLogoUrl } from '@/lib/api/settings'
@@ -225,8 +226,13 @@ export function ReceiptTicket({ order, settings, provisional = false }: ReceiptT
                     <div className="border-t border-dashed border-black my-2" />
                     <p className="text-center text-sm font-bold" data-testid="receipt-pending-stamp">
                         {t('receiptPendingStamp', {
+                            // E7: sum in minor units so a float remainder never off-by-a-cent the printed balance.
                             balance: money(
-                                order.total - order.payments.reduce((sum, payment) => sum + payment.amount, 0)
+                                order.total -
+                                    sumMoney(
+                                        order.payments.map(payment => payment.amount),
+                                        currencyDecimals(settings.currency)
+                                    )
                             ),
                             due: (() => {
                                 const dueDate = (order as OrderDetail & { due_date?: string | null }).due_date

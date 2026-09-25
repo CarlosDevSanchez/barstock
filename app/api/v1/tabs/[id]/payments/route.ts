@@ -12,9 +12,7 @@ export const POST = route({
     handler: async ({ supabase, params, body }) => {
         const result =
             'payments' in body ? await payTabSplit(supabase, params.id, body) : await payTab(supabase, params.id, body)
-        afterResponse(() => {
-            void dispatchOutbox()
-        })
+        afterResponse(() => dispatchOutbox())
         return ok(result)
     }
 })

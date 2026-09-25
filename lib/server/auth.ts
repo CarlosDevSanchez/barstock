@@ -30,6 +30,30 @@ const profileSchema = z.object({
     notify_push: z.boolean().optional()
 })
 
+type LooseProfileClient = {
+    from: (table: 'profiles') => {
+        select: (columns: string) => {
+            eq: (
+                column: string,
+                value: string
+            ) => {
+                maybeSingle: () => PromiseLike<{
+                    data: Record<string, unknown> | null
+                    error: { message: string; code?: string } | null
+                }>
+            }
+        }
+    }
+}
+
+// notify_* columns arrive with migration 20261005000004; select via loose client until db:types regenerates.
+function selectProfile(supabase: AppSupabaseClient, userId: string, withNotifyColumns: boolean) {
+    const columns = withNotifyColumns
+        ? 'role, full_name, is_active, locale, notify_email, notify_push'
+        : 'role, full_name, is_active, locale'
+    return (supabase as unknown as LooseProfileClient).from('profiles').select(columns).eq('id', userId).maybeSingle()
+}
+
 /**
  * Resolves the caller from the session held by `supabase`. `auth.getUser()` validates the JWT against Supabase Auth
  * (unlike `getSession()`, which trusts the cookie). The role is read from `profiles` on every request, so a role change
@@ -42,28 +66,12 @@ export async function loadSession(supabase: AppSupabaseClient): Promise<Session 
     } = await supabase.auth.getUser()
     if (error || !user) return null
 
-    // notify_* columns arrive with migration 20261005000004; select via loose client until db:types regenerates.
-    const { data, error: profileError } = await (
-        supabase as unknown as {
-            from: (table: 'profiles') => {
-                select: (columns: string) => {
-                    eq: (
-                        column: string,
-                        value: string
-                    ) => {
-                        maybeSingle: () => PromiseLike<{
-                            data: Record<string, unknown> | null
-                            error: { message: string } | null
-                        }>
-                    }
-                }
-            }
-        }
-    )
-        .from('profiles')
-        .select('role, full_name, is_active, locale, notify_email, notify_push')
-        .eq('id', user.id)
-        .maybeSingle()
+    let { data, error: profileError } = await selectProfile(supabase, user.id, true)
+    // Tolerates code deployed ahead of migration 20261005000004: a missing-column error (42703) falls back to a
+    // select without notify_* and defaults both to true, instead of failing every session in the fleet.
+    if (profileError?.code === '42703') {
+        ;({ data, error: profileError } = await selectProfile(supabase, user.id, false))
+    }
     if (profileError || !data) return null
 
     const profile = profileSchema.safeParse(data)

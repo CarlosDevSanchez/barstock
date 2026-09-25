@@ -78,6 +78,11 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     const [fromTill, setFromTill] = useState(false)
     const [sessionId, setSessionId] = useState('')
     const [pendingPurchase, setPendingPurchase] = useState(false)
+    // U3: generated once per dialog instance, reused on every retry.
+    const [purchaseKey] = useState(() => crypto.randomUUID())
+    // E5: search against the API instead of a flat pageSize:100 fetch.
+    const [supplierSearch, setSupplierSearch] = useState('')
+    const debouncedSupplierSearch = useDebouncedValue(supplierSearch)
 
     const form = useForm<AdjustInput, unknown, AdjustOutput>({
         resolver: zodResolver(inventoryAdjustSchema),
@@ -88,10 +93,16 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     const deltaNum = typeof delta === 'number' ? delta : Number(delta)
     const showPurchaseOption = Number.isFinite(deltaNum) && deltaNum > 0
 
-    const suppliers = useApiQuery(signal => suppliersApi.list({ pageSize: 100 }, signal), 'purchase-suppliers')
+    const suppliers = useApiQuery(
+        signal => suppliersApi.list({ pageSize: 50, q: debouncedSupplierSearch }, signal),
+        `purchase-suppliers#${debouncedSupplierSearch}`
+    )
     const desk = useApiQuery(signal => cashApi.current(signal), 'purchase-cash-desk')
     const sessions = desk.data?.sessions ?? []
-    const selectedSupplier = supplierId || suppliers.data?.data[0]?.id || ''
+    // Bloqueante 3 (H6): only fall back to the first result while the search box is empty (the unfiltered list), so
+    // typing a search never silently swaps the derived selection underneath an untouched select — a plain derived
+    // value, not an effect, per "you might not need an effect".
+    const selectedSupplier = supplierId || (debouncedSupplierSearch ? '' : (suppliers.data?.data[0]?.id ?? ''))
     const selectedSession = sessionId || sessions[0]?.id || ''
     const parsedCost = Number(unitCost)
     const costMismatch =
@@ -121,7 +132,7 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
         }
         setPendingPurchase(true)
         try {
-            await purchasesApi.receive(parsed.data)
+            await purchasesApi.receive(parsed.data, purchaseKey)
             toast.success(t('purchaseSaved'))
             onSaved()
         } catch (error: unknown) {
@@ -173,6 +184,15 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
                             {mode === 'purchase' && showPurchaseOption ? (
                                 <>
                                     <div className="space-y-1">
+                                        <Label htmlFor="adj-supplier-search">{tc('search')}</Label>
+                                        <Input
+                                            id="adj-supplier-search"
+                                            value={supplierSearch}
+                                            onChange={event => setSupplierSearch(event.target.value)}
+                                            placeholder={tc('search')}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
                                         <Label htmlFor="adj-supplier">{t('supplier')}</Label>
                                         <select
                                             id="adj-supplier"
@@ -180,6 +200,9 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
                                             value={selectedSupplier}
                                             onChange={event => setSupplierId(event.target.value)}
                                         >
+                                            <option value="" disabled>
+                                                {t('pickSupplier')}
+                                            </option>
                                             {(suppliers.data?.data ?? []).map(supplier => (
                                                 <option key={supplier.id} value={supplier.id}>
                                                     {supplier.name}
@@ -328,19 +351,14 @@ function ThresholdDialog({ item, onClose, onSaved }: AdjustDialogProps) {
 
 interface PurchaseLine {
     product_id: string
+    // Cached at selection time so the <select> always shows the real selection even after the search moves the
+    // product out of the current page (bloqueante 3, H6) — no ref/cache lookup needed during render.
+    product_name: string
     quantity: string
     unit_cost: string
 }
 
-function RegisterPurchaseDialog({
-    products,
-    onClose,
-    onSaved
-}: {
-    products: InventoryListItem[]
-    onClose: () => void
-    onSaved: () => void
-}) {
+function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
     const t = useTranslations('inventory')
     const tc = useTranslations('common')
     const money = useMoney()
@@ -350,18 +368,35 @@ function RegisterPurchaseDialog({
     const [fromTill, setFromTill] = useState(false)
     const [sessionId, setSessionId] = useState('')
     const [pending, setPending] = useState(false)
+    // U3: generated once per dialog instance, reused on every retry.
+    const [purchaseKey] = useState(() => crypto.randomUUID())
+    // E5: the dialog searches the catalog against the API (`q`) instead of the parent's flat `pageSize: 100` fetch,
+    // so a catalog bigger than one page stays reachable from every line's product picker.
+    const [productSearch, setProductSearch] = useState('')
+    const debouncedProductSearch = useDebouncedValue(productSearch)
+    const catalogQuery = useApiQuery(
+        signal => inventoryApi.list({ pageSize: 50, q: debouncedProductSearch }, signal),
+        `purchase-dialog-catalog#${debouncedProductSearch}`
+    )
+    const products = useMemo(() => catalogQuery.data?.data ?? [], [catalogQuery.data])
+    // The line starts unselected (not `products[0]`, which is always empty on mount since the catalog query is
+    // async) so the visible <select> and the submitted `product_id` can never disagree.
     const [lines, setLines] = useState<PurchaseLine[]>([
-        {
-            product_id: products[0]?.product.id ?? '',
-            quantity: '1',
-            unit_cost: String(products[0]?.product.cost_price ?? 0)
-        }
+        { product_id: '', product_name: '', quantity: '1', unit_cost: '0' }
     ])
 
-    const suppliers = useApiQuery(signal => suppliersApi.list({ pageSize: 100 }, signal), 'multi-purchase-suppliers')
+    // E5: search against the API instead of a flat pageSize:100 fetch.
+    const [supplierSearch, setSupplierSearch] = useState('')
+    const debouncedSupplierSearch = useDebouncedValue(supplierSearch)
+    const suppliers = useApiQuery(
+        signal => suppliersApi.list({ pageSize: 50, q: debouncedSupplierSearch }, signal),
+        `multi-purchase-suppliers#${debouncedSupplierSearch}`
+    )
     const desk = useApiQuery(signal => cashApi.current(signal), 'multi-purchase-cash-desk')
     const sessions = desk.data?.sessions ?? []
-    const selectedSupplier = supplierId || suppliers.data?.data[0]?.id || ''
+    // Bloqueante 3 (H6): only fall back to the first result while the search box is empty — a derived value, not an
+    // effect (see AdjustDialog above for why the old always-on fallback was wrong).
+    const selectedSupplier = supplierId || (debouncedSupplierSearch ? '' : (suppliers.data?.data[0]?.id ?? ''))
     const selectedSession = sessionId || sessions[0]?.id || ''
     const productById = useMemo(() => new Map(products.map(item => [item.product.id, item.product])), [products])
 
@@ -383,7 +418,7 @@ function RegisterPurchaseDialog({
         }
         setPending(true)
         try {
-            await purchasesApi.receive(parsed.data)
+            await purchasesApi.receive(parsed.data, purchaseKey)
             toast.success(t('purchaseSaved'))
             onSaved()
         } catch (error: unknown) {
@@ -401,6 +436,15 @@ function RegisterPurchaseDialog({
                 </DialogHeader>
                 <div className="space-y-3">
                     <div className="space-y-1">
+                        <Label htmlFor="po-supplier-search">{tc('search')}</Label>
+                        <Input
+                            id="po-supplier-search"
+                            value={supplierSearch}
+                            onChange={event => setSupplierSearch(event.target.value)}
+                            placeholder={tc('search')}
+                        />
+                    </div>
+                    <div className="space-y-1">
                         <Label htmlFor="po-supplier">{t('supplier')}</Label>
                         <select
                             id="po-supplier"
@@ -408,12 +452,24 @@ function RegisterPurchaseDialog({
                             value={selectedSupplier}
                             onChange={event => setSupplierId(event.target.value)}
                         >
+                            <option value="" disabled>
+                                {t('pickSupplier')}
+                            </option>
                             {(suppliers.data?.data ?? []).map(supplier => (
                                 <option key={supplier.id} value={supplier.id}>
                                     {supplier.name}
                                 </option>
                             ))}
                         </select>
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="po-product-search">{tc('search')}</Label>
+                        <Input
+                            id="po-product-search"
+                            value={productSearch}
+                            onChange={event => setProductSearch(event.target.value)}
+                            placeholder={tc('search')}
+                        />
                     </div>
                     {lines.map((line, index) => {
                         const catalog = productById.get(line.product_id)
@@ -422,6 +478,13 @@ function RegisterPurchaseDialog({
                             catalog &&
                             Number.isFinite(cost) &&
                             Math.round(cost * 100) !== Math.round(catalog.cost_price * 100)
+                        // The current search page (`products`) plus, if it fell outside that page, the product this
+                        // line already has selected (by the name cached on the line itself) — so the <select> always
+                        // shows the real selection, never a stale or empty one (bloqueante 3, H6).
+                        const selectedOutsidePage =
+                            line.product_id && !products.some(item => item.product.id === line.product_id)
+                                ? { product_id: line.product_id, name: line.product_name || line.product_id }
+                                : null
                         return (
                             <div key={index} className="space-y-2 rounded-md border p-3">
                                 <div className="space-y-1">
@@ -437,6 +500,7 @@ function RegisterPurchaseDialog({
                                                     i === index
                                                         ? {
                                                               product_id: id,
+                                                              product_name: next?.name ?? '',
                                                               quantity: row.quantity,
                                                               unit_cost: String(next?.cost_price ?? row.unit_cost)
                                                           }
@@ -445,6 +509,14 @@ function RegisterPurchaseDialog({
                                             )
                                         }}
                                     >
+                                        <option value="" disabled>
+                                            {t('pickProduct')}
+                                        </option>
+                                        {selectedOutsidePage && (
+                                            <option value={selectedOutsidePage.product_id}>
+                                                {selectedOutsidePage.name}
+                                            </option>
+                                        )}
                                         {products.map(item => (
                                             <option key={item.product.id} value={item.product.id}>
                                                 {item.product.name}
@@ -511,11 +583,7 @@ function RegisterPurchaseDialog({
                         onClick={() =>
                             setLines(current => [
                                 ...current,
-                                {
-                                    product_id: products[0]?.product.id ?? '',
-                                    quantity: '1',
-                                    unit_cost: String(products[0]?.product.cost_price ?? 0)
-                                }
+                                { product_id: '', product_name: '', quantity: '1', unit_cost: '0' }
                             ])
                         }
                     >
@@ -599,7 +667,6 @@ export default function InventoryPage() {
         signal => inventoryApi.list({ page, pageSize, q: search, low: filterLow }, signal),
         JSON.stringify({ page, pageSize, search, filterLow })
     )
-    const catalog = useApiQuery(signal => inventoryApi.list({ pageSize: 100 }, signal), 'purchase-catalog')
     const summary = inventory.data?.summary
     const sellablePackages = useApiQuery(
         signal => promotionsApi.list({ pageSize: 100, active: true }, signal),
@@ -911,7 +978,6 @@ export default function InventoryPage() {
                     onSaved={() => {
                         setAdjusting(null)
                         inventory.reload()
-                        catalog.reload()
                     }}
                 />
             )}
@@ -928,12 +994,10 @@ export default function InventoryPage() {
             )}
             {buying && (
                 <RegisterPurchaseDialog
-                    products={catalog.data?.data ?? inventory.data?.data ?? []}
                     onClose={() => setBuying(false)}
                     onSaved={() => {
                         setBuying(false)
                         inventory.reload()
-                        catalog.reload()
                     }}
                 />
             )}

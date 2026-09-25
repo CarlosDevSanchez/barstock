@@ -19,9 +19,17 @@ export interface DeskSession {
     register_id: string
     register_name: string
     opening_float: number
-    expected_cash: number
+    /** R-1: blind cash count. Null while open, for a cashier — manager+ and closed sessions always get a number. */
+    expected_cash: number | null
     users: { id: string; full_name: string | null }[]
     movements: { id: string; kind: string; amount: number; reason: string; created_at: string }[]
+}
+
+export interface CloseCashSessionResult {
+    expected_cash: number
+    counted_cash: number
+    difference: number
+    needs_review: boolean
 }
 
 export interface CashDesk {
@@ -51,5 +59,6 @@ export const cashApi = {
         apiPost<{ id: string }>('cash-sessions', body),
     addMovement: (id: string, body: { kind: 'deposit' | 'withdrawal'; amount: number; reason: string }) =>
         apiPost<{ id: string }>(`cash-sessions/${id}/movements`, body),
-    closeSession: (id: string, body: { counted_cash: number }) => apiPost<void>(`cash-sessions/${id}/close`, body)
+    closeSession: (id: string, body: { counted_cash: number }) =>
+        apiPost<CloseCashSessionResult>(`cash-sessions/${id}/close`, body)
 }

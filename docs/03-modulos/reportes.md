@@ -13,8 +13,8 @@
 | COGS (`total_cogs`) | Σ `qty × coalesce(order_items.unit_cost, products.cost_price)`. Las ventas nuevas guardan el costo al cobrar; las anteriores usan el costo de catálogo actual |
 | Utilidad bruta (`gross_profit`) | Σ bases de línea (`unit_price × qty − discount`) − `total_cogs` (sin impuesto) |
 | Gastos (`total_expenses`) | Σ `expenses.amount` del rango (`occurred_at`, sin anulados), con desglose `expenses_by_category` |
-| Castigos (`written_off_total`) | Σ saldo restante de órdenes `written_off` cuyo `written_off_at` cae en el rango |
-| Ganancia neta (`net_profit`) | `gross_profit − total_discount − total_expenses − written_off_total` |
+| Castigos (`written_off_total`) | Σ saldo restante de órdenes `written_off` cuyo `written_off_at` cae en el rango. **Solo informativo: no se resta de `net_profit`** ([H6](../04-auditoria/hallazgos/H6-revision-adversarial-a-f.md), C1) |
+| Ganancia neta (`net_profit`) | `gross_profit + (pagos cobrados sobre órdenes written_off, en su propia fecha de cobro) − total_discount − total_expenses − (costo de los productos de las órdenes written_off del rango)`. Antes se restaba el saldo entero de `written_off_total` sin cargar su costo ni sumar lo ya cobrado; ver [H6](../04-auditoria/hallazgos/H6-revision-adversarial-a-f.md) |
 | Ventas diarias | Serie por día en la zona de Ajustes, con días vacíos a 0 |
 | Top productos (10) | Por **ingresos de línea** (`Σ order_items.total`, incluye impuesto); también `cogs` y `gross_profit` por SKU. Promos cuentan como **componentes** a precio asignado |
 | Top promociones (10) | Paquetes estimados (`min(qty/receta)` por orden), órdenes e ingresos de línea de combo |

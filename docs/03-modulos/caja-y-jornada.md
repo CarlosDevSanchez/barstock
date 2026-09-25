@@ -21,7 +21,32 @@ Una **jornada** es el día de operación del negocio. Una **caja** (`cash_regist
 
 El pago de una cuenta no se cuenta dos veces: mientras la cuenta sigue abierta está solo en `tab_payments`; al cerrarla, la copia en `payments` conserva `cash_session_id` y la cuenta deja de sumarse. Un gasto en efectivo de esa caja (no anulado) se resta. Un gasto con otro método no mueve el efectivo.
 
-`expected_cash` guardado al cerrar es una foto. El resumen en vivo usa el estado actual (un reembolso posterior baja el esperado en pantalla, no el número ya guardado).
+`expected_cash` guardado al cerrar es una foto. El resumen en vivo usa el estado actual (un reembolso posterior baja el esperado en pantalla, no el número ya guardado) — salvo que la caja ya esté cerrada: entonces `cash_session_summary` devuelve siempre la foto guardada, nunca un recálculo.
+
+## Arqueo a ciegas (R-1)
+
+Mientras la caja está **abierta**, un cajero (incluido el dueño de la caja) no ve `expected_cash` **ni ningún
+componente que permita derivarlo por suma** (`cash_sales`, `open_tab_cash`, `deposits`, `withdrawals`,
+`refunded_cash`, `expenses`, `purchases`): `cash_session_summary` solo devuelve `opening_float`. Un gerente+
+siempre ve todo, en vivo. Al cerrar, `close_cash_session` devuelve `{expected_cash, counted_cash, difference,
+needs_review}` en la respuesta — así el cajero se entera de la diferencia justo después de contar, no antes.
+`getCashDesk` (la respuesta de `GET /business-days/current` que usan `/cash`, `/expenses` e `/inventory`) solo
+llama `cash_session_summary` para la caja del **propio** cajero: para las cajas de otros cajeros abiertas en la
+misma jornada, la muestra sin `expected_cash` y sin llamar la RPC (que lanzaría `42501` si la llamara).
+
+## Reembolso de una venta en efectivo
+
+El monto se resta de la caja **donde se cobró originalmente** (`payments.cash_session_id`; solo puede haber un
+pago en efectivo por orden, los métodos duplicados están bloqueados), **si esa caja sigue abierta** — sin
+importar qué caja tenga abierta quien hace el reembolso (un gerente normalmente no tiene ninguna). Si la caja
+original ya cerró, no se resta de ninguna caja y la orden queda `refund_after_close = true` para que alguien lo
+revise; el número ya reconciliado de esa caja cerrada no cambia.
+
+## Anular un gasto o una compra en efectivo (R-2)
+
+Si la caja de ese gasto/compra sigue **abierta**, el monto vuelve al esperado de inmediato, como antes.
+Si ya está **cerrada**, el monto sigue restado — no cambia lo ya reconciliado — y la fila queda marcada
+`voided_after_close = true`.
 
 ## API
 

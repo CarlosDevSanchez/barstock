@@ -40,7 +40,11 @@ export interface SupplierPurchaseHistory {
     }[]
 }
 
-export async function receivePurchase(supabase: AppSupabaseClient, input: PurchaseReceive): Promise<{ id: string }> {
+export async function receivePurchase(
+    supabase: AppSupabaseClient,
+    input: PurchaseReceive,
+    idempotencyKey: string
+): Promise<{ id: string }> {
     const costs: Record<string, number> = {}
     for (const [index, item] of input.items.entries()) {
         costs[`items.${index}.unit_cost`] = item.unit_cost
@@ -52,7 +56,8 @@ export async function receivePurchase(supabase: AppSupabaseClient, input: Purcha
         p_items: input.items,
         p_invoice: input.invoice_number ?? null,
         p_notes: input.notes ?? null,
-        p_cash_session_id: input.cash_session_id ?? null
+        p_cash_session_id: input.cash_session_id ?? null,
+        p_idempotency_key: idempotencyKey
     })
     assertNoError(error)
     if (typeof data !== 'string') throw notFound('Purchase not found')

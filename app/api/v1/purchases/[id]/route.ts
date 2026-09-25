@@ -11,9 +11,7 @@ export const DELETE = route({
     body: purchaseVoidSchema,
     handler: async ({ supabase, params, body }) => {
         await voidPurchase(supabase, params.id, body)
-        afterResponse(() => {
-            void dispatchOutbox()
-        })
+        afterResponse(() => dispatchOutbox())
         return noContent()
     }
 })

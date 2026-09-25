@@ -1,8 +1,19 @@
+import { timingSafeEqual } from 'node:crypto'
 import { afterResponse } from '@/lib/server/after'
 import { createSupabaseAdminClient } from '@/lib/server/supabase-admin'
 import { dispatchOutbox } from '@/lib/server/services/notifications'
 
 const noStore = { 'Cache-Control': 'no-store' }
+
+function isValidCronSecret(header: string | null, secret: string): boolean {
+    if (header === null) return false
+    const headerBuf = Buffer.from(header)
+    const expectedBuf = Buffer.from(`Bearer ${secret}`)
+    // Compare BYTE length, not JS string .length: a multibyte header can have equal .length but a different
+    // buffer size, and timingSafeEqual throws a RangeError (500, not 401) when its two buffers differ in size.
+    if (headerBuf.length !== expectedBuf.length) return false
+    return timingSafeEqual(headerBuf, expectedBuf)
+}
 
 /**
  * Daily lazy close + receivable reminders + outbox dispatch. Vercel Cron has no user session, so this uses the
@@ -16,7 +27,7 @@ export async function GET(request: Request) {
             { status: 503, headers: noStore }
         )
     }
-    if (request.headers.get('authorization') !== `Bearer ${secret}`) {
+    if (!isValidCronSecret(request.headers.get('authorization'), secret)) {
         return Response.json(
             { error: { code: 'unauthorized', message: 'Authentication required' } },
             { status: 401, headers: noStore }
@@ -45,8 +56,13 @@ export async function GET(request: Request) {
         )
     }
 
-    afterResponse(() => {
-        void dispatchOutbox()
-    })
+    // E3: best-effort purge of old, already-processed outbox rows. Never blocks the cron response: a purge
+    // failure just means the table grows a bit more until the next tick.
+    const purge = await (admin.rpc as unknown as (fn: string) => PromiseLike<{ error: { message: string } | null }>)(
+        '_purge_outbox'
+    )
+    if (purge.error) console.error('[cron] outbox purge failed', purge.error)
+
+    afterResponse(() => dispatchOutbox())
     return Response.json({ data: { ok: true } }, { headers: noStore })
 }

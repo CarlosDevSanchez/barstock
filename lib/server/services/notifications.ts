@@ -3,6 +3,7 @@ import { Resend } from 'resend'
 import webpush, { WebPushError } from 'web-push'
 import { serverEnv } from '@/lib/env/server'
 import { createSupabaseAdminClient } from '@/lib/server/supabase-admin'
+import { isAllowedPushEndpoint } from '@/lib/validation/notifications'
 
 type DbResult<T = unknown> = { data: T; error: { message: string } | null }
 
@@ -36,6 +37,12 @@ export interface OutboxRow {
     processed_at: string | null
     attempts: number
     last_error: string | null
+}
+
+/** F3: recipients (by profile id) already delivered this row's content, tracked in `payload.delivered_to`. */
+function deliveredTo(row: OutboxRow): Set<string> {
+    const value = row.payload.delivered_to
+    return new Set(Array.isArray(value) ? value.filter((v): v is string => typeof v === 'string') : [])
 }
 
 interface StaffRecipient {
@@ -162,11 +169,21 @@ async function sendPush(db: UntypedAdmin, subs: PushRow[], title: string, body: 
     if (!subject || !publicKey || !privateKey || subs.length === 0) return
     webpush.setVapidDetails(subject, publicKey, privateKey)
     const payload = JSON.stringify({ title, body, url })
+    // F3: try every subscription of this user (a device gone stale must not stop delivery to their other devices),
+    // accumulating failures instead of throwing on the first one.
+    const errors: string[] = []
     for (const sub of subs) {
+        // Re-validate at dispatch time too: the allowlist in lib/validation/notifications.ts may have
+        // narrowed since the subscription was stored, and this is the point that actually makes the request.
+        if (!isAllowedPushEndpoint(sub.endpoint)) {
+            console.error('[notifications] skipping disallowed push endpoint', sub.id)
+            continue
+        }
         try {
             await webpush.sendNotification(
                 { endpoint: sub.endpoint, keys: { p256dh: sub.p256dh, auth: sub.auth } },
-                payload
+                payload,
+                { TTL: 60, timeout: 10_000 }
             )
         } catch (error: unknown) {
             const status =
@@ -180,9 +197,10 @@ async function sendPush(db: UntypedAdmin, subs: PushRow[], title: string, body: 
                 if (delError) console.error('[notifications] delete dead push sub failed', delError)
                 continue
             }
-            throw error instanceof Error ? error : new Error(String(error))
+            errors.push(error instanceof Error ? error.message : String(error))
         }
     }
+    if (errors.length > 0) throw new Error(errors.join('; '))
 }
 
 /**
@@ -191,6 +209,10 @@ async function sendPush(db: UntypedAdmin, subs: PushRow[], title: string, body: 
  */
 export async function dispatchOutbox(): Promise<void> {
     try {
+        // D4: with no channel configured at all, don't even claim rows — they stay untouched (claimed_at/attempts
+        // unchanged) until a channel is provisioned, instead of being reclaimed and immediately given up on.
+        if (!emailConfigured() && !pushConfigured()) return
+
         const db = adminDb()
         const { data, error } = await db.rpc('_claim_outbox', { p_limit: 50 })
         if (error) {
@@ -215,8 +237,14 @@ export async function dispatchOutbox(): Promise<void> {
         if (subError) console.error('[notifications] push_subscriptions read failed', subError)
         const allSubs = (subData as PushRow[] | null) ?? []
 
-        let deliveryError: string | null = null
-        for (const recipient of recipients) {
+        // F3: a recipient still needs this batch if they are missing from ANY row's `delivered_to` — a retry then
+        // only re-sends to the recipients who did not get it, not to everyone again.
+        const deliveredSets = rows.map(deliveredTo)
+        const pendingRecipients = recipients.filter(r => deliveredSets.some(set => !set.has(r.id)))
+
+        const succeeded: string[] = []
+        const failed: { id: string; message: string }[] = []
+        for (const recipient of pendingRecipients) {
             try {
                 if (recipient.notify_email && emailConfigured()) {
                     await sendEmail(recipient.email, summary.title, summary.body, summary.url)
@@ -230,16 +258,35 @@ export async function dispatchOutbox(): Promise<void> {
                         summary.url
                     )
                 }
+                succeeded.push(recipient.id)
             } catch (err: unknown) {
                 const message = err instanceof Error ? err.message : String(err)
                 console.error('[notifications] delivery failed for', recipient.id, message)
-                deliveryError = message
+                failed.push({ id: recipient.id, message })
             }
         }
 
+        if (succeeded.length > 0) {
+            const ids = rows.map(r => r.id)
+            for (const recipientId of succeeded) {
+                const { error: markError } = await db.rpc('_mark_outbox_delivery', {
+                    p_ids: ids,
+                    p_recipient: recipientId
+                })
+                if (markError) console.error('[notifications] mark delivery failed', recipientId, markError)
+            }
+        }
+
+        const allRecipientIds = new Set(recipients.map(r => r.id))
         for (const row of rows) {
-            if (deliveryError) await markFailure(db, row, deliveryError)
-            else await markSuccess(db, row.id)
+            const delivered = new Set([...deliveredTo(row), ...succeeded])
+            const fullyDelivered = [...allRecipientIds].every(id => delivered.has(id))
+            if (fullyDelivered) {
+                await markSuccess(db, row.id)
+            } else {
+                const message = failed.map(f => `${f.id}: ${f.message}`).join('; ') || 'partial delivery'
+                await markFailure(db, row, message)
+            }
         }
     } catch (error: unknown) {
         console.error('[notifications] dispatchOutbox crashed', error)

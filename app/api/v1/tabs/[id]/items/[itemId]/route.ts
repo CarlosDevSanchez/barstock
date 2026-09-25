@@ -14,9 +14,7 @@ export const DELETE = route({
     body: removeTabItemSchema,
     handler: async ({ supabase, params, body }) => {
         const result = await removeTabItem(supabase, params.id, params.itemId, body)
-        afterResponse(() => {
-            void dispatchOutbox()
-        })
+        afterResponse(() => dispatchOutbox())
         return ok(result)
     }
 })

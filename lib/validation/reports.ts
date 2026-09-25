@@ -23,10 +23,11 @@ export const dashboardSummarySchema = z.object({
             low_stock_threshold: num
         })
     ),
-    /** Sum of balances on pending receivable orders. */
-    receivables_total: num,
-    /** Pending balances whose due_date is before today in the store time zone. */
-    receivables_overdue: num
+    /** Sum of balances on pending receivable orders. Added by phase E (20261005000003); optional so code deployed
+     *  ahead of that migration degrades to "no receivables" instead of failing every dashboard load (D9/F4). */
+    receivables_total: num.default(0),
+    /** Pending balances whose due_date is before today in the store time zone. Same D9/F4 tolerance as above. */
+    receivables_overdue: num.default(0)
 })
 export type DashboardSummary = z.infer<typeof dashboardSummarySchema>
 
@@ -47,9 +48,12 @@ export const salesReportSchema = z.object({
     gross_profit: num,
     total_expenses: num,
     expenses_by_category: z.array(z.object({ category: z.string(), total: num })),
-    /** Remaining balance of written_off orders whose written_off_at falls in the range. */
-    written_off_total: num,
-    /** gross_profit − total_discount − total_expenses − written_off_total. */
+    /** Remaining (uncollected) balance of written_off orders whose written_off_at falls in the range. Shown for
+     *  visibility only — it is not subtracted from net_profit (see C1, H6). Added by phase E; optional so code
+     *  deployed ahead of that migration degrades to 0 instead of failing the whole report (D9/F4). */
+    written_off_total: num.default(0),
+    /** gross_profit + (payments collected on written-off orders, on their own date) − total_discount −
+     *  total_expenses − (cost of goods for written-off orders in range). */
     net_profit: num,
     daily: z.array(z.object({ date: z.string(), revenue: num, orders: num })),
     top_products: z.array(

@@ -11,9 +11,7 @@ export const POST = route({
     body: addTabItemsSchema,
     handler: async ({ supabase, params, body }) => {
         const result = await addTabItems(supabase, params.id, body)
-        afterResponse(() => {
-            void dispatchOutbox()
-        })
+        afterResponse(() => dispatchOutbox())
         return ok(result)
     }
 })

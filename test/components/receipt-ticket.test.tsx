@@ -20,6 +20,8 @@ const baseOrder: OrderDetail = {
     total: 141,
     business_day_id: null,
     cash_session_id: null,
+    refund_cash_session_id: null,
+    refund_after_close: false,
     notes: null,
     tab_id: null,
     created_by: 'user-1',
