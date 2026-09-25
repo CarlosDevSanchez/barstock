@@ -25,6 +25,18 @@ carrera adicional en `close_business_day`, un ajuste de pagos que podía colapsa
 segunda pasada también encontró que el informe original afirmaba pruebas de concurrencia ×20 "rompiendo la
 protección" en más hallazgos de los que realmente las tenían; la tabla de abajo es la versión corregida.
 
+**Tercera pasada:** al cerrar F3/U5/U6/C6/R-E (ver `20261006000008_fix_h6_pending.sql`), una revisión adversarial
+superficial (Opus) encontró 3 bloqueantes reales antes de fusionar: (1) el backfill de E2 referenciaba
+`expenses.date`, columna eliminada en `20261004000001_expenses.sql`, y habría reventado la migración completa
+(arrastrando F3/U5/E3, en la misma migración) contra cualquier base con zona horaria distinta de UTC — se corrigió
+para recalcular desde `occurred_at` por su huella de medianoche UTC, verificado con `begin; … ; rollback;` en
+local; (2) `verificar-checkout.md` y la fila F4 de esta tabla afirmaban una tolerancia de despliegue (`42703` en
+`lib/server/auth.ts`, esquemas `.optional()`) que no existía en el código — se implementó de verdad; (3) el diálogo
+de registrar compra (`RegisterPurchaseDialog`/`AdjustDialog` en `inventory/page.tsx`) inicializaba el producto o
+proveedor con el primer resultado de una búsqueda asíncrona vacía en el montaje, dejando líneas sin producto real
+o cambiando de proveedor en silencio al escribir en el buscador — corregido con selección explícita (sin
+autocompletar salvo con la lista sin filtrar) y placeholder real en el `<select>`.
+
 ## Estado por hallazgo
 
 | ID | Severidad | Hallazgo | Estado |

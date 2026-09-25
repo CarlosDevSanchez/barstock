@@ -87,9 +87,12 @@ revoke all on function public._purge_outbox() from public, anon, authenticated;
 grant execute on function public._purge_outbox() to service_role;
 
 -- ---------------------------------------------------------------------------
--- E2: expenses.occurred_at was backfilled assuming UTC (20261004000001_expenses.sql:48); recompute using the
--- business's actual timezone, but ONLY for rows still exactly at that UTC-derived value (a row edited or created
--- after the timezone was set has since diverged and is left untouched).
+-- E2: expenses.occurred_at was backfilled assuming UTC (20261004000001_expenses.sql:48, `date::timestamp at
+-- time zone 'UTC'`) before the `date` column was dropped in that same migration, so it can't be read back here.
+-- Its fingerprint survives instead: a row backfilled that way lands exactly at UTC midnight. Recompute those rows
+-- (and only those) using the business's actual timezone. A row edited or created after the timezone was set no
+-- longer sits at UTC midnight and is left untouched; re-running this block is a no-op for rows already migrated,
+-- since reinterpreting in a non-UTC zone moves them off UTC midnight.
 -- ---------------------------------------------------------------------------
 
 do $$
@@ -99,7 +102,7 @@ begin
   select coalesce((select s.value #>> '{}' from public.settings s where s.key = 'timezone'), 'UTC') into v_tz;
   if v_tz <> 'UTC' then
     update public.expenses
-       set occurred_at = date::timestamp at time zone v_tz
-     where occurred_at = date::timestamp at time zone 'UTC';
+       set occurred_at = (occurred_at at time zone 'UTC')::date::timestamp at time zone v_tz
+     where (occurred_at at time zone 'UTC')::time = '00:00:00';
   end if;
 end $$;
