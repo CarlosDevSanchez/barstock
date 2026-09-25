@@ -115,6 +115,13 @@ y las suites de invitación (una página recién abierta se recargaba a mitad de
 Además, el SW olvida esas mismas cachés si detecta que `/api/v1/me` responde con un `id` de usuario distinto al último
 visto (variable en memoria del propio worker).
 
+## Push (alertas de personal) **[Por verificar]**
+
+`public/sw.js` maneja `push` (`showNotification` con `title` / `body` / `data.url`) y `notificationclick`
+(`clients.openWindow`). La suscripción vive en `push_subscriptions` y se gestiona desde el menú de cuenta.
+Detalle: [`03-modulos/notificaciones.md`](../03-modulos/notificaciones.md). En iOS hace falta la PWA en modo
+standalone para recibir push.
+
 ## Límite conocido de las navegaciones del App Router **[Por verificar]**
 
 Las navegaciones del cliente (`<Link>`, `router.push`) piden payloads RSC con cabeceras `Vary`, que el SW no distingue

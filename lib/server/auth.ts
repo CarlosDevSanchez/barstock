@@ -12,6 +12,8 @@ export interface SessionUser {
     fullName: string | null
     role: UserRole
     locale: AppLocale
+    notifyEmail: boolean
+    notifyPush: boolean
 }
 
 export interface Session {
@@ -23,7 +25,9 @@ const profileSchema = z.object({
     role: z.enum(USER_ROLES),
     full_name: z.string().nullable(),
     is_active: z.boolean(),
-    locale: z.enum(APP_LOCALES)
+    locale: z.enum(APP_LOCALES),
+    notify_email: z.boolean().optional(),
+    notify_push: z.boolean().optional()
 })
 
 /**
@@ -38,9 +42,26 @@ export async function loadSession(supabase: AppSupabaseClient): Promise<Session 
     } = await supabase.auth.getUser()
     if (error || !user) return null
 
-    const { data, error: profileError } = await supabase
+    // notify_* columns arrive with migration 20261005000004; select via loose client until db:types regenerates.
+    const { data, error: profileError } = await (
+        supabase as unknown as {
+            from: (table: 'profiles') => {
+                select: (columns: string) => {
+                    eq: (
+                        column: string,
+                        value: string
+                    ) => {
+                        maybeSingle: () => PromiseLike<{
+                            data: Record<string, unknown> | null
+                            error: { message: string } | null
+                        }>
+                    }
+                }
+            }
+        }
+    )
         .from('profiles')
-        .select('role, full_name, is_active, locale')
+        .select('role, full_name, is_active, locale, notify_email, notify_push')
         .eq('id', user.id)
         .maybeSingle()
     if (profileError || !data) return null
@@ -54,7 +75,9 @@ export async function loadSession(supabase: AppSupabaseClient): Promise<Session 
             email: user.email ?? '',
             fullName: profile.data.full_name,
             role: profile.data.role,
-            locale: profile.data.locale
+            locale: profile.data.locale,
+            notifyEmail: profile.data.notify_email ?? true,
+            notifyPush: profile.data.notify_push ?? true
         },
         supabase
     }

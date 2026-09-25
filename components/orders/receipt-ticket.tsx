@@ -220,6 +220,25 @@ export function ReceiptTicket({ order, settings, provisional = false }: ReceiptT
                 </>
             )}
 
+            {order.status === 'pending' && (
+                <>
+                    <div className="border-t border-dashed border-black my-2" />
+                    <p className="text-center text-sm font-bold" data-testid="receipt-pending-stamp">
+                        {t('receiptPendingStamp', {
+                            balance: money(
+                                order.total - order.payments.reduce((sum, payment) => sum + payment.amount, 0)
+                            ),
+                            due: (() => {
+                                const dueDate = (order as OrderDetail & { due_date?: string | null }).due_date
+                                if (!dueDate) return '—'
+                                const [, month, day] = dueDate.split('-')
+                                return `${day}/${month}`
+                            })()
+                        })}
+                    </p>
+                </>
+            )}
+
             {settings.receipt_template.footer && (
                 <>
                     <div className="border-t border-dashed border-black my-2" />

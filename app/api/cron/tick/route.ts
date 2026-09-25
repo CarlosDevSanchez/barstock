@@ -1,10 +1,12 @@
+import { afterResponse } from '@/lib/server/after'
 import { createSupabaseAdminClient } from '@/lib/server/supabase-admin'
+import { dispatchOutbox } from '@/lib/server/services/notifications'
 
 const noStore = { 'Cache-Control': 'no-store' }
 
 /**
- * Daily lazy close. Vercel Cron has no user session, so this uses the service role only to call
- * `_auto_close_stale_business_days` (granted to service_role, not to anon or authenticated).
+ * Daily lazy close + receivable reminders + outbox dispatch. Vercel Cron has no user session, so this uses the
+ * service role only for RPCs granted to service_role (not to anon or authenticated).
  */
 export async function GET(request: Request) {
     const secret = process.env.CRON_SECRET
@@ -21,12 +23,30 @@ export async function GET(request: Request) {
         )
     }
 
-    const { error } = await createSupabaseAdminClient().rpc('_auto_close_stale_business_days')
+    const admin = createSupabaseAdminClient()
+    const { error } = await admin.rpc('_auto_close_stale_business_days')
     if (error) {
         return Response.json(
             { error: { code: 'internal_error', message: 'Could not close stale business days' } },
             { status: 500, headers: noStore }
         )
     }
+
+    const enqueue = await (
+        admin.rpc as unknown as (
+            fn: string,
+            args?: Record<string, unknown>
+        ) => PromiseLike<{ error: { message: string } | null }>
+    )('_enqueue_due_receivables')
+    if (enqueue.error) {
+        return Response.json(
+            { error: { code: 'internal_error', message: 'Could not enqueue due receivables' } },
+            { status: 500, headers: noStore }
+        )
+    }
+
+    afterResponse(() => {
+        void dispatchOutbox()
+    })
     return Response.json({ data: { ok: true } }, { headers: noStore })
 }

@@ -9,6 +9,8 @@ import type {
     SetTabDiscountInput,
     VoidTabInput
 } from '@/lib/validation/tabs'
+import type { DeferTabInput } from '@/lib/validation/receivables'
+import type { OrderDetail } from '@/lib/api/orders'
 import { apiDelete, apiGet, apiList, apiPost, type Query } from './client'
 
 export type { TabDetail, TabListItem }
@@ -24,5 +26,7 @@ export const tabsApi = {
     setDiscount: (id: string, body: SetTabDiscountInput) => apiPost<TabDetail>(`tabs/${id}/discount`, body),
     pay: (id: string, body: PayTabInput) => apiPost<TabDetail>(`tabs/${id}/payments`, body),
     paySplit: (id: string, body: PayTabSplitInput) => apiPost<TabDetail>(`tabs/${id}/payments`, body),
-    void: (id: string, body: VoidTabInput) => apiPost<TabDetail>(`tabs/${id}/void`, body)
+    void: (id: string, body: VoidTabInput) => apiPost<TabDetail>(`tabs/${id}/void`, body),
+    /** Close an open tab as a pending receivable (customer required). */
+    defer: (id: string, body: DeferTabInput) => apiPost<OrderDetail>(`tabs/${id}/defer`, body)
 }

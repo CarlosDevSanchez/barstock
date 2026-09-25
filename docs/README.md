@@ -50,6 +50,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [pos-checkout.md](03-modulos/pos-checkout.md) | Punto de venta, cálculo del cobro, concurrencia |
 | [caja-y-jornada.md](03-modulos/caja-y-jornada.md) | Jornada del negocio, cajas, arqueo y autocierre a las 24 h |
 | [cuentas-abiertas.md](03-modulos/cuentas-abiertas.md) | Cuentas compartidas, stock al añadir, pagos parciales, cierre a orden |
+| [cuentas-por-cobrar.md](03-modulos/cuentas-por-cobrar.md) | Diferir una tab a orden pendiente, cobro posterior y castigo |
 | [ordenes-y-reembolsos.md](03-modulos/ordenes-y-reembolsos.md) | Listado, detalle, reembolso idempotente |
 | [productos.md](03-modulos/productos.md) | CRUD de productos |
 | [categorias.md](03-modulos/categorias.md) | CRUD de categorías |
@@ -63,6 +64,7 @@ Las referencias `archivo:línea` de `04-auditoria/` apuntan al commit `54962b9`;
 | [ajustes.md](03-modulos/ajustes.md) | Ajustes de la tienda (persisten) |
 | [usuarios.md](03-modulos/usuarios.md) | Invitar, cambiar rol, desactivar |
 | [auditoria.md](03-modulos/auditoria.md) | Registro de escrituras y eventos de sesión, solo admin, append-only |
+| [notificaciones.md](03-modulos/notificaciones.md) | Alertas de personal (stock bajo, jornada autocerrada, cobros vencidos) |
 
 ### 04 · Auditoría técnica — [`04-auditoria/`](04-auditoria/)
 | Archivo | Contenido |

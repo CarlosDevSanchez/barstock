@@ -13,6 +13,7 @@
     "promotions": "Promotions",
     "inventory": "Inventory",
     "orders": "Orders",
+    "receivables": "Receivables",
     "customers": "Customers",
     "suppliers": "Suppliers",
     "reports": "Reports",
@@ -58,7 +59,8 @@
       "completed": "Completed",
       "refunded": "Refunded",
       "draft": "Draft",
-      "pending": "Pending"
+      "pending": "Pending",
+      "written_off": "Written off"
     },
     "payment": {
       "cash": "Cash",
@@ -193,7 +195,10 @@
     "left": "{count} left",
     "min": "Min: {count}",
     "andMore": "and {count} more",
-    "needsReview": "{count, plural, one {# business day needs review} other {# business days need review}}"
+    "needsReview": "{count, plural, one {# business day needs review} other {# business days need review}}",
+    "receivables": "Receivables",
+    "receivablesHint": "Outstanding customer balances",
+    "receivablesOverdue": "Overdue: {amount}"
   },
   "pos": {
     "title": "Point of Sale",
@@ -470,7 +475,26 @@
     "packagesColAvailable": "Packages",
     "packagesColRecipe": "Recipe",
     "packagesEmpty": "No active promotions",
-    "packagesUnavailable": "No inventory"
+    "packagesUnavailable": "No inventory",
+    "registerPurchase": "Record purchase",
+    "supplierEntry": "Supplier intake",
+    "asAdjustment": "Manual adjustment",
+    "asPurchase": "Supplier intake",
+    "supplier": "Supplier",
+    "pickSupplier": "Choose a supplier",
+    "unitCost": "Unit cost",
+    "invoice": "Invoice",
+    "invoicePlaceholder": "Invoice number (optional)",
+    "notes": "Notes",
+    "paidFromTill": "Paid with cash from the till",
+    "till": "Open till",
+    "noOpenTill": "There is no open till.",
+    "purchaseSaved": "Purchase recorded",
+    "purchaseFailed": "Could not record the purchase",
+    "costMismatch": "Purchase cost ({purchase}) differs from catalog cost ({catalog}). The catalog is left unchanged.",
+    "addLine": "Add product",
+    "removeLine": "Remove",
+    "savePurchase": "Save purchase"
   },
   "orders": {
     "title": "Orders",
@@ -558,7 +582,8 @@
     "receiptPayments": "Payments",
     "refundedStamp": "REFUNDED",
     "receiptPromo": "Promo: {name}",
-    "promoGroup": "Promo: {name} × {count}"
+    "promoGroup": "Promo: {name} × {count}",
+    "receiptPendingStamp": "PAYMENT DUE — Balance {balance} — Due {due}"
   },
   "customers": {
     "title": "Customers",
@@ -606,7 +631,9 @@
     "colDate": "Date",
     "colTotal": "Total",
     "noHistory": "No purchase history yet",
-    "view": "View"
+    "view": "View",
+    "openBalance": "Open balance",
+    "noOpenBalance": "No open balance"
   },
   "suppliers": {
     "title": "Suppliers",
@@ -638,7 +665,9 @@
     "colEmail": "Email",
     "colPhone": "Phone",
     "colAddress": "Address",
-    "empty": "No suppliers found"
+    "empty": "No suppliers found",
+    "viewHistory": "Purchase history",
+    "viewHistoryAria": "View purchase history for {name}"
   },
   "expenses": {
     "title": "Expenses",
@@ -688,7 +717,7 @@
     "totalExpenses": "Expenses",
     "totalExpensesHint": "Operating expenses in the range. Merchandise purchases are not included.",
     "netProfit": "Net profit",
-    "netProfitHint": "Gross profit − discounts − expenses",
+    "netProfitHint": "Gross profit − discounts − expenses − write-offs",
     "grossProfit": "Gross profit",
     "grossProfitHint": "Charged bases − cost (ex tax)",
     "dailySales": "Daily Sales",
@@ -728,7 +757,9 @@
     "openingFloat": "Float",
     "expectedCash": "Expected cash",
     "countedCash": "Counted cash",
-    "difference": "Difference"
+    "difference": "Difference",
+    "writtenOffTotal": "Write-offs",
+    "writtenOffTotalHint": "Balances written off in the range"
   },
   "cash": {
     "title": "Business day",
@@ -889,7 +920,29 @@
       "open": "Open",
       "closed": "Closed",
       "voided": "Voided"
-    }
+    },
+    "deferAsReceivable": "Close as receivable",
+    "deferTitle": "Close as receivable",
+    "deferDescription": "The tab closes and the balance stays outstanding.",
+    "dueDate": "Due date",
+    "reminder": "Reminder",
+    "reminderYes": "Yes",
+    "reminderNo": "No",
+    "note": "Note",
+    "deferConfirm": "Close as receivable",
+    "deferSuccess": "Tab deferred",
+    "deferFailed": "Could not defer"
+  },
+  "notifications": {
+    "title": "Notifications",
+    "email": "Email",
+    "push": "Push",
+    "installForPush": "Install the app to receive notifications",
+    "pushDenied": "Notification permission denied",
+    "pushFailed": "Could not enable push notifications",
+    "prefsFailed": "Could not save notification preferences",
+    "bell": "Low stock alerts",
+    "bellCount": "{count} low-stock products"
   },
   "pagination": {
     "showing": "Showing {from}–{to} of {total}",
@@ -900,5 +953,74 @@
     "nextPage": "Next page",
     "lastPage": "Last page",
     "pageAria": "Page {page}"
+  },
+  "purchases": {
+    "historyTitle": "Purchase history",
+    "historySubtitle": "Received purchases from this supplier",
+    "backToSuppliers": "Back to suppliers",
+    "backAria": "Back to suppliers",
+    "notFound": "Supplier not found",
+    "from": "From",
+    "to": "To",
+    "total": "Total purchased",
+    "purchases": "Purchases",
+    "products": "Products",
+    "colPo": "PO",
+    "colInvoice": "Invoice",
+    "colWhen": "Date",
+    "colAmount": "Amount",
+    "colProduct": "Product",
+    "colQty": "Quantity",
+    "colLastCost": "Last cost",
+    "colAvgCost": "Average cost",
+    "empty": "No purchases in this range",
+    "costMismatch": "The last purchase cost differs from the catalog cost. The catalog is left unchanged.",
+    "void": "Void",
+    "voidTitle": "Void this purchase?",
+    "voidReason": "Reason",
+    "voided": "Purchase voided"
+  },
+  "receivables": {
+    "title": "Receivables",
+    "subtitle": "Outstanding balances",
+    "empty": "No receivables",
+    "customer": "Customer",
+    "total": "Total",
+    "paid": "Paid",
+    "balance": "Balance",
+    "dueDate": "Due",
+    "overdue": "Overdue",
+    "status": "Status",
+    "recordPayment": "Record payment",
+    "edit": "Edit",
+    "writeOff": "Write off",
+    "writeOffTitle": "Write off receivable",
+    "writeOffDescription": "The remaining balance will no longer be collected. This cannot be undone.",
+    "writeOffReason": "Reason",
+    "writeOffConfirm": "Write off",
+    "writeOffSuccess": "Receivable written off",
+    "writeOffFailed": "Could not write off",
+    "paymentSuccess": "Payment recorded",
+    "paymentFailed": "Could not record payment",
+    "editTitle": "Edit receivable",
+    "editSuccess": "Receivable updated",
+    "editFailed": "Could not update",
+    "reminder": "Reminder",
+    "reminderYes": "Yes",
+    "reminderNo": "No",
+    "note": "Note",
+    "save": "Save",
+    "cancel": "Cancel",
+    "paymentMethod": "Method",
+    "amount": "Amount",
+    "splitPayment": "Split payment",
+    "secondPayment": "Second method",
+    "filterAll": "Pending and written off",
+    "filterPending": "Pending",
+    "filterWrittenOff": "Written off",
+    "statusPending": "Pending",
+    "statusWrittenOff": "Written off",
+    "openBalance": "Open balance",
+    "noOpenBalance": "No open balance"
   }
 }

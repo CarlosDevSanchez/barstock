@@ -17,7 +17,7 @@
 | `profiles` | `profiles_email_key` (UNIQUE) | |
 | `settings` | `settings_key_key` (UNIQUE) | |
 | `categories` | `idx_categories_parent` | FK |
-| `purchase_orders` / `_items` | `purchase_orders_po_number_key`, `idx_po_supplier`, `idx_purchase_order_items_order` | |
+| `purchase_orders` / `_items` | `purchase_orders_po_number_key`, `idx_po_supplier`, `idx_purchase_order_items_order`; secuencia `purchase_order_number_seq` **[Por verificar]** | |
 
 Se eliminaron `idx_products_sku` e `idx_products_barcode` (redundantes con los `UNIQUE`).
 
