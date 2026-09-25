@@ -25,7 +25,7 @@ Backfill: órdenes `completed`/`refunded` existentes reciben `settled_at = coale
 | `_create_order_from_tab(tab_id, status)` | Interna. Extrae el cuerpo de `_close_tab`. Si `completed`, pone `settled_at = now()`; si `pending`, lo deja null. Copia ítems, pagos parciales de la tab y cierra la tab. |
 | `_close_tab` | Wrapper → `_create_order_from_tab(..., 'completed')` |
 | `defer_tab` | Tab abierta, con `customer_id`, balance > 0. Crea orden `pending` y guarda vencimiento/recordatorio/nota. |
-| `pay_receivable` | 1–2 pagos (`method`/`amount`, métodos distintos). `FOR UPDATE` de la orden. Suma ≤ saldo. Idempotencia como `create_sale`. Al llegar a 0: `completed`, `settled_at = now()`, `business_day_id` de la asignación actual. |
+| `pay_receivable` | 1–2 pagos (`method`/`amount`, métodos distintos). `FOR UPDATE` de la orden. Suma ≤ saldo. Idempotencia como `create_sale`, pero la cabecera `Idempotency-Key` es **obligatoria** en `POST /receivables/{id}/payments` (400 si falta) — un cobro nunca debe poder reintentarse sin ella. Al llegar a 0: `completed`, `settled_at = now()`; `business_day_id` se actualiza con la jornada activa **solo si hay una abierta**, si no conserva el que ya tenía (no se pierde el vínculo con la jornada donde se difirió). |
 | `update_receivable` | Solo `pending`. |
 | `write_off_receivable` | Solo `pending` → `written_off`. **No** pone `settled_at`. |
 | `list_receivables` | Filas con saldo, `days_overdue`, etc. `p_status` null = pending + written_off. |
@@ -37,8 +37,8 @@ Backfill: órdenes `completed`/`refunded` existentes reciben `settled_at = coale
 
 - `sales_report` / `dashboard_summary` agrupan y filtran por **`settled_at`** (no por `occurred_at`/`created_at`).
 - Dashboard: `receivables_total`, `receivables_overdue`.
-- Reportes: `written_off_total`; `net_profit` resta también ese monto.
-- `business_day_report` sigue anclado a `business_day_id` de órdenes `completed` (al cobrar del todo, `pay_receivable` reescribe ese id).
+- Reportes: `written_off_total` (saldo no cobrado, solo informativo); `net_profit` **no** lo resta — solo resta el costo de los productos de esas órdenes, y suma (sin impuesto) los pagos que sí se cobraron, en la fecha en que se cobraron.
+- `business_day_report` cuenta una orden por su `business_day_id` cuando lo tiene; solo cae a `settled_at` cuando la orden no tiene `business_day_id` (para no contarla dos veces entre el reporte del día al que "pertenece" y el día en que se liquidó).
 
 ## UI
 

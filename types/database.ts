@@ -427,6 +427,7 @@ export type Database = {
           supplier_id: string | null
           updated_at: string
           void_reason: string | null
+          voided_after_close: boolean
         }
         Insert: {
           amount: number
@@ -443,6 +444,7 @@ export type Database = {
           supplier_id?: string | null
           updated_at?: string
           void_reason?: string | null
+          voided_after_close?: boolean
         }
         Update: {
           amount?: number
@@ -459,6 +461,7 @@ export type Database = {
           supplier_id?: string | null
           updated_at?: string
           void_reason?: string | null
+          voided_after_close?: boolean
         }
         Relationships: [
           {
@@ -750,6 +753,8 @@ export type Database = {
           notes: string | null
           occurred_at: string | null
           order_number: string
+          refund_after_close: boolean
+          refund_cash_session_id: string | null
           refund_reason: string | null
           refunded_at: string | null
           refunded_by: string | null
@@ -783,6 +788,8 @@ export type Database = {
           notes?: string | null
           occurred_at?: string | null
           order_number: string
+          refund_after_close?: boolean
+          refund_cash_session_id?: string | null
           refund_reason?: string | null
           refunded_at?: string | null
           refunded_by?: string | null
@@ -816,6 +823,8 @@ export type Database = {
           notes?: string | null
           occurred_at?: string | null
           order_number?: string
+          refund_after_close?: boolean
+          refund_cash_session_id?: string | null
           refund_reason?: string | null
           refunded_at?: string | null
           refunded_by?: string | null
@@ -856,6 +865,13 @@ export type Database = {
             columns: ["customer_id"]
             isOneToOne: false
             referencedRelation: "customers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "orders_refund_cash_session_id_fkey"
+            columns: ["refund_cash_session_id"]
+            isOneToOne: false
+            referencedRelation: "cash_sessions"
             referencedColumns: ["id"]
           },
           {
@@ -1227,6 +1243,7 @@ export type Database = {
           supplier_id: string | null
           total_amount: number | null
           updated_at: string
+          voided_after_close: boolean
         }
         Insert: {
           business_day_id?: string | null
@@ -1244,6 +1261,7 @@ export type Database = {
           supplier_id?: string | null
           total_amount?: number | null
           updated_at?: string
+          voided_after_close?: boolean
         }
         Update: {
           business_day_id?: string | null
@@ -1261,6 +1279,7 @@ export type Database = {
           supplier_id?: string | null
           total_amount?: number | null
           updated_at?: string
+          voided_after_close?: boolean
         }
         Relationships: [
           {
@@ -1739,7 +1758,7 @@ export type Database = {
       }
       close_cash_session: {
         Args: { p_counted_cash: number; p_notes?: string; p_session_id: string }
-        Returns: undefined
+        Returns: Json
       }
       create_expense: {
         Args: {
@@ -1786,7 +1805,7 @@ export type Database = {
         Returns: boolean
       }
       list_receivables: {
-        Args: { p_customer_id: string; p_status: string }
+        Args: { p_customer_id: string; p_limit?: number; p_status: string }
         Returns: Json
       }
       log_auth_event: {
@@ -1830,6 +1849,7 @@ export type Database = {
       receive_purchase: {
         Args: {
           p_cash_session_id: string
+          p_idempotency_key?: string
           p_invoice: string
           p_items: Json
           p_notes: string
