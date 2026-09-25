@@ -47,9 +47,11 @@ export const salesReportSchema = z.object({
     gross_profit: num,
     total_expenses: num,
     expenses_by_category: z.array(z.object({ category: z.string(), total: num })),
-    /** Remaining balance of written_off orders whose written_off_at falls in the range. */
+    /** Remaining (uncollected) balance of written_off orders whose written_off_at falls in the range. Shown for
+     *  visibility only — it is not subtracted from net_profit (see C1, H6). */
     written_off_total: num,
-    /** gross_profit − total_discount − total_expenses − written_off_total. */
+    /** gross_profit + (payments collected on written-off orders, on their own date) − total_discount −
+     *  total_expenses − (cost of goods for written-off orders in range). */
     net_profit: num,
     daily: z.array(z.object({ date: z.string(), revenue: num, orders: num })),
     top_products: z.array(

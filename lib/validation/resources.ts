@@ -249,7 +249,7 @@ export type SettingsInput = z.infer<typeof settingsSchema>
 export type SettingKey = keyof SettingsInput
 
 // ---- Query strings
-export const ORDER_STATUSES = ['draft', 'pending', 'completed', 'refunded'] as const
+export const ORDER_STATUSES = ['draft', 'pending', 'completed', 'refunded', 'written_off'] as const
 const optionalDate = z.preprocess(value => blankToNull(value) ?? undefined, z.iso.date().optional())
 
 export const productsQuerySchema = paginationSchema.extend({

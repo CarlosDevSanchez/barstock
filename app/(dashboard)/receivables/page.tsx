@@ -300,6 +300,9 @@ function PayDialog({
     const [split, setSplit] = useState(false)
     const [amount2, setAmount2] = useState('')
     const [submitting, setSubmitting] = useState(false)
+    // U3/C5: generated once when the dialog opens and reused on every retry, so a double-click or a retry after
+    // a dropped response replays the same request instead of paying twice.
+    const [idempotencyKey] = useState(() => crypto.randomUUID())
 
     const submit = async () => {
         setSubmitting(true)
@@ -310,7 +313,7 @@ function PayDialog({
                       { method: method2, amount: Number(amount2) || 0 }
                   ]
                 : [{ method: method1, amount: Number(amount1) || 0 }]
-            await receivablesApi.pay(row.order_id, { payments }, crypto.randomUUID())
+            await receivablesApi.pay(row.order_id, { payments }, idempotencyKey)
             toast.success(t('paymentSuccess'))
             onDone()
         } catch (error) {
@@ -403,7 +406,7 @@ function EditDialog({ row, onClose, onDone }: { row: ReceivableRow; onClose: () 
     const t = useTranslations('receivables')
     const [dueDate, setDueDate] = useState(row.due_date ?? '')
     const [reminder, setReminder] = useState(row.reminder_enabled)
-    const [note, setNote] = useState('')
+    const [note, setNote] = useState(row.reminder_note ?? '')
     const [submitting, setSubmitting] = useState(false)
 
     const submit = async () => {
