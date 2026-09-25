@@ -112,6 +112,7 @@
     "atMostFourDecimals": "At most 4 decimals",
     "noDecimals": "Use whole amounts (no cents)",
     "reasonRequired": "A reason is required",
+    "pushEndpointNotAllowed": "This push service is not supported",
     "positive": "Must be greater than 0",
     "tillExpenseCash": "An expense paid from the till must be cash",
     "invalidRange": "The end date is before the start",
