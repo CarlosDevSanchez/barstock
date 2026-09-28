@@ -47,6 +47,7 @@ export function IntlProvider({ children, locale = 'en' }: { children: ReactNode;
 }
 
 export function product(overrides: Partial<ProductListItem> = {}): ProductListItem {
+    const stock = overrides.stock === undefined ? 5 : overrides.stock
     return {
         id: crypto.randomUUID(),
         name: 'Wireless Mouse',
@@ -63,7 +64,13 @@ export function product(overrides: Partial<ProductListItem> = {}): ProductListIt
         created_at: '2026-01-01T00:00:00Z',
         updated_at: '2026-01-01T00:00:00Z',
         category: null,
-        stock: 5,
+        stock,
+        stock_mode: 'own',
+        stock_product_id: null,
+        stock_units: 1,
+        // An own product sells from its own row: the base quantity is its stock unless a test says otherwise.
+        stock_base_quantity: stock,
+        stock_base: null,
         ...overrides
     }
 }

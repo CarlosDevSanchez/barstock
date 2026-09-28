@@ -27,6 +27,10 @@ Lo crea un trigger al nacer el usuario; el rol solo lo cambia un admin (trigger)
 **`image_key`** (Fase 6: clave de R2, `CHECK image_key ~ '^products/[0-9a-f-]{36}/[0-9a-f-]{36}\.(webp|jpg|png)$'`, generada por el
 servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), `is_active` NOT NULL default true, **`deleted_at`**
 (borrado lógico). Un trigger crea su fila de `inventory`.
+**Modo de stock** (`20261009000001`, ver [productos](../03-modulos/productos.md#modos-de-stock)): `stock_mode text NOT NULL default 'own'`
+(`CHECK IN ('own','none','linked')`), `stock_product_id` → `products` (el **base** de una presentación) y `stock_units int NOT NULL default 1`
+(`CHECK 1–10000`). CHECKs de coherencia: `linked` ⇔ `stock_product_id` no nulo, `stock_units = 1` salvo en `linked`, nunca apunta a sí mismo.
+El trigger `products_stock_mode_guard` exige un solo nivel y protege al base (ver [funciones](04-triggers-y-funciones.md#modos-de-stock-20261009000001)).
 
 **`product_variants`** — `product_id` → `products` CASCADE NOT NULL, `name`, `variant_type` (texto libre: "size", "color"), `sku` UNIQUE, `barcode` UNIQUE, `cost_price`, `selling_price` (nullables, `CHECK ≥ 0`). Sin UI ni venta desde el POS (D10).
 
@@ -52,6 +56,7 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 Offline (F2): `client_ref UUID UNIQUE` (nullable; misma clave que la idempotencia del cobro), `occurred_at timestamptz` (nullable; hora del dispositivo), `source text NOT NULL default 'online' CHECK IN ('online','offline')`, `sync_issues jsonb` (nullable), `reviewed_by/reviewed_at` (reservados para F4).
 
 **`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, **`promotion_id` → `promotions` (nullable; líneas nacidas de un paquete; permite promo soft-deleted)**, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`, **`unit_cost`** (`NUMERIC(14,2)`, nullable: foto de `products.cost_price` al vender; las líneas anteriores quedan en null). `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
+**Foto de stock** (`20261009000001`): `stock_product_id uuid` y `stock_units int` (`≥ 0`), **sin FK** (una segunda FK a `products` haría ambiguos los *embeds* de PostgREST). `stock_units` null = línea anterior (su propio producto, factor 1); 0 = sin control (no se movió stock); ≥ 1 = unidades del base por unidad vendida. `stock_taken` se mide ahora en **unidades del base** (`CHECK 0..quantity × coalesce(nullif(stock_units,0),1)`). `tab_items` y `purchase_order_items` tienen la misma foto.
 
 **`payments`** — `order_id` → `orders` CASCADE NOT NULL, `payment_method` NOT NULL, `amount` (`CHECK ≥ 0`), `reference_number`, `notes`. Una orden nacida de una venta directa tiene un pago; una nacida de una
 cuenta ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)) puede tener varios (uno por cada pago parcial). `orders.tab_id` → `tabs` (NULL en una venta directa).
@@ -120,4 +125,5 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `business_days`, `cash_registers`, `cash_sessions`, `cash_session_users`, `cash_movements`; `orders`/`payments`/`tab_payments` ganan jornada y caja; settings `default_opening_float` y `cash_count_tolerance` (0); registro «Caja 1» | `20261003000001` |
 | `expense_categories`, `expenses` (categoría, método, jornada, caja, `occurred_at`, anulación), `order_items.unit_cost`; `create_expense` / `void_expense`; el efectivo esperado resta gastos en efectivo | `20261004000001` |
 | `tab_pay` / `tab_pay_split` ganan `p_idempotency_key` opcional (drop + recreate); `tabs.balance()` como columna computada para el listado | `20261007000001` |
+| `products.stock_mode/stock_product_id/stock_units` + trigger `products_stock_mode_guard`; foto `stock_product_id/stock_units` en `order_items`, `tab_items`, `purchase_order_items`; helpers `_stock_target`, `_lock_inventory`, `_take_stock`, `_return_stock`; `create_sale`, `tab_add_items`, `tab_remove_item`, `void_tab`, `_create_order_from_tab`, `refund_order`, `receive_purchase`, `void_purchase`, `dashboard_summary` y `top_selling_products` (drop + recreate: gana `stock_mode`, `stock_product_id`, `stock_units`, `stock_base_quantity`) redefinidos | `20261009000001` |
 | `orders.debtor_name` + CHECKs; `defer_tab` v2 (`p_customer_id` / `p_debtor_name` / `p_payments` / `p_idempotency_key`); `list_receivables` gana `p_q` y devuelve `debtor_name` | `20261008000001` |

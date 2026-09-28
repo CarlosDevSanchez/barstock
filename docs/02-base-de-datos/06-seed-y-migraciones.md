@@ -84,6 +84,13 @@ La migración inserta los settings `default_opening_float` y `cash_count_toleran
 
 `orders.debtor_name` (nullable, 2–120) y el CHECK de que una `pending` tenga cliente o nombre. `defer_tab` / `list_receivables` / `_create_order_from_tab` se recrean; no toca `seed.sql`. Ver [cuentas por cobrar](../03-modulos/cuentas-por-cobrar.md).
 
+## Modos de stock (`20261009000001`)
+
+Añade `products.stock_mode/stock_product_id/stock_units` con default `own`, así que **los productos existentes siguen igual** (no hay backfill).
+Las líneas antiguas de `order_items`/`tab_items`/`purchase_order_items` quedan con `stock_units = null` y las RPC las tratan como antes (su
+propio producto, factor 1); el `CHECK` de `order_items.stock_taken` se recrea con el nuevo rango. Recrea `top_selling_products` (cambia su
+tipo de retorno) y redefine las RPC de venta, cuentas, reembolso y compras. No toca `seed.sql`. Ver [productos](../03-modulos/productos.md#modos-de-stock).
+
 ## Configuración de Auth local (`supabase/config.toml`)
 
 `enable_signup = false` (alta solo por invitación), `[auth.email] enable_confirmations = true`, `minimum_password_length = 10`,

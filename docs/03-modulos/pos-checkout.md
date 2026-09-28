@@ -90,17 +90,22 @@ POST /api/v1/sales
 
 ## Reglas de cálculo (D3 + D-promos)
 - Producto suelto: igual que antes (`selling_price` + `tax_rate` del catálogo).
+- Stock por [modo](productos.md#modos-de-stock): `none` no toca inventario (nunca se rechaza por stock); `linked` descuenta `cantidad × stock_units` del
+  base (caja + sueltos en la misma venta van contra la misma fila, bloqueada una sola vez con `_lock_inventory`). Cada línea guarda la foto
+  `stock_product_id/stock_units` y `stock_taken` en unidades del base.
 - Promo: base total = `package_price × paquetes`, repartida proporcionalmente a `selling_price × qty` del componente; última línea absorbe el redondeo a `money_scale`. Impuesto **por producto** sobre la base asignada.
 - `total = Σ base + Σ impuesto − descuento global`.
 
 ## Validaciones y rechazos
 Carrito vacío, > 100 entradas o > 200 líneas tras expansión, cantidad ≤ 0, promo inactiva/borrada o con componente inactivo,
 stock insuficiente en cualquier componente (atómico), etc. **Excepción:** una venta offline (`occurred_at` no nulo)
-nunca se rechaza por falta de stock — ver F2 arriba.
+nunca se rechaza por falta de stock — ver F2 arriba. En una presentación, el faltante offline se anota a nombre del **base** y en sus unidades
+(`stock_shortfall: [{product_id: <base>, missing: 8}]`).
 
 ## Pantalla: comportamiento
 - Carrito persistido (`pos-cart` v3: líneas discriminadas; versiones anteriores se descartan).
-- Tope de `+` = stock (o paquetes disponibles) − ya en carrito.
+- Tope de `+` = stock (o paquetes disponibles) − ya en carrito. **Compartido entre presentaciones** (`lib/stock.ts`, `maxAddable`): con 20
+  cigarrillos y 6 sueltos en el carrito, la caja de 15 ya no se puede añadir. Un producto sin control no tiene tope y muestra «Siempre disponible».
 - Ticket e detalle de orden **agrupan** por `promotion_id` en UI; la BD sigue descompuesta.
 
 Relacionados: [Promociones](promociones.md), [Órdenes y reembolsos](ordenes-y-reembolsos.md), [Cuentas abiertas](cuentas-abiertas.md), [decisiones pendientes](../06-roadmap/decisiones-pendientes.md).

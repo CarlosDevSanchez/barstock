@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, mock, test } from 'bun:test'
 import { settings, userWithRole, IntlProvider } from '../helpers/fixtures'
 import { setupDom } from '../helpers/dom'
+import { maxAddable, type StockInfo } from '@/lib/stock'
 
 setupDom()
 const { cleanup, fireEvent, render, screen } = await import('@testing-library/react')
@@ -18,7 +19,7 @@ const { SessionProvider } = await import('@/components/session-provider')
 const idleProps = {
     pendingId: null as string | null,
     pendingQty: 1,
-    qtyInCart: () => 0
+    maxAddableFor: (product: StockInfo) => maxAddable(product, [])
 }
 
 const renderTop = (
@@ -39,7 +40,7 @@ const renderTop = (
                     reloadSignal={0}
                     pendingId={extras.pendingId ?? idleProps.pendingId}
                     pendingQty={extras.pendingQty ?? idleProps.pendingQty}
-                    qtyInCart={idleProps.qtyInCart}
+                    maxAddableFor={idleProps.maxAddableFor}
                     onSelect={onSelect}
                     onChangeQty={onChangeQty}
                     onConfirm={onConfirm}
@@ -92,7 +93,7 @@ describe('TopProducts', () => {
                         reloadSignal={0}
                         pendingId={null}
                         pendingQty={1}
-                        qtyInCart={() => 0}
+                        maxAddableFor={idleProps.maxAddableFor}
                         onSelect={() => {}}
                         onChangeQty={() => {}}
                         onConfirm={() => {}}

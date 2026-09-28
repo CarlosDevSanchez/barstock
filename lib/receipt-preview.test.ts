@@ -14,6 +14,11 @@ const mouse: ProductListItem = {
     stock: 5,
     category_id: null,
     category: null,
+    stock_mode: 'own',
+    stock_product_id: null,
+    stock_units: 1,
+    stock_base_quantity: 5,
+    stock_base: null,
     is_active: true,
     deleted_at: null,
     barcode: null,
@@ -49,7 +54,8 @@ const promo: PromotionListItem = {
                 deleted_at: null,
                 selling_price: 8,
                 tax_rate: 0.1,
-                stock: 10
+                stock: 10,
+                stock_mode: 'own'
             }
         },
         {
@@ -63,7 +69,8 @@ const promo: PromotionListItem = {
                 deleted_at: null,
                 selling_price: 5,
                 tax_rate: 0.1,
-                stock: 10
+                stock: 10,
+                stock_mode: 'own'
             }
         }
     ]

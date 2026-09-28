@@ -127,7 +127,8 @@
     "unknownCurrency": "Moneda desconocida",
     "unknownTimezone": "Zona horaria desconocida",
     "minPassword": "Al menos 10 caracteres",
-    "passwordsMismatch": "Las contraseñas no coinciden"
+    "passwordsMismatch": "Las contraseñas no coinciden",
+    "minTwoUnits": "Debe ser al menos 2"
   },
   "errors": {
     "generic": "Algo salió mal",
@@ -285,7 +286,8 @@
     "decreasePackages": "Disminuir paquetes",
     "increasePackages": "Aumentar paquetes",
     "packagesUnit": "paquetes",
-    "promoStockDetail": "{recipe} → {count, plural, one {# paquete disponible} other {# paquetes disponibles}}"
+    "promoStockDetail": "{recipe} → {count, plural, one {# paquete disponible} other {# paquetes disponibles}}",
+    "alwaysAvailable": "Siempre disponible"
   },
   "products": {
     "title": "Productos",
@@ -336,7 +338,25 @@
     "changeImage": "Cambiar imagen",
     "removeImage": "Quitar imagen",
     "imageResizeFailed": "No se pudo procesar esa imagen. Prueba con otro archivo.",
-    "imageSaveFailed": "El producto se guardó, pero no se pudo guardar la imagen."
+    "imageSaveFailed": "El producto se guardó, pero no se pudo guardar la imagen.",
+    "stockMode": "Inventario",
+    "stockModeOwn": "Controla su propio stock",
+    "stockModeNone": "Sin control de stock (siempre disponible)",
+    "stockModeLinked": "Presentación de otro producto",
+    "stockModeOwnHint": "Las unidades se ajustan y compran desde Inventario.",
+    "stockModeNoneHint": "Siempre se puede vender y no aparece en Inventario. Útil para cafés, bebidas preparadas o servicios.",
+    "stockModeLinkedHint": "Se vende con su propio precio, pero descuenta unidades del stock del producto base (p. ej. una caja de 15 cigarrillos).",
+    "stockBase": "Producto base *",
+    "stockBasePlaceholder": "Elige el producto base",
+    "baseStock": "{stock} en stock",
+    "stockUnits": "Unidades del base por venta *",
+    "stockUnitsHint": "Cuántas unidades del producto base se descuentan al vender 1.",
+    "stockLinkPreview": "Vender 1 descuenta {units} × {base} · disponibles ahora: {available}",
+    "useSuggestedCost": "Usar costo sugerido: {cost}",
+    "stockUntracked": "Sin control",
+    "stockOfBase": "(×{units} de {base})",
+    "createPresentation": "Crear presentación",
+    "createPresentationAria": "Crear una presentación de {name}"
   },
   "settings": {
     "title": "Ajustes",
@@ -411,7 +431,7 @@
     "colItems": "Componentes",
     "colPackages": "Paquetes disponibles",
     "packagesAvailable": "{count, plural, one {# paquete} other {# paquetes}}",
-    "packagesUnavailable": "Sin inventario",
+    "packagesUnavailable": "Sin límite",
     "componentStock": "stock {count}",
     "componentStockUnknown": "sin stock",
     "bottleneck": "Limita",
@@ -484,7 +504,7 @@
     "packagesColAvailable": "Paquetes",
     "packagesColRecipe": "Receta",
     "packagesEmpty": "No hay promociones activas",
-    "packagesUnavailable": "Sin inventario",
+    "packagesUnavailable": "Sin límite",
     "registerPurchase": "Registrar compra",
     "supplierEntry": "Entrada de proveedor",
     "asAdjustment": "Ajuste manual",
@@ -504,7 +524,10 @@
     "costMismatch": "El costo de compra ({purchase}) no coincide con el costo del catálogo ({catalog}). El catálogo no se modifica.",
     "addLine": "Añadir producto",
     "removeLine": "Quitar",
-    "savePurchase": "Guardar compra"
+    "savePurchase": "Guardar compra",
+    "equivalent": "= {packs} × {name}{loose, plural, =0 {} other { + # sueltas}}",
+    "presentationOf": "Presentación: ×{units} de {base}",
+    "purchaseAddsUnits": "Suma {units} unidades a {base}"
   },
   "orders": {
     "title": "Órdenes",

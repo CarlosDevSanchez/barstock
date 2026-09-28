@@ -3,6 +3,9 @@
 > Actualizado 2026-09-22 · migraciones `20260924000001` (tablas/RLS) + `20260924000002` (`create_sale` expansión) + `20260925000001` (`tab_add_items` promos) · API `promotions`, `promotions/[id]` · UI `/promotions` (gerente+) · venta en POS y cuentas · Confianza: **[Verificado]** en local (RPC + allocation unitario).
 
 - **Qué es:** paquete multi-producto a **precio fijo** (`package_price`). **Sin stock propio:** disponibilidad = `floor(min(stock_i / qty_i))` sobre componentes activos con inventario (`promotion.available` en la API).
+  Con los [modos de stock](productos.md#modos-de-stock): un componente **sin control** no limita; uno que es **presentación** cuenta con su stock efectivo
+  (`floor(base / stock_units)`). Si ningún componente controla stock, `available = null` = **sin límite** («Sin límite» / «Siempre disponible»); un
+  componente que controla stock sin fila de inventario da 0.
 - **Dónde se ve el inventario derivado:**
   - `/promotions`: columna **Paquetes disponibles**, stock por componente en la receta, badge **Limita** en el cuello de botella; el diálogo de alta/edición muestra una **estimación en vivo**.
   - POS: franja horizontal con scroll + modal «Ver todas»; badge `{N} paquetes` + tooltip con receta y stock por componente.
