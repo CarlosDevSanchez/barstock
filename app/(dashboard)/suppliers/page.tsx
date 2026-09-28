@@ -1,11 +1,12 @@
 'use client'
 
 import { useState } from 'react'
+import { useRouter } from 'next/navigation'
 import { useForm } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Edit, Plus, Trash2, Truck } from 'lucide-react'
+import { Edit, History, Plus, Trash2, Truck } from 'lucide-react'
 import { Card } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -119,6 +120,7 @@ function SupplierDialog({ supplier, onClose, onSaved }: SupplierDialogProps) {
 export default function SuppliersPage() {
     const t = useTranslations('suppliers')
     const tc = useTranslations('common')
+    const router = useRouter()
     const { user } = useSession()
     const canDelete = roleAtLeast(user.role, 'admin')
     const [searchQuery, setSearchQuery] = useState('')
@@ -199,6 +201,14 @@ export default function SuppliersPage() {
                                                         <Button
                                                             size="sm"
                                                             variant="ghost"
+                                                            aria-label={t('viewHistoryAria', { name: supplier.name })}
+                                                            onClick={() => router.push(`/suppliers/${supplier.id}`)}
+                                                        >
+                                                            <History className="h-4 w-4" />
+                                                        </Button>
+                                                        <Button
+                                                            size="sm"
+                                                            variant="ghost"
                                                             aria-label={t('editAria', { name: supplier.name })}
                                                             onClick={() => setEditing(supplier)}
                                                         >
@@ -227,8 +237,13 @@ export default function SuppliersPage() {
                             <ListCardRow
                                 title={supplier.name}
                                 subtitle={supplier.contact_person || supplier.email || supplier.phone || undefined}
+                                href={`/suppliers/${supplier.id}`}
                                 menu={
                                     <>
+                                        <DropdownMenuItem onClick={() => router.push(`/suppliers/${supplier.id}`)}>
+                                            <History className="mr-2 h-4 w-4" />
+                                            {t('viewHistory')}
+                                        </DropdownMenuItem>
                                         <DropdownMenuItem onClick={() => setEditing(supplier)}>
                                             <Edit className="mr-2 h-4 w-4" />
                                             {tc('edit')}

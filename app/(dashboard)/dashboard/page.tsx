@@ -8,6 +8,8 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/com
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
 import { useMoney, useSession } from '@/components/session-provider'
+import { roleAtLeast } from '@/lib/auth/roles'
+import { ReviewBanner } from '@/components/cash/review-banner'
 import { DEFAULT_LOCALE } from '@/lib/money'
 import { dashboardApi } from '@/lib/api/reports'
 import { calendarDate } from '@/lib/dates'
@@ -17,7 +19,7 @@ import { useApiQuery } from '@/hooks/use-api-query'
 export default function DashboardPage() {
     const t = useTranslations('dashboard')
     const money = useMoney()
-    const { settings } = useSession()
+    const { settings, user } = useSession()
     // One request: the database aggregates (refunded orders excluded, days bucketed in the store time zone).
     const summary = useApiQuery(signal => dashboardApi.get(signal), 'dashboard')
 
@@ -43,9 +45,10 @@ export default function DashboardPage() {
                 <h1 className="text-3xl font-bold">{t('title')}</h1>
                 <p className="text-muted-foreground">{t('subtitle')}</p>
             </div>
+            {roleAtLeast(user.role, 'admin') ? <ReviewBanner /> : null}
 
             {/* KPI Cards */}
-            <div className="grid grid-cols-1 gap-4 lg:grid-cols-4">
+            <div className="grid grid-cols-1 gap-4 lg:grid-cols-5">
                 <Card className="rounded-2xl border-emerald-100 dark:border-emerald-900/30">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
                         <CardTitle className="text-sm font-medium">{t('todayRevenue')}</CardTitle>
@@ -90,6 +93,21 @@ export default function DashboardPage() {
                     <CardContent>
                         <div className="text-2xl font-bold text-red-600">{stats.low_stock_count}</div>
                         <p className="text-xs text-muted-foreground mt-1">{t('itemsNeedRestocking')}</p>
+                    </CardContent>
+                </Card>
+
+                <Card className="rounded-2xl border-amber-100 dark:border-amber-900/30">
+                    <CardHeader className="flex flex-row items-center justify-between space-y-0 pb-2">
+                        <CardTitle className="text-sm font-medium">{t('receivables')}</CardTitle>
+                        <DollarSign className="h-4 w-4 text-amber-600" />
+                    </CardHeader>
+                    <CardContent>
+                        <div className="text-2xl font-bold">{money(stats.receivables_total)}</div>
+                        <p className="text-xs text-muted-foreground mt-1">
+                            {stats.receivables_overdue > 0
+                                ? t('receivablesOverdue', { amount: money(stats.receivables_overdue) })
+                                : t('receivablesHint')}
+                        </p>
                     </CardContent>
                 </Card>
             </div>

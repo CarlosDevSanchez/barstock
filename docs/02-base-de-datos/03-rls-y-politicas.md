@@ -30,10 +30,12 @@
 | `inventory` | SELECT | SELECT | SELECT (escritura solo vía RPC) |
 | `inventory_transactions` | — | SELECT | SELECT (las escribe el RPC) |
 | `customers` | SELECT, INSERT, UPDATE (solo `name, email, phone, address, is_active, deleted_at`; `deleted_at` solo admin, trigger `guard_soft_delete`) | ídem | + DELETE; borrado lógico (`deleted_at`) |
-| `suppliers`, `purchase_orders`, `purchase_order_items` | — | SELECT, INSERT, UPDATE (en `suppliers`, `deleted_at` solo admin: trigger `guard_soft_delete`) | + DELETE; borrado lógico de `suppliers` (`deleted_at`) |
+| `suppliers` | — | SELECT, INSERT, UPDATE (`deleted_at` solo admin: `guard_soft_delete`) | + DELETE; borrado lógico |
+| `purchase_orders`, `purchase_order_items` | — | SELECT (gerente+); escrituras **solo** vía RPC (`receive_purchase` / `void_purchase`); INSERT/UPDATE/DELETE revocados a `authenticated` **[Por verificar]** | — |
 | `orders` | SELECT **propias** (`created_by`) | SELECT todas | SELECT todas |
 | `order_items`, `payments` | SELECT de sus órdenes (heredan la visibilidad de `orders`) | todas | todas |
-| `expenses` | — | SELECT, INSERT | + UPDATE, DELETE |
+| `expenses` | — | SELECT (escritura solo vía `create_expense`) | SELECT; anulación vía `void_expense` |
+| `expense_categories` | SELECT | SELECT | SELECT, INSERT, UPDATE (sin DELETE) |
 | `settings` | SELECT | SELECT | SELECT, INSERT, UPDATE, DELETE |
 | `tabs`, `tab_members`, `tab_items`, `tab_payments` | SELECT (compartido: cualquier cajero ve/atiende cualquier cuenta; escritura solo vía RPC) | SELECT | SELECT |
 | `audit_log` | — | — | SELECT (append-only: ver abajo) |
@@ -122,6 +124,10 @@ where grantee = 'anon' and table_schema = 'public';
     -- … sentencias a probar …
   rollback;
   ```
+
+## Jornada y cajas (`20261003000001`)
+
+Cajero+ puede leer `business_days`, `cash_registers`, `cash_sessions`, `cash_session_users` y `cash_movements`. No hay políticas de escritura: todo pasa por RPC, salvo `cash_registers` (insert y update solo admin). `anon` no tiene privilegios; `authenticated` no puede borrar ni truncar.
 
 ## Migrar una base ya desplegada
 

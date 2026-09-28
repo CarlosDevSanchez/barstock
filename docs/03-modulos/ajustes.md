@@ -1,8 +1,8 @@
 # Módulo: Ajustes
 
-> Actualizado en la etapa 3 (Fase 6: subida real del logo) · `app/(dashboard)/settings/page.tsx` · API `GET/PATCH /settings`,
+> Actualizado con `offline_max_hours` (F2) · `app/(dashboard)/settings/page.tsx` · API `GET/PATCH /settings`,
 > `POST/DELETE /settings/logo` · Servicio `services/settings.ts` · Confianza: **[Verificado]** (`admin.test.ts`, `rls.test.ts`,
-> `product-images.test.ts`, e2e).
+> `product-images.test.ts`, `offline-sales.test.ts`, e2e).
 
 Antes: la pantalla era decorativa (no persistía nada) y había tres fuentes de "ajustes" desconectadas. Ahora hay **una**: la tabla `settings` (D11: solo BD).
 
@@ -19,6 +19,7 @@ Antes: la pantalla era decorativa (no persistía nada) y había tres fuentes de 
 | `timezone` | zona IANA válida | Agrupación por días en dashboard y reportes (SQL); defecto `America/Bogota` |
 | `tax_rate` | fracción 0–1 (el formulario usa %) | **Tasa por defecto al crear un producto** (cada producto conserva la suya; **no interviene en las ventas**); defecto `0.19` (supuesto D3) |
 | `low_stock_threshold` | entero ≥ 0 | Umbral de la fila de inventario de los **productos nuevos** (los existentes conservan el suyo) |
+| `offline_max_hours` | entero 1–168 | Ventana máxima que `create_sale` acepta para `occurred_at` en una venta offline; fuera de rango se recorta (`sync_issues.occurred_at_clamped`); defecto `12`. Ver [pos-checkout](pos-checkout.md) y [offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md) (F2) |
 | `receipt_template` | `{ header, footer }` (≤ 200) | Encabezado/pie del [ticket de 80 mm](ordenes-y-reembolsos.md) |
 
 Si una clave falta o su valor es inválido, el servicio devuelve el **valor por defecto** (`SETTINGS_DEFAULTS`) en lugar de romper la app (probado). `PATCH` acepta un subconjunto y hace *upsert* por clave.

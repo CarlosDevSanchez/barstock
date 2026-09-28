@@ -17,7 +17,7 @@
 | `profiles` | `profiles_email_key` (UNIQUE) | |
 | `settings` | `settings_key_key` (UNIQUE) | |
 | `categories` | `idx_categories_parent` | FK |
-| `purchase_orders` / `_items` | `purchase_orders_po_number_key`, `idx_po_supplier`, `idx_purchase_order_items_order` | |
+| `purchase_orders` / `_items` | `purchase_orders_po_number_key`, `idx_po_supplier`, `idx_purchase_order_items_order`; secuencia `purchase_order_number_seq` **[Por verificar]** | |
 
 Se eliminaron `idx_products_sku` e `idx_products_barcode` (redundantes con los `UNIQUE`).
 
@@ -30,7 +30,7 @@ Se eliminaron `idx_products_sku` e `idx_products_barcode` (redundantes con los `
 | `inventory` | `quantity ≥ 0` (**nunca stock negativo**), `low_stock_threshold ≥ 0` |
 | `inventory_transactions` | `transaction_type IN ('purchase','sale','adjustment','return')`, `quantity ≠ 0` |
 | `customers` | `loyalty_points ≥ 0`, `total_spent ≥ 0` |
-| `orders` | importes `≥ 0`; **`total = subtotal − discount + tax`** (`NOT VALID`) |
+| `orders` | importes `≥ 0`; **`total = subtotal − discount + tax`** (`NOT VALID`); `debtor_name` nulo o 2–120 caracteres recortados; `pending` exige `customer_id` **o** `debtor_name` |
 | `order_items` | `quantity > 0`, importes `≥ 0`; **`total = unit_price × quantity − discount + tax`** (`NOT VALID`) |
 | `payments`, `expenses` | `amount ≥ 0` |
 | `purchase_orders` / `_items` | `total_amount ≥ 0`; `quantity > 0`, `unit_price ≥ 0` |
@@ -54,5 +54,7 @@ select relname as tabla, indexrelname as indice, idx_scan
 from pg_stat_user_indexes where schemaname = 'public' order by idx_scan asc, relname;
 ```
 
-- Pendiente si el volumen lo pide: índice `pg_trgm` GIN sobre `products(name)` para `ilike '%…%'`, `orders(customer_id, created_at)` para historiales largos, y `expenses(date)` cuando exista la UI de gastos.
+- `business_days_one_open_idx`: una sola jornada con `closed_at` nulo. `cash_sessions_one_open_register_idx`: una sesión abierta por caja. `closed_at` nulo o posterior a `opened_at`.
+- `expenses(occurred_at)` para el listado y el reporte por rango.
+- Pendiente si el volumen lo pide: índice `pg_trgm` GIN sobre `products(name)` para `ilike '%…%'`, y `orders(customer_id, created_at)` para historiales largos.
 - `inventory?low=true` filtra en memoria (hasta 1000 filas): con miles de artículos convendría una vista o una función.

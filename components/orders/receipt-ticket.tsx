@@ -3,7 +3,8 @@
 import { useLocale, useTranslations } from 'next-intl'
 import { taxBreakdown } from '@/lib/receipt'
 import { groupOrderItemsByPromotion } from '@/lib/order-item-groups'
-import { formatMoney } from '@/lib/money'
+import { currencyDecimals, formatMoney } from '@/lib/money'
+import { sumMoney } from '@/lib/tab-split'
 import { moneyLocale } from '@/lib/i18n/config'
 import type { OrderDetail } from '@/lib/api/orders'
 import type { SettingsWithLogoUrl } from '@/lib/api/settings'
@@ -11,6 +12,9 @@ import type { SettingsWithLogoUrl } from '@/lib/api/settings'
 interface ReceiptTicketProps {
     order: OrderDetail
     settings: SettingsWithLogoUrl
+    /** Set for a queued-but-not-yet-synced sale (F4): the order/items are a preview (`lib/receipt-preview.ts`),
+     * not the real thing yet, so the ticket says so instead of showing a real `order_number`. */
+    provisional?: boolean
 }
 
 /**
@@ -19,7 +23,7 @@ interface ReceiptTicketProps {
  * printed page to 80mm and `app/(dashboard)/orders/[id]/page.tsx` hides the normal on-screen view while printing.
  * Promotion packages are grouped under the promo name; component lines are indented under it.
  */
-export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
+export function ReceiptTicket({ order, settings, provisional = false }: ReceiptTicketProps) {
     const t = useTranslations('orders')
     const tc = useTranslations('common')
     const locale = useLocale()
@@ -73,11 +77,20 @@ export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
                 <p>{dateTime}</p>
             </div>
 
+            {provisional && (
+                <>
+                    <div className="border-t border-dashed border-black my-2" />
+                    <p className="text-center text-sm font-bold" data-testid="receipt-provisional-stamp">
+                        {t('receiptProvisionalStamp')}
+                    </p>
+                </>
+            )}
+
             <div className="border-t border-dashed border-black my-2" />
 
             <div className="space-y-0.5">
                 <p>
-                    {t('name')} {order.customer?.name || t('walkInCustomer')}
+                    {t('name')} {order.customer?.name || order.debtor_name || t('walkInCustomer')}
                 </p>
                 {order.payments.length > 0 && (
                     <p>
@@ -205,6 +218,30 @@ export function ReceiptTicket({ order, settings }: ReceiptTicketProps) {
                 <>
                     <div className="border-t border-dashed border-black my-2" />
                     <p className="text-center text-sm font-bold">{t('refundedStamp')}</p>
+                </>
+            )}
+
+            {order.status === 'pending' && (
+                <>
+                    <div className="border-t border-dashed border-black my-2" />
+                    <p className="text-center text-sm font-bold" data-testid="receipt-pending-stamp">
+                        {t('receiptPendingStamp', {
+                            // E7: sum in minor units so a float remainder never off-by-a-cent the printed balance.
+                            balance: money(
+                                order.total -
+                                    sumMoney(
+                                        order.payments.map(payment => payment.amount),
+                                        currencyDecimals(settings.currency)
+                                    )
+                            ),
+                            due: (() => {
+                                const dueDate = (order as OrderDetail & { due_date?: string | null }).due_date
+                                if (!dueDate) return '—'
+                                const [, month, day] = dueDate.split('-')
+                                return `${day}/${month}`
+                            })()
+                        })}
+                    </p>
                 </>
             )}
 

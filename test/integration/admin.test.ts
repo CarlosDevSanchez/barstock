@@ -185,7 +185,8 @@ describe('reports', () => {
                     discount,
                     total,
                     customer_id: customer.id,
-                    created_at: at
+                    created_at: at,
+                    settled_at: at
                 })
                 .select('id')
                 .single()
@@ -285,7 +286,7 @@ describe('reports', () => {
 
         await db
             .from('orders')
-            .update({ created_at: `${day}T15:00:00Z` })
+            .update({ created_at: `${day}T15:00:00Z`, settled_at: `${day}T15:00:00Z` })
             .eq('id', orderId!)
 
         const data = dataOf<Report>(await manager.get(report, `reports?from=${day}&to=${day}`))
@@ -359,10 +360,22 @@ describe('settings', () => {
             { timezone: 'Mars/Base' },
             { tax_rate: 21 },
             { store_email: 'nope' },
-            { low_stock_threshold: -1 }
+            { low_stock_threshold: -1 },
+            { offline_max_hours: 0 },
+            { offline_max_hours: 200 }
         ]) {
             expect((await admin.patch(patchSettings, 'settings', { body })).status).toBe(422)
         }
+    })
+
+    test('offline_max_hours defaults to 12 and only an admin changes it', async () => {
+        const defaults = dataOf<{ offline_max_hours: number }>(await cashier.get(getSettings, 'settings'))
+        expect(defaults.offline_max_hours).toBe(12)
+        expect((await cashier.patch(patchSettings, 'settings', { body: { offline_max_hours: 24 } })).status).toBe(403)
+        expect((await admin.patch(patchSettings, 'settings', { body: { offline_max_hours: 24 } })).status).toBe(200)
+        expect(
+            dataOf<{ offline_max_hours: number }>(await cashier.get(getSettings, 'settings')).offline_max_hours
+        ).toBe(24)
     })
 
     test('a corrupt stored value falls back to the default instead of breaking the app', async () => {

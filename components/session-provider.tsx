@@ -13,6 +13,8 @@ export interface SessionUser {
     fullName: string | null
     role: UserRole
     locale: AppLocale
+    notifyEmail: boolean
+    notifyPush: boolean
 }
 
 interface SessionValue {

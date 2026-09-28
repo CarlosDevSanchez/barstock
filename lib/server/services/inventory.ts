@@ -64,6 +64,19 @@ export async function listInventory(
     return { rows: matching.slice(from, to + 1), total: matching.length, summary }
 }
 
+export async function setThreshold(
+    supabase: AppSupabaseClient,
+    inventoryId: string,
+    threshold: number
+): Promise<{ low_stock_threshold: number }> {
+    const { error } = await supabase.rpc('set_low_stock_threshold', {
+        p_inventory_id: inventoryId,
+        p_threshold: threshold
+    })
+    assertNoError(error)
+    return { low_stock_threshold: threshold }
+}
+
 export async function adjustInventory(
     supabase: AppSupabaseClient,
     inventoryId: string,

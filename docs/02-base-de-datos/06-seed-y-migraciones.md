@@ -76,6 +76,14 @@ curl -s -X POST "$API_URL/auth/v1/admin/users" -H "apikey: $SERVICE_ROLE_KEY" -H
 
 (`supabase status -o env` imprime `API_URL` y `SERVICE_ROLE_KEY`.) Los usuarios de las pruebas automáticas se crean igual, en su `setup`.
 
+## Jornada (`20261003000001`)
+
+La migración inserta los settings `default_opening_float` y `cash_count_tolerance` (ambos `0`) y la caja «Caja 1». No hace falta tocar `seed.sql`.
+
+## Cuentas por cobrar v2 (`20261008000001`)
+
+`orders.debtor_name` (nullable, 2–120) y el CHECK de que una `pending` tenga cliente o nombre. `defer_tab` / `list_receivables` / `_create_order_from_tab` se recrean; no toca `seed.sql`. Ver [cuentas por cobrar](../03-modulos/cuentas-por-cobrar.md).
+
 ## Configuración de Auth local (`supabase/config.toml`)
 
 `enable_signup = false` (alta solo por invitación), `[auth.email] enable_confirmations = true`, `minimum_password_length = 10`,

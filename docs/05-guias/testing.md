@@ -6,7 +6,7 @@
 
 | Nivel | Dónde | Herramienta | Necesita BD | Qué cubre |
 |---|---|---|---|---|
-| Unitarias | `lib/**/*.test.ts`, `stores/*.test.ts` | `bun test` | No | Esquemas zod (`''` → `null`, dinero, límites, asignación masiva), `formatMoney`, `previewTotals`, `dateInZone`, roles, validación de entorno, mapeo de errores, `route()` (CSRF, 401/403/422, errores), cliente `fetch`, carrito |
+| Unitarias | `lib/**/*.test.ts`, `stores/*.test.ts`, `test/offline/*.test.ts` | `bun test` | No | Esquemas zod (`''` → `null`, dinero, límites, asignación masiva), `formatMoney`, `previewTotals`, `dateInZone`, roles, validación de entorno, mapeo de errores, `route()` (CSRF, 401/403/422, errores), cliente `fetch`, carrito, degradado offline sin `indexedDB` |
 | Componentes | `test/components/*.test.tsx` | `bun test` + happy-dom + Testing Library | No | Carrito del POS, formulario de producto (errores de validación y normalización), navegación por rol, confirmación de borrado |
 | API (integración) | `test/integration/{auth,catalog,sales,admin,proxy}.test.ts` | `bun test` | **Sí** (Supabase local) | Cada Route Handler invocado con un `Request` real y la cookie de sesión de un login real, por rol: 401 sin sesión, 403 por rol, 422 por validación, respuesta correcta; `proxy.ts`; flujo de invitación y recuperación con el correo real de Mailpit |
 | Seguridad / RLS | `test/integration/rls.test.ts` | `bun test` + supabase-js | **Sí** | Clientes autenticados como cajero, gerente, admin, inactivo y anónimo **sin código de la app por medio** (como un atacante con la clave anónima): escalada de rol, escrituras directas revocadas, matriz de roles, visibilidad de órdenes, trigger de alta, `CHECK`s |
@@ -55,8 +55,16 @@ Con `CI=true`, Playwright no reutiliza un servidor existente y arranca `bun run 
   handler real `auth/login` (cookies reales de `@supabase/ssr`).
 - **Por qué procesos separados.** `mock.module` de Bun es **global al proceso** y persiste entre archivos: el mock de `@/lib/server/supabase` de
   `http.test.ts` rompería las pruebas de integración que usan el cliente real. Además Testing Library captura `document` al importarse, así que
-  cada archivo de componentes necesita su propio proceso (`test:components` los lanza uno a uno). Consecuencia: no se usa `coverageThreshold` de
-  `bunfig.toml` (juzgaría cada proceso por separado).
+  cada archivo de componentes necesita su propio proceso (`test:components` los lanza uno a uno). Misma razón: la suite del degradado sin
+  `indexedDB` vive en `test/offline/` (fuera de `lib/`), lanzada en un segundo `bun test` tras el batch `lib stores` — si compartiera proceso con
+  `outbox.test.ts`/`sync.test.ts`, su `mock.module('@/lib/offline/db')` sustituiría el módulo real (falla cuando el orden es sync → db, como en
+  CI Linux). Por la misma razón, `test/integration/notifications-dispatch.test.ts` (`mock.module('resend'|'web-push')`, `dispatchOutbox`
+  end-to-end) corre en su **propio** `bun test` separado del resto de `test/integration/`: `test:integration` y `test:coverage` lo excluyen del
+  batch principal (`find ... ! -name 'notifications-dispatch.test.ts'`) y lo lanzan aparte; cada uno restaura con `try/finally` cualquier
+  `process.env.*` que toque. Consecuencia: no se usa `coverageThreshold` de `bunfig.toml` (juzgaría cada proceso por separado) y
+  `scripts/coverage-check.ts` fusiona tres informes lcov, no dos.
+- **Bun en CI.** `supabase/setup-cli` reinstala Bun según su propio `.bun-version` y lo pone delante en `PATH`; el workflow vuelve a pinnear
+  1.4.1 justo después para que `test:coverage` / e2e no corran con una versión distinta a `packageManager`.
 - **Cobertura** (`scripts/coverage-check.ts`): fusiona los informes lcov de unitarias e integración y exige **≥ 80 % de líneas** en `lib/server/**` y
   `lib/validation/**`; un archivo que ninguna prueba carga cuenta como fallo (no desaparece del informe). Hoy: `lib/server` 96,8 %, `lib/validation` 99,1 %.
 - **Nomenclatura E2E**: `*.e2e.ts`, no `*.spec.ts`, porque `bun test` recoge los `.spec.` y los ejecutaría como unitarios.
@@ -72,6 +80,7 @@ Una carrera se puede colar sin ser detectada. Se comprobó **rompiendo a propós
 | Guarda `quantity >= n` del `UPDATE` de stock | Dos ventas de la última unidad |
 | `REVOKE`/políticas de escritura sobre `orders` | `rls.test.ts` (3 roles) |
 | Trigger `protect_profile_columns` | Escalada de rol de un cajero |
+| `for update skip locked` en `_claim_outbox` | `test/integration/outbox-claim-pg.test.ts`, ×20: dos conexiones **Postgres reales** (`Bun.SQL`, no supabase-js) donde una mantiene su transacción abierta sin `COMMIT` mientras la otra reclama — el escenario que dos llamadas RPC vía supabase-js no pueden ejercitar, porque cada una hace `commit` antes de que la otra empiece. Sin el `skip locked` (o con un `for update` a secas), ambas conexiones esperarían la misma fila en vez de repartírselas |
 
 Para repetir el ejercicio: aplicar la mutación con `docker exec supabase_db_barstock psql …` (p. ej. `pg_get_functiondef` + `sed`), ejecutar la prueba y
 volver al estado sano con `bun run db:reset`.
@@ -86,6 +95,11 @@ volver al estado sano con `bun run db:reset`.
 - Los ids del seed (`aaaaaaaa-…`) no son UUID RFC 4122 válidos para `z.uuid()` de zod 4: se usa `z.guid()`.
 - Un formulario enviado **antes de hidratar** hace un `GET` nativo y deja la contraseña en la URL: el botón de los formularios de auth espera a `useHydrated()`.
 - `getByText('Total')` en Playwright casa también con "Subtotal": usar `{ exact: true }`.
+- En las tablas paginadas **en el cliente** (p. ej. `/receivables`), comprobar una fila antes de que cargue la lista la da por ausente: el
+  helper `receivableRow` (`e2e/cash-and-receivables.e2e.ts`) espera el texto «Showing X–Y of N» antes de recorrer páginas. Sin esa espera,
+  con 11 filas y la buscada en la página 1, saltaba a la página 2 (fallo del CI en el PR #13).
+- `page.route` **no ve** los `fetch` que atiende el service worker (build de producción): para interceptarlos, crear el contexto con
+  `serviceWorkers: 'block'`.
 
 ## Cómo añadir pruebas a un recurso nuevo
 

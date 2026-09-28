@@ -1,12 +1,12 @@
 'use client'
 
-import { useState } from 'react'
-import { useForm } from 'react-hook-form'
+import { useMemo, useState, useSyncExternalStore } from 'react'
+import { useForm, useWatch } from 'react-hook-form'
 import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { AlertTriangle, Gift, PackagePlus, TrendingUp, Warehouse } from 'lucide-react'
+import { AlertTriangle, Gift, PackagePlus, Pencil, ShoppingCart, TrendingUp, Warehouse } from 'lucide-react'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
@@ -20,6 +20,8 @@ import {
     DialogTitle
 } from '@/components/ui/dialog'
 import { Form } from '@/components/ui/form'
+import { Input } from '@/components/ui/input'
+import { Label } from '@/components/ui/label'
 import { TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
@@ -27,20 +29,38 @@ import { PageSpinner } from '@/components/page-spinner'
 import { PageHeader } from '@/components/page-header'
 import { FilterBar } from '@/components/filter-bar'
 import { ResponsiveList, ListCardRow } from '@/components/responsive-list'
+import { SearchableSelect } from '@/components/searchable-select'
 import { DropdownMenuItem } from '@/components/ui/dropdown-menu'
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { errorMessage } from '@/lib/api/client'
+import { cashApi } from '@/lib/api/cash'
 import { inventoryApi, type InventoryListItem } from '@/lib/api/inventory'
 import { promotionsApi } from '@/lib/api/promotions'
+import { purchasesApi } from '@/lib/api/purchases'
+import { suppliersApi } from '@/lib/api/suppliers'
 import { roleAtLeast } from '@/lib/auth/roles'
-import { inventoryAdjustSchema } from '@/lib/validation/resources'
+import { purchaseReceiveSchema } from '@/lib/validation/purchases'
+import { inventoryAdjustSchema, inventoryThresholdSchema } from '@/lib/validation/resources'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
 import { usePagination } from '@/hooks/use-pagination'
 
 type AdjustInput = z.input<typeof inventoryAdjustSchema>
 type AdjustOutput = z.output<typeof inventoryAdjustSchema>
+type ThresholdInput = z.input<typeof inventoryThresholdSchema>
+type ThresholdOutput = z.output<typeof inventoryThresholdSchema>
+
+function useLowStockQueryFlag(): boolean {
+    return useSyncExternalStore(
+        onStoreChange => {
+            window.addEventListener('popstate', onStoreChange)
+            return () => window.removeEventListener('popstate', onStoreChange)
+        },
+        () => new URLSearchParams(window.location.search).get('low') === '1',
+        () => false
+    )
+}
 
 interface AdjustDialogProps {
     item: InventoryListItem
@@ -48,16 +68,46 @@ interface AdjustDialogProps {
     onSaved: () => void
 }
 
-// Stock never changes through a plain UPDATE: the adjustment goes through a database function that records who, why and how
-// much, and refuses to make the stock negative.
 function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
     const t = useTranslations('inventory')
     const tc = useTranslations('common')
+    const money = useMoney()
+    const [mode, setMode] = useState<'adjust' | 'purchase'>('adjust')
+    const [supplierId, setSupplierId] = useState('')
+    const [unitCost, setUnitCost] = useState(String(item.product.cost_price))
+    const [invoice, setInvoice] = useState('')
+    const [fromTill, setFromTill] = useState(false)
+    const [sessionId, setSessionId] = useState('')
+    const [pendingPurchase, setPendingPurchase] = useState(false)
+    // U3: generated once per dialog instance, reused on every retry.
+    const [purchaseKey] = useState(() => crypto.randomUUID())
+    // E5: search against the API instead of a flat pageSize:100 fetch.
+    const [supplierSearch, setSupplierSearch] = useState('')
+    const debouncedSupplierSearch = useDebouncedValue(supplierSearch)
+
     const form = useForm<AdjustInput, unknown, AdjustOutput>({
         resolver: zodResolver(inventoryAdjustSchema),
         defaultValues: { delta: undefined, reason: '' }
     })
     const submitting = form.formState.isSubmitting
+    const delta = useWatch({ control: form.control, name: 'delta' })
+    const deltaNum = typeof delta === 'number' ? delta : Number(delta)
+    const showPurchaseOption = Number.isFinite(deltaNum) && deltaNum > 0
+
+    const suppliers = useApiQuery(
+        signal => suppliersApi.list({ pageSize: 50, q: debouncedSupplierSearch }, signal),
+        `purchase-suppliers#${debouncedSupplierSearch}`
+    )
+    const desk = useApiQuery(signal => cashApi.current(signal), 'purchase-cash-desk')
+    const sessions = desk.data?.sessions ?? []
+    // Bloqueante 3 (H6): only fall back to the first result while the search box is empty (the unfiltered list), so
+    // typing a search never silently swaps the derived selection underneath an untouched select — a plain derived
+    // value, not an effect, per "you might not need an effect".
+    const selectedSupplier = supplierId || (debouncedSupplierSearch ? '' : (suppliers.data?.data[0]?.id ?? ''))
+    const selectedSession = sessionId || sessions[0]?.id || ''
+    const parsedCost = Number(unitCost)
+    const costMismatch =
+        Number.isFinite(parsedCost) && Math.round(parsedCost * 100) !== Math.round(item.product.cost_price * 100)
 
     const onSubmit = form.handleSubmit(async values => {
         try {
@@ -69,17 +119,41 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
         }
     })
 
+    const onPurchase = async () => {
+        const parsed = purchaseReceiveSchema.safeParse({
+            supplier_id: selectedSupplier,
+            items: [{ product_id: item.product.id, quantity: deltaNum, unit_cost: unitCost }],
+            invoice_number: invoice || null,
+            notes: null,
+            cash_session_id: fromTill ? selectedSession || null : null
+        })
+        if (!parsed.success) {
+            toast.error(errorMessage(parsed.error, t('purchaseFailed')))
+            return
+        }
+        setPendingPurchase(true)
+        try {
+            await purchasesApi.receive(parsed.data, purchaseKey)
+            toast.success(t('purchaseSaved'))
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('purchaseFailed')))
+        } finally {
+            setPendingPurchase(false)
+        }
+    }
+
     return (
         <Dialog open onOpenChange={open => !open && onClose()}>
             <DialogContent>
                 <DialogHeader>
-                    <DialogTitle>{t('adjustTitle')}</DialogTitle>
+                    <DialogTitle>{mode === 'purchase' ? t('supplierEntry') : t('adjustTitle')}</DialogTitle>
                     <DialogDescription>
                         {t('adjustDescription', { name: item.product.name, quantity: item.quantity })}
                     </DialogDescription>
                 </DialogHeader>
                 <Form {...form}>
-                    <form onSubmit={onSubmit} noValidate>
+                    <form onSubmit={mode === 'purchase' ? event => event.preventDefault() : onSubmit} noValidate>
                         <div className="space-y-4 py-4">
                             <TextField
                                 name="delta"
@@ -88,18 +162,453 @@ function AdjustDialog({ item, onClose, onSaved }: AdjustDialogProps) {
                                 step="1"
                                 placeholder={t('changePlaceholder')}
                             />
-                            <TextField name="reason" label={t('reasonLabel')} placeholder={t('reasonPlaceholder')} />
+                            {showPurchaseOption && (
+                                <div className="flex flex-wrap gap-2">
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={mode === 'adjust' ? 'default' : 'outline'}
+                                        onClick={() => setMode('adjust')}
+                                    >
+                                        {t('asAdjustment')}
+                                    </Button>
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant={mode === 'purchase' ? 'default' : 'outline'}
+                                        onClick={() => setMode('purchase')}
+                                    >
+                                        {t('asPurchase')}
+                                    </Button>
+                                </div>
+                            )}
+                            {mode === 'purchase' && showPurchaseOption ? (
+                                <>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="adj-supplier">{t('supplier')}</Label>
+                                        <SearchableSelect
+                                            id="adj-supplier"
+                                            value={selectedSupplier}
+                                            onValueChange={setSupplierId}
+                                            search={supplierSearch}
+                                            onSearchChange={setSupplierSearch}
+                                            placeholder={t('pickSupplier')}
+                                            options={(suppliers.data?.data ?? []).map(supplier => ({
+                                                value: supplier.id,
+                                                label: supplier.name
+                                            }))}
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label htmlFor="adj-cost">{t('unitCost')}</Label>
+                                        <Input
+                                            id="adj-cost"
+                                            inputMode="decimal"
+                                            value={unitCost}
+                                            onChange={event => setUnitCost(event.target.value)}
+                                        />
+                                    </div>
+                                    {costMismatch && (
+                                        <p className="text-sm text-muted-foreground">
+                                            {t('costMismatch', {
+                                                purchase: money(parsedCost),
+                                                catalog: money(item.product.cost_price)
+                                            })}
+                                        </p>
+                                    )}
+                                    <div className="space-y-1">
+                                        <Label htmlFor="adj-invoice">{t('invoice')}</Label>
+                                        <Input
+                                            id="adj-invoice"
+                                            value={invoice}
+                                            placeholder={t('invoicePlaceholder')}
+                                            onChange={event => setInvoice(event.target.value)}
+                                        />
+                                    </div>
+                                    <label className="flex items-center gap-2 text-sm">
+                                        <input
+                                            type="checkbox"
+                                            checked={fromTill}
+                                            onChange={event => setFromTill(event.target.checked)}
+                                        />
+                                        {t('paidFromTill')}
+                                    </label>
+                                    {fromTill ? (
+                                        sessions.length === 0 ? (
+                                            <p className="text-sm text-muted-foreground">{t('noOpenTill')}</p>
+                                        ) : (
+                                            <div className="space-y-1">
+                                                <Label htmlFor="adj-till">{t('till')}</Label>
+                                                <select
+                                                    id="adj-till"
+                                                    className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                                                    value={selectedSession}
+                                                    onChange={event => setSessionId(event.target.value)}
+                                                >
+                                                    {sessions.map(session => (
+                                                        <option key={session.id} value={session.id}>
+                                                            {session.register_name}
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        )
+                                    ) : null}
+                                </>
+                            ) : (
+                                <TextField
+                                    name="reason"
+                                    label={t('reasonLabel')}
+                                    placeholder={t('reasonPlaceholder')}
+                                />
+                            )}
                         </div>
                         <DialogFooter>
                             <Button type="button" variant="outline" onClick={onClose}>
                                 {tc('cancel')}
                             </Button>
-                            <OfflineDisabledButton type="submit" disabled={submitting}>
-                                {submitting ? tc('saving') : t('apply')}
-                            </OfflineDisabledButton>
+                            {mode === 'purchase' && showPurchaseOption ? (
+                                <OfflineDisabledButton
+                                    type="button"
+                                    disabled={pendingPurchase || !selectedSupplier}
+                                    onClick={onPurchase}
+                                >
+                                    {pendingPurchase ? tc('saving') : t('savePurchase')}
+                                </OfflineDisabledButton>
+                            ) : (
+                                <OfflineDisabledButton type="submit" disabled={submitting}>
+                                    {submitting ? tc('saving') : t('apply')}
+                                </OfflineDisabledButton>
+                            )}
                         </DialogFooter>
                     </form>
                 </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+function ThresholdDialog({ item, onClose, onSaved }: AdjustDialogProps) {
+    const t = useTranslations('inventory')
+    const tc = useTranslations('common')
+    const form = useForm<ThresholdInput, unknown, ThresholdOutput>({
+        resolver: zodResolver(inventoryThresholdSchema),
+        defaultValues: { low_stock_threshold: String(item.low_stock_threshold) }
+    })
+    const submitting = form.formState.isSubmitting
+
+    const onSubmit = form.handleSubmit(async values => {
+        try {
+            await inventoryApi.setThreshold(item.id, values)
+            toast.success(t('thresholdSaved'))
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('thresholdFailed')))
+        }
+    })
+
+    return (
+        <Dialog open onOpenChange={open => !open && onClose()}>
+            <DialogContent>
+                <DialogHeader>
+                    <DialogTitle>{t('thresholdTitle')}</DialogTitle>
+                    <DialogDescription>{item.product.name}</DialogDescription>
+                </DialogHeader>
+                <Form {...form}>
+                    <form onSubmit={onSubmit} noValidate className="space-y-4">
+                        <TextField
+                            name="low_stock_threshold"
+                            label={t('minThreshold')}
+                            type="number"
+                            min="0"
+                            step="1"
+                        />
+                        <DialogFooter>
+                            <Button type="button" variant="outline" onClick={onClose}>
+                                {tc('cancel')}
+                            </Button>
+                            <Button type="submit" disabled={submitting}>
+                                {submitting ? tc('saving') : tc('save')}
+                            </Button>
+                        </DialogFooter>
+                    </form>
+                </Form>
+            </DialogContent>
+        </Dialog>
+    )
+}
+
+interface PurchaseLine {
+    product_id: string
+    // Cached at selection time so the <select> always shows the real selection even after the search moves the
+    // product out of the current page (bloqueante 3, H6) — no ref/cache lookup needed during render.
+    product_name: string
+    quantity: string
+    unit_cost: string
+}
+
+function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
+    const t = useTranslations('inventory')
+    const tc = useTranslations('common')
+    const money = useMoney()
+    const [supplierId, setSupplierId] = useState('')
+    const [invoice, setInvoice] = useState('')
+    const [notes, setNotes] = useState('')
+    const [fromTill, setFromTill] = useState(false)
+    const [sessionId, setSessionId] = useState('')
+    const [pending, setPending] = useState(false)
+    // U3: generated once per dialog instance, reused on every retry.
+    const [purchaseKey] = useState(() => crypto.randomUUID())
+    // E5: the dialog searches the catalog against the API (`q`) instead of the parent's flat `pageSize: 100` fetch,
+    // so a catalog bigger than one page stays reachable from every line's product picker.
+    const [productSearch, setProductSearch] = useState('')
+    const debouncedProductSearch = useDebouncedValue(productSearch)
+    const catalogQuery = useApiQuery(
+        signal => inventoryApi.list({ pageSize: 50, q: debouncedProductSearch }, signal),
+        `purchase-dialog-catalog#${debouncedProductSearch}`
+    )
+    const products = useMemo(() => catalogQuery.data?.data ?? [], [catalogQuery.data])
+    // The line starts unselected (not `products[0]`, which is always empty on mount since the catalog query is
+    // async) so the visible <select> and the submitted `product_id` can never disagree.
+    const [lines, setLines] = useState<PurchaseLine[]>([
+        { product_id: '', product_name: '', quantity: '1', unit_cost: '0' }
+    ])
+
+    // E5: search against the API instead of a flat pageSize:100 fetch.
+    const [supplierSearch, setSupplierSearch] = useState('')
+    const debouncedSupplierSearch = useDebouncedValue(supplierSearch)
+    const suppliers = useApiQuery(
+        signal => suppliersApi.list({ pageSize: 50, q: debouncedSupplierSearch }, signal),
+        `multi-purchase-suppliers#${debouncedSupplierSearch}`
+    )
+    const desk = useApiQuery(signal => cashApi.current(signal), 'multi-purchase-cash-desk')
+    const sessions = desk.data?.sessions ?? []
+    // Bloqueante 3 (H6): only fall back to the first result while the search box is empty — a derived value, not an
+    // effect (see AdjustDialog above for why the old always-on fallback was wrong).
+    const selectedSupplier = supplierId || (debouncedSupplierSearch ? '' : (suppliers.data?.data[0]?.id ?? ''))
+    const selectedSession = sessionId || sessions[0]?.id || ''
+    const productById = useMemo(() => new Map(products.map(item => [item.product.id, item.product])), [products])
+
+    const onSave = async () => {
+        const parsed = purchaseReceiveSchema.safeParse({
+            supplier_id: selectedSupplier,
+            items: lines.map(line => ({
+                product_id: line.product_id,
+                quantity: line.quantity,
+                unit_cost: line.unit_cost
+            })),
+            invoice_number: invoice || null,
+            notes: notes || null,
+            cash_session_id: fromTill ? selectedSession || null : null
+        })
+        if (!parsed.success) {
+            toast.error(errorMessage(parsed.error, t('purchaseFailed')))
+            return
+        }
+        setPending(true)
+        try {
+            await purchasesApi.receive(parsed.data, purchaseKey)
+            toast.success(t('purchaseSaved'))
+            onSaved()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, t('purchaseFailed')))
+        } finally {
+            setPending(false)
+        }
+    }
+
+    return (
+        <Dialog open onOpenChange={open => !open && onClose()}>
+            <DialogContent className="max-h-[90vh] overflow-y-auto sm:max-w-lg">
+                <DialogHeader>
+                    <DialogTitle>{t('registerPurchase')}</DialogTitle>
+                </DialogHeader>
+                <div className="space-y-3">
+                    <div className="space-y-1">
+                        <Label htmlFor="po-supplier">{t('supplier')}</Label>
+                        <SearchableSelect
+                            id="po-supplier"
+                            value={selectedSupplier}
+                            onValueChange={setSupplierId}
+                            search={supplierSearch}
+                            onSearchChange={setSupplierSearch}
+                            placeholder={t('pickSupplier')}
+                            options={(suppliers.data?.data ?? []).map(supplier => ({
+                                value: supplier.id,
+                                label: supplier.name
+                            }))}
+                        />
+                    </div>
+                    {lines.map((line, index) => {
+                        const catalog = productById.get(line.product_id)
+                        const cost = Number(line.unit_cost)
+                        const mismatch =
+                            catalog &&
+                            Number.isFinite(cost) &&
+                            Math.round(cost * 100) !== Math.round(catalog.cost_price * 100)
+                        // The current search page (`products`) plus, if it fell outside that page, the product this
+                        // line already has selected (by the name cached on the line itself) — so the <select> always
+                        // shows the real selection, never a stale or empty one (bloqueante 3, H6).
+                        const selectedOutsidePage =
+                            line.product_id && !products.some(item => item.product.id === line.product_id)
+                                ? { product_id: line.product_id, name: line.product_name || line.product_id }
+                                : null
+                        return (
+                            <div key={index} className="space-y-2 rounded-md border p-3">
+                                <div className="space-y-1">
+                                    <Label>{t('product')}</Label>
+                                    <SearchableSelect
+                                        value={line.product_id}
+                                        onValueChange={id => {
+                                            const next = productById.get(id)
+                                            setLines(current =>
+                                                current.map((row, i) =>
+                                                    i === index
+                                                        ? {
+                                                              product_id: id,
+                                                              product_name: next?.name ?? '',
+                                                              quantity: row.quantity,
+                                                              unit_cost: String(next?.cost_price ?? row.unit_cost)
+                                                          }
+                                                        : row
+                                                )
+                                            )
+                                        }}
+                                        search={productSearch}
+                                        onSearchChange={setProductSearch}
+                                        placeholder={t('pickProduct')}
+                                        options={[
+                                            ...(selectedOutsidePage
+                                                ? [
+                                                      {
+                                                          value: selectedOutsidePage.product_id,
+                                                          label: selectedOutsidePage.name
+                                                      }
+                                                  ]
+                                                : []),
+                                            ...products.map(item => ({
+                                                value: item.product.id,
+                                                label: item.product.name
+                                            }))
+                                        ]}
+                                    />
+                                </div>
+                                <div className="grid grid-cols-2 gap-2">
+                                    <div className="space-y-1">
+                                        <Label>{t('quantity')}</Label>
+                                        <Input
+                                            inputMode="numeric"
+                                            value={line.quantity}
+                                            onChange={event =>
+                                                setLines(current =>
+                                                    current.map((row, i) =>
+                                                        i === index ? { ...row, quantity: event.target.value } : row
+                                                    )
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                    <div className="space-y-1">
+                                        <Label>{t('unitCost')}</Label>
+                                        <Input
+                                            inputMode="decimal"
+                                            value={line.unit_cost}
+                                            onChange={event =>
+                                                setLines(current =>
+                                                    current.map((row, i) =>
+                                                        i === index ? { ...row, unit_cost: event.target.value } : row
+                                                    )
+                                                )
+                                            }
+                                        />
+                                    </div>
+                                </div>
+                                {mismatch && catalog && (
+                                    <p className="text-xs text-muted-foreground">
+                                        {t('costMismatch', {
+                                            purchase: money(cost),
+                                            catalog: money(catalog.cost_price)
+                                        })}
+                                    </p>
+                                )}
+                                {lines.length > 1 && (
+                                    <Button
+                                        type="button"
+                                        size="sm"
+                                        variant="ghost"
+                                        onClick={() => setLines(current => current.filter((_, i) => i !== index))}
+                                    >
+                                        {t('removeLine')}
+                                    </Button>
+                                )}
+                            </div>
+                        )
+                    })}
+                    <Button
+                        type="button"
+                        variant="outline"
+                        size="sm"
+                        disabled={lines.length >= 100 || products.length === 0}
+                        onClick={() =>
+                            setLines(current => [
+                                ...current,
+                                { product_id: '', product_name: '', quantity: '1', unit_cost: '0' }
+                            ])
+                        }
+                    >
+                        {t('addLine')}
+                    </Button>
+                    <div className="space-y-1">
+                        <Label htmlFor="po-invoice">{t('invoice')}</Label>
+                        <Input
+                            id="po-invoice"
+                            value={invoice}
+                            placeholder={t('invoicePlaceholder')}
+                            onChange={event => setInvoice(event.target.value)}
+                        />
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="po-notes">{t('notes')}</Label>
+                        <Input id="po-notes" value={notes} onChange={event => setNotes(event.target.value)} />
+                    </div>
+                    <label className="flex items-center gap-2 text-sm">
+                        <input
+                            type="checkbox"
+                            checked={fromTill}
+                            onChange={event => setFromTill(event.target.checked)}
+                        />
+                        {t('paidFromTill')}
+                    </label>
+                    {fromTill ? (
+                        sessions.length === 0 ? (
+                            <p className="text-sm text-muted-foreground">{t('noOpenTill')}</p>
+                        ) : (
+                            <div className="space-y-1">
+                                <Label htmlFor="po-till">{t('till')}</Label>
+                                <select
+                                    id="po-till"
+                                    className="border-input bg-background h-9 w-full rounded-md border px-3 text-sm"
+                                    value={selectedSession}
+                                    onChange={event => setSessionId(event.target.value)}
+                                >
+                                    {sessions.map(session => (
+                                        <option key={session.id} value={session.id}>
+                                            {session.register_name}
+                                        </option>
+                                    ))}
+                                </select>
+                            </div>
+                        )
+                    ) : null}
+                </div>
+                <DialogFooter>
+                    <Button type="button" variant="outline" onClick={onClose}>
+                        {tc('cancel')}
+                    </Button>
+                    <OfflineDisabledButton type="button" disabled={pending || !selectedSupplier} onClick={onSave}>
+                        {pending ? tc('saving') : t('savePurchase')}
+                    </OfflineDisabledButton>
+                </DialogFooter>
             </DialogContent>
         </Dialog>
     )
@@ -113,14 +622,19 @@ export default function InventoryPage() {
     const canAdjust = roleAtLeast(user.role, 'manager')
 
     const [searchQuery, setSearchQuery] = useState('')
+    const lowFromUrl = useLowStockQueryFlag()
     const [lowOnly, setLowOnly] = useState(false)
+    const [dismissedUrlLow, setDismissedUrlLow] = useState(false)
+    const filterLow = lowOnly || (lowFromUrl && !dismissedUrlLow)
     const { page, pageSize, setPage, setPageSize, reset } = usePagination()
     const [adjusting, setAdjusting] = useState<InventoryListItem | null>(null)
+    const [thresholdItem, setThresholdItem] = useState<InventoryListItem | null>(null)
+    const [buying, setBuying] = useState(false)
     const search = useDebouncedValue(searchQuery)
 
     const inventory = useApiQuery(
-        signal => inventoryApi.list({ page, pageSize, q: search, low: lowOnly }, signal),
-        JSON.stringify({ page, pageSize, search, lowOnly })
+        signal => inventoryApi.list({ page, pageSize, q: search, low: filterLow }, signal),
+        JSON.stringify({ page, pageSize, search, filterLow })
     )
     const summary = inventory.data?.summary
     const sellablePackages = useApiQuery(
@@ -130,9 +644,21 @@ export default function InventoryPage() {
 
     return (
         <div className="space-y-6">
-            <PageHeader title={t('title')} description={t('subtitle')} />
+            <PageHeader
+                title={t('title')}
+                description={t('subtitle')}
+                primaryAction={
+                    canAdjust
+                        ? {
+                              label: t('registerPurchase'),
+                              icon: ShoppingCart,
+                              onClick: () => setBuying(true)
+                          }
+                        : undefined
+                }
+            />
 
-            <div className="grid grid-cols-1 gap-3 md:gap-4">
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-2 lg:grid-cols-3 gap-3 md:gap-4">
                 <Card className="gap-2 rounded-2xl py-4 md:gap-6 md:py-6">
                     <CardHeader className="flex flex-row items-center justify-between space-y-0 px-4 pb-2 md:px-6">
                         <CardTitle className="text-xs font-medium md:text-sm">{t('totalItems')}</CardTitle>
@@ -254,11 +780,17 @@ export default function InventoryPage() {
                 searchPlaceholder={t('searchPlaceholder')}
             >
                 <Button
-                    variant={lowOnly ? 'default' : 'outline'}
-                    aria-pressed={lowOnly}
+                    variant={filterLow ? 'default' : 'outline'}
+                    aria-pressed={filterLow}
                     className="w-full lg:w-auto"
                     onClick={() => {
-                        setLowOnly(value => !value)
+                        if (filterLow) {
+                            setLowOnly(false)
+                            setDismissedUrlLow(true)
+                        } else {
+                            setLowOnly(true)
+                            setDismissedUrlLow(false)
+                        }
                         reset()
                     }}
                 >
@@ -316,7 +848,24 @@ export default function InventoryPage() {
                                                             {item.quantity}
                                                         </span>
                                                     </TableCell>
-                                                    <TableCell>{item.low_stock_threshold}</TableCell>
+                                                    <TableCell>
+                                                        <span className="inline-flex items-center gap-1">
+                                                            {item.low_stock_threshold}
+                                                            {canAdjust && (
+                                                                <Button
+                                                                    size="icon"
+                                                                    variant="ghost"
+                                                                    className="h-7 w-7"
+                                                                    aria-label={t('editThresholdAria', {
+                                                                        name: item.product.name
+                                                                    })}
+                                                                    onClick={() => setThresholdItem(item)}
+                                                                >
+                                                                    <Pencil className="h-3.5 w-3.5" />
+                                                                </Button>
+                                                            )}
+                                                        </span>
+                                                    </TableCell>
                                                     <TableCell>
                                                         <Badge variant={isLowStock ? 'destructive' : 'default'}>
                                                             {isLowStock ? t('lowStock') : t('inStock')}
@@ -361,10 +910,16 @@ export default function InventoryPage() {
                                     }
                                     menu={
                                         canAdjust && (
-                                            <DropdownMenuItem onClick={() => setAdjusting(item)}>
-                                                <PackagePlus className="mr-2 h-4 w-4" />
-                                                {t('adjustTitle')}
-                                            </DropdownMenuItem>
+                                            <>
+                                                <DropdownMenuItem onClick={() => setThresholdItem(item)}>
+                                                    <Pencil className="mr-2 h-4 w-4" />
+                                                    {t('editThreshold')}
+                                                </DropdownMenuItem>
+                                                <DropdownMenuItem onClick={() => setAdjusting(item)}>
+                                                    <PackagePlus className="mr-2 h-4 w-4" />
+                                                    {t('adjustTitle')}
+                                                </DropdownMenuItem>
+                                            </>
                                         )
                                     }
                                 />
@@ -391,6 +946,26 @@ export default function InventoryPage() {
                     onClose={() => setAdjusting(null)}
                     onSaved={() => {
                         setAdjusting(null)
+                        inventory.reload()
+                    }}
+                />
+            )}
+            {thresholdItem && (
+                <ThresholdDialog
+                    key={thresholdItem.id}
+                    item={thresholdItem}
+                    onClose={() => setThresholdItem(null)}
+                    onSaved={() => {
+                        setThresholdItem(null)
+                        inventory.reload()
+                    }}
+                />
+            )}
+            {buying && (
+                <RegisterPurchaseDialog
+                    onClose={() => setBuying(false)}
+                    onSaved={() => {
+                        setBuying(false)
                         inventory.reload()
                     }}
                 />

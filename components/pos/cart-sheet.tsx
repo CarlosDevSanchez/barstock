@@ -1,24 +1,19 @@
 'use client'
 
-import { Trash2, Plus, Minus, ShoppingCart, CreditCard, DollarSign, Smartphone } from 'lucide-react'
+import { type ComponentProps } from 'react'
+import { Trash2, Plus, Minus, ShoppingCart, CreditCard } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
-import {
-    Dialog,
-    DialogContent,
-    DialogDescription,
-    DialogFooter,
-    DialogHeader,
-    DialogTitle
-} from '@/components/ui/dialog'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
 import { Separator } from '@/components/ui/separator'
 import { Sheet, SheetContent, SheetHeader, SheetTitle } from '@/components/ui/sheet'
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs'
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/components/ui/tooltip'
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
+import { PaymentDialog } from '@/components/pos/payment-dialog'
 import { moneyStep } from '@/lib/money'
 import type { PromotionListItem } from '@/lib/api/promotions'
 import type { ProductListItem } from '@/lib/api/products'
@@ -42,11 +37,10 @@ interface CustomerOption {
     phone: string | null
 }
 
-const PAYMENT_ICONS: Array<{ value: PaymentMethod; icon: typeof DollarSign }> = [
-    { value: 'cash', icon: DollarSign },
-    { value: 'card', icon: CreditCard },
-    { value: 'ewallet', icon: Smartphone }
-]
+export interface CheckoutPayment {
+    payment_method: PaymentMethod
+    payments?: Array<{ method: PaymentMethod; amount: number }>
+}
 
 interface CartSheetProps {
     open: boolean
@@ -63,18 +57,45 @@ interface CartSheetProps {
     selectedCustomer: string
     onSelectCustomer: (customerId: string) => void
     blocked: boolean
+    /** Offline for longer than settings.offline_max_hours (or the offline catalog snapshot never loaded): too
+     * stale to trust an offline sale against. Checkout itself still works offline otherwise (F3) — this is the
+     * one case it stays disabled. */
+    offlineWindowExpired: boolean
     showPaymentDialog: boolean
     onShowPaymentDialog: (show: boolean) => void
-    paymentMethod: PaymentMethod
-    onPaymentMethodChange: (method: PaymentMethod) => void
     processing: boolean
-    onCheckout: () => void
+    onCheckout: (payment: CheckoutPayment) => void
     openTabs: TabListItem[]
     openTabsLoading: boolean
     onOpenNewTab: () => void
     onSelectTab: (tabId: string) => void
     onAddToTab: () => void
     canAddToTab: boolean
+}
+
+/**
+ * Checkout works offline too (F3): unlike the other write actions here (`OfflineDisabledButton`, still
+ * network-only), it only disables once the till has been offline longer than `settings.offline_max_hours`
+ * (`offlineWindowExpired`, computed in `app/(dashboard)/pos/page.tsx`).
+ */
+function CheckoutButton({
+    offlineWindowExpired,
+    disabled,
+    ...props
+}: ComponentProps<typeof Button> & { offlineWindowExpired: boolean }) {
+    const t = useTranslations('connection')
+    if (!offlineWindowExpired) return <Button disabled={disabled} {...props} />
+    return (
+        <Tooltip>
+            <TooltipTrigger asChild>
+                {/* A disabled button swallows pointer events, so the tooltip needs this wrapper to still receive them. */}
+                <span className="block w-full">
+                    <Button disabled {...props} className={`pointer-events-none ${props.className ?? ''}`} />
+                </span>
+            </TooltipTrigger>
+            <TooltipContent>{t('offlineWindowExpired')}</TooltipContent>
+        </Tooltip>
+    )
 }
 
 /** The cart, as a Sheet that opens over the content instead of a fixed side column. Same behaviour as before:
@@ -94,10 +115,9 @@ export function CartSheet({
     selectedCustomer,
     onSelectCustomer,
     blocked,
+    offlineWindowExpired,
     showPaymentDialog,
     onShowPaymentDialog,
-    paymentMethod,
-    onPaymentMethodChange,
     processing,
     onCheckout,
     openTabs,
@@ -110,6 +130,7 @@ export function CartSheet({
     const t = useTranslations('pos')
     const tTabs = useTranslations('tabs')
     const tc = useTranslations('common')
+    const tConn = useTranslations('connection')
     const money = useMoney()
     const { settings } = useSession()
     const priceStep = moneyStep(settings.currency)
@@ -309,7 +330,8 @@ export function CartSheet({
                                         </div>
                                         <p className="text-xs text-muted-foreground">{t('estimateHint')}</p>
 
-                                        <OfflineDisabledButton
+                                        <CheckoutButton
+                                            offlineWindowExpired={offlineWindowExpired}
                                             className="w-full"
                                             size="lg"
                                             onClick={() => onShowPaymentDialog(true)}
@@ -317,7 +339,7 @@ export function CartSheet({
                                         >
                                             <CreditCard className="mr-2 h-5 w-5" />
                                             {t('checkout')}
-                                        </OfflineDisabledButton>
+                                        </CheckoutButton>
                                         <OfflineDisabledButton
                                             className="w-full"
                                             variant="outline"
@@ -334,44 +356,23 @@ export function CartSheet({
                 </SheetContent>
             </Sheet>
 
-            <Dialog open={showPaymentDialog} onOpenChange={next => !processing && onShowPaymentDialog(next)}>
-                <DialogContent className="sm:max-w-md">
-                    <DialogHeader>
-                        <DialogTitle>{t('completePayment')}</DialogTitle>
-                        <DialogDescription>
-                            {t('estimatedTotal')}{' '}
-                            <span className="text-lg font-bold text-emerald-600">{money(totals.total)}</span>
-                        </DialogDescription>
-                    </DialogHeader>
-                    <div className="space-y-4 py-4">
-                        <div className="space-y-2">
-                            <Label className="text-foreground font-semibold">{t('paymentMethod')}</Label>
-                            <div className="grid grid-cols-3 gap-2">
-                                {PAYMENT_ICONS.map(({ value, icon: Icon }) => (
-                                    <Button
-                                        key={value}
-                                        variant={paymentMethod === value ? 'default' : 'outline'}
-                                        aria-pressed={paymentMethod === value}
-                                        className="flex flex-col h-auto py-4"
-                                        onClick={() => onPaymentMethodChange(value)}
-                                    >
-                                        <Icon className="h-6 w-6 mb-1" />
-                                        <span className="text-xs">{tc(`payment.${value}`)}</span>
-                                    </Button>
-                                ))}
-                            </div>
-                        </div>
-                    </div>
-                    <DialogFooter>
-                        <Button variant="outline" disabled={processing} onClick={() => onShowPaymentDialog(false)}>
-                            {tc('cancel')}
-                        </Button>
-                        <OfflineDisabledButton onClick={onCheckout} disabled={processing}>
-                            {processing ? t('processing') : t('completeOrder')}
-                        </OfflineDisabledButton>
-                    </DialogFooter>
-                </DialogContent>
-            </Dialog>
+            <PaymentDialog
+                open={showPaymentDialog}
+                onOpenChange={onShowPaymentDialog}
+                title={t('completePayment')}
+                amountDue={totals.total}
+                submitLabel={t('completeOrder')}
+                processing={processing}
+                disabled={offlineWindowExpired}
+                disabledReason={offlineWindowExpired ? tConn('offlineWindowExpired') : undefined}
+                onSubmit={payments =>
+                    onCheckout(
+                        payments.length === 2
+                            ? { payment_method: payments[0]!.method, payments }
+                            : { payment_method: payments[0]!.method }
+                    )
+                }
+            />
         </>
     )
 }

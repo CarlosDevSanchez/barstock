@@ -9,14 +9,17 @@ import { clientEnv } from '@/lib/env/client'
 const PUBLIC_PAGES = ['/login', '/forgot-password', '/reset-password', '/auth/confirm']
 // Reachable while signed in: the user may open an invitation/recovery link, and must be able to set a password.
 const SIGNED_IN_ALLOWED = ['/reset-password', '/auth/confirm']
-const PUBLIC_API_PREFIX = '/api/v1/auth/'
+const PUBLIC_API_PREFIXES = ['/api/v1/auth/', '/api/cron/']
 const PAGE_ROLE_GUARDS: Array<{ prefix: string; minimum: UserRole }> = [
     { prefix: '/settings', minimum: 'admin' },
     { prefix: '/users', minimum: 'admin' },
     { prefix: '/audit', minimum: 'admin' },
     { prefix: '/reports', minimum: 'manager' },
+    { prefix: '/expenses', minimum: 'manager' },
     { prefix: '/suppliers', minimum: 'manager' },
-    { prefix: '/promotions', minimum: 'manager' }
+    { prefix: '/promotions', minimum: 'manager' },
+    // Cashier+ (same floor as /orders); listed so the route is explicit next to higher guards.
+    { prefix: '/receivables', minimum: 'cashier' }
 ]
 
 const profileSchema = z.object({ role: z.enum(USER_ROLES), is_active: z.boolean() })
@@ -55,7 +58,7 @@ export async function proxy(request: NextRequest) {
     const { pathname } = request.nextUrl
     const isApi = pathname.startsWith('/api/')
     const isPublicPage = PUBLIC_PAGES.some(page => matches(pathname, page))
-    const isPublicApi = pathname.startsWith(PUBLIC_API_PREFIX)
+    const isPublicApi = PUBLIC_API_PREFIXES.some(prefix => pathname.startsWith(prefix))
 
     // Redirects must carry the refreshed cookies, or the browser keeps the stale session.
     const redirectTo = (path: string, search?: Record<string, string>) => {

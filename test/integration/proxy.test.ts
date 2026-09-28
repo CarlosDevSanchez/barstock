@@ -40,7 +40,8 @@ describe('signed out', () => {
             '/forgot-password',
             '/reset-password',
             '/auth/confirm?token_hash=x&type=recovery',
-            '/api/v1/auth/login'
+            '/api/v1/auth/login',
+            '/api/cron/tick'
         ]) {
             expect(passesThrough(await visit(path))).toBe(true)
         }
@@ -62,7 +63,10 @@ describe('signed in', () => {
             // path,          cashier, manager, admin
             ['/dashboard', true, true, true],
             ['/pos', true, true, true],
+            ['/cash', true, true, true],
+            ['/receivables', true, true, true],
             ['/reports', false, true, true],
+            ['/expenses', false, true, true],
             ['/suppliers', false, true, true],
             ['/settings', false, false, true],
             ['/users', false, false, true],

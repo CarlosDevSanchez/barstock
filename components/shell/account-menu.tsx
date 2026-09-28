@@ -1,11 +1,13 @@
 'use client'
 
+import { useEffect, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { useTheme } from 'next-themes'
 import { toast } from 'sonner'
 import { Button } from '@/components/ui/button'
 import { Avatar, AvatarFallback } from '@/components/ui/avatar'
+import { ConfirmDialog } from '@/components/confirm-dialog'
 import {
     DropdownMenu,
     DropdownMenuContent,
@@ -14,7 +16,10 @@ import {
     DropdownMenuSeparator,
     DropdownMenuTrigger
 } from '@/components/ui/dropdown-menu'
-import { apiPatch, apiPost, errorMessage } from '@/lib/api/client'
+import { apiPatch, apiPost, errorMessage, setSigningOut } from '@/lib/api/client'
+import { notificationsApi } from '@/lib/api/notifications'
+import { idbClearSnapshot } from '@/lib/offline/db'
+import { pendingOutboxCount } from '@/lib/offline/outbox'
 import { clearOfflineCaches } from '@/lib/pwa/clear-cache'
 import { APP_LOCALES, type AppLocale } from '@/lib/i18n/config'
 import { useCartStore } from '@/stores/cart'
@@ -29,26 +34,108 @@ interface AccountMenuProps {
     variant?: 'icon' | 'full'
 }
 
+function isIos(): boolean {
+    if (typeof navigator === 'undefined') return false
+    return (
+        /iPad|iPhone|iPod/.test(navigator.userAgent) ||
+        (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1)
+    )
+}
+
+function isStandalone(): boolean {
+    if (typeof window === 'undefined') return false
+    const media = window.matchMedia('(display-mode: standalone)').matches
+    const safari = 'standalone' in navigator && Boolean((navigator as { standalone?: boolean }).standalone)
+    return media || safari
+}
+
+function urlBase64ToUint8Array(base64String: string): Uint8Array {
+    const padding = '='.repeat((4 - (base64String.length % 4)) % 4)
+    const base64 = (base64String + padding).replace(/-/g, '+').replace(/_/g, '/')
+    const raw = atob(base64)
+    const output = new Uint8Array(raw.length)
+    for (let i = 0; i < raw.length; i++) output[i] = raw.charCodeAt(i)
+    return output
+}
+
 export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuProps) {
     const router = useRouter()
     const { theme, setTheme } = useTheme()
     const t = useTranslations('common')
+    const tn = useTranslations('notifications')
     const clearCart = useCartStore(state => state.clearCart)
     const displayName = user.fullName || user.email
+    const [pendingLogoutWarning, setPendingLogoutWarning] = useState<number | null>(null)
+    const [notifyEmail, setNotifyEmail] = useState(user.notifyEmail)
+    const [notifyPush, setNotifyPush] = useState(user.notifyPush)
+    const [prefsBusy, setPrefsBusy] = useState(false)
+    // U5: whether THIS browser actually holds a push subscription, independent of the server-side `notify_push`
+    // preference — a shared/kiosk device must not show "push on" just because some other user enabled it here.
+    const [hasBrowserSub, setHasBrowserSub] = useState(false)
 
-    const handleLogout = async () => {
+    useEffect(() => {
+        let cancelled = false
+        if (!('serviceWorker' in navigator)) return
+        navigator.serviceWorker.ready
+            .then(reg => reg.pushManager.getSubscription())
+            .then(sub => {
+                if (!cancelled) setHasBrowserSub(Boolean(sub))
+            })
+            .catch(() => {
+                /* no service worker registration yet: treat as no subscription */
+            })
+        return () => {
+            cancelled = true
+        }
+    }, [])
+
+    const doLogout = async () => {
+        // U5: drop this browser's push subscription BEFORE logging out, so a shared/kiosk device does not keep
+        // sending the next cashier's push notifications to this session's subscription.
+        // `getRegistration` (not `.ready`) because `.ready` never resolves when no service worker is registered
+        // at all (e.g. `next dev`, see components/pwa/sw-register.tsx) — that would hang the whole logout forever.
+        try {
+            if ('serviceWorker' in navigator) {
+                const reg = await navigator.serviceWorker.getRegistration()
+                const sub = await reg?.pushManager.getSubscription()
+                if (sub) {
+                    await notificationsApi.unsubscribe(sub.endpoint).catch(() => {})
+                    await sub.unsubscribe().catch(() => {})
+                }
+            }
+        } catch {
+            /* best-effort: never block logout on push cleanup */
+        }
+        setSigningOut(true)
         try {
             await apiPost('auth/logout')
         } catch {
+            setSigningOut(false)
             toast.error(t('signOutFailed'))
             return
         }
         // The cart belongs to the session: never leave it behind for the next person at this till.
         clearCart()
-        // Same reason, for a shared/kiosk device: the offline caches are per-session, not per-device.
-        await clearOfflineCaches()
-        router.push('/login')
-        router.refresh()
+        // Same reason, for a shared/kiosk device: the POS snapshot is per-session, not per-device. The offline
+        // sale queue (lib/offline/outbox.ts) is NOT cleared here: it belongs to the user, not the device, and is
+        // sent the next time they sign back in (see the confirmation below).
+        await Promise.all([clearOfflineCaches(), idbClearSnapshot()])
+        // Full page load: it resets `setSigningOut` (a soft navigation would keep 401 redirects muted into the next
+        // session) and drops the client router cache of signed-in RSC payloads.
+        // eslint-disable-next-line @next/next/no-location-assign-relative-destination
+        window.location.assign('/login')
+    }
+
+    // Unsynced offline sales (F3) stay queued through a logout, but the cashier should know they are there before
+    // walking away from this device. Own entries only: a different user's leftovers on a shared device are not
+    // this cashier's to know about (and the sync center itself hides them the same way — F4).
+    const handleLogoutClick = async () => {
+        const pending = await pendingOutboxCount(user.id)
+        if (pending > 0) {
+            setPendingLogoutWarning(pending)
+            return
+        }
+        await doLogout()
     }
 
     const setLocale = async (locale: AppLocale) => {
@@ -58,6 +145,89 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
             router.refresh()
         } catch (error: unknown) {
             toast.error(errorMessage(error))
+        }
+    }
+
+    const savePrefs = async (email: boolean, push: boolean) => {
+        setPrefsBusy(true)
+        try {
+            await notificationsApi.updatePrefs({ notify_email: email, notify_push: push })
+            setNotifyEmail(email)
+            setNotifyPush(push)
+            router.refresh()
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, tn('prefsFailed')))
+            throw error
+        } finally {
+            setPrefsBusy(false)
+        }
+    }
+
+    const toggleEmail = async () => {
+        const next = !notifyEmail
+        try {
+            await savePrefs(next, notifyPush)
+        } catch {
+            /* toast already shown */
+        }
+    }
+
+    const togglePush = async () => {
+        // U5: decide the action from what THIS browser actually holds, not just the server preference — otherwise
+        // a device that never had a real subscription (notify_push true from a different device) gets stuck
+        // showing "on" with a switch that does nothing when clicked.
+        if (notifyPush && hasBrowserSub) {
+            try {
+                const reg = 'serviceWorker' in navigator ? await navigator.serviceWorker.ready : null
+                const sub = await reg?.pushManager.getSubscription()
+                if (sub) {
+                    await notificationsApi.unsubscribe(sub.endpoint)
+                    await sub.unsubscribe()
+                }
+                setHasBrowserSub(false)
+                await savePrefs(notifyEmail, false)
+            } catch (error: unknown) {
+                toast.error(errorMessage(error, tn('prefsFailed')))
+            }
+            return
+        }
+
+        if (isIos() && !isStandalone()) {
+            toast.message(tn('installForPush'))
+            return
+        }
+
+        try {
+            if (!('Notification' in window) || !('serviceWorker' in navigator) || !('PushManager' in window)) {
+                toast.error(tn('pushFailed'))
+                return
+            }
+            const permission = await Notification.requestPermission()
+            if (permission !== 'granted') {
+                toast.error(tn('pushDenied'))
+                return
+            }
+            const { publicKey } = await notificationsApi.getPushKey()
+            const reg = await navigator.serviceWorker.ready
+            const sub = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: urlBase64ToUint8Array(publicKey) as BufferSource
+            })
+            const json = sub.toJSON()
+            if (!json.endpoint || !json.keys?.p256dh || !json.keys?.auth) {
+                toast.error(tn('pushFailed'))
+                return
+            }
+            await notificationsApi.subscribe({
+                endpoint: json.endpoint,
+                p256dh: json.keys.p256dh,
+                auth: json.keys.auth,
+                user_agent: navigator.userAgent
+            })
+            setHasBrowserSub(true)
+            await savePrefs(notifyEmail, true)
+        } catch (error: unknown) {
+            toast.error(errorMessage(error, tn('pushFailed')))
         }
     }
 
@@ -114,16 +284,70 @@ export function AccountMenu({ user, className, variant = 'icon' }: AccountMenuPr
                     </DropdownMenuItem>
                 ))}
                 <DropdownMenuSeparator />
+                <DropdownMenuLabel className="text-xs font-normal text-muted-foreground">
+                    {tn('title')}
+                </DropdownMenuLabel>
+                <DropdownMenuItem
+                    disabled={prefsBusy}
+                    onSelect={e => {
+                        e.preventDefault()
+                        void toggleEmail()
+                    }}
+                    className="justify-between"
+                >
+                    <span>{tn('email')}</span>
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        aria-checked={notifyEmail}
+                        checked={notifyEmail}
+                        readOnly
+                        className="h-4 w-4 accent-emerald-600 pointer-events-none"
+                    />
+                </DropdownMenuItem>
+                <DropdownMenuItem
+                    disabled={prefsBusy}
+                    onSelect={e => {
+                        e.preventDefault()
+                        void togglePush()
+                    }}
+                    className="justify-between"
+                >
+                    <span>{tn('push')}</span>
+                    <input
+                        type="checkbox"
+                        role="switch"
+                        aria-checked={notifyPush && hasBrowserSub}
+                        checked={notifyPush && hasBrowserSub}
+                        readOnly
+                        className="h-4 w-4 accent-emerald-600 pointer-events-none"
+                    />
+                </DropdownMenuItem>
+                {isIos() && !isStandalone() && (
+                    <DropdownMenuLabel className="text-xs font-normal text-muted-foreground whitespace-normal">
+                        {tn('installForPush')}
+                    </DropdownMenuLabel>
+                )}
+                <DropdownMenuSeparator />
                 <DropdownMenuItem onClick={() => setTheme(theme === 'dark' ? 'light' : 'dark')}>
                     {theme === 'dark' ? <Sun className="mr-2 h-4 w-4" /> : <Moon className="mr-2 h-4 w-4" />}
                     {theme === 'dark' ? t('themeLight') : t('themeDark')}
                 </DropdownMenuItem>
                 <DropdownMenuSeparator />
-                <DropdownMenuItem onClick={handleLogout} className="text-red-600">
+                <DropdownMenuItem onClick={handleLogoutClick} className="text-red-600">
                     <LogOut className="mr-2 h-4 w-4" />
                     {t('signOut')}
                 </DropdownMenuItem>
             </DropdownMenuContent>
+            <ConfirmDialog
+                open={pendingLogoutWarning !== null}
+                onOpenChange={open => !open && setPendingLogoutWarning(null)}
+                title={t('logoutPendingTitle')}
+                description={t('logoutPendingDescription', { count: pendingLogoutWarning ?? 0 })}
+                confirmLabel={t('logoutPendingConfirm')}
+                onConfirm={doLogout}
+                destructive={false}
+            />
         </DropdownMenu>
     )
 }

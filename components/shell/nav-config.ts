@@ -11,21 +11,27 @@ import {
     FolderTree,
     Gift,
     UserCog,
-    ScrollText
+    ScrollText,
+    Banknote,
+    Receipt,
+    HandCoins
 } from 'lucide-react'
 import type { UserRole } from '@/lib/auth/roles'
 
 export type NavKey =
     | 'dashboard'
     | 'pos'
+    | 'cash'
     | 'products'
     | 'categories'
     | 'promotions'
     | 'inventory'
     | 'orders'
+    | 'receivables'
     | 'customers'
     | 'suppliers'
     | 'reports'
+    | 'expenses'
     | 'settings'
     | 'users'
     | 'audit'
@@ -48,7 +54,9 @@ export const navGroups: NavGroup[] = [
         items: [
             { icon: LayoutDashboard, key: 'dashboard', href: '/dashboard', minimumRole: 'cashier' },
             { icon: ShoppingCart, key: 'pos', href: '/pos', minimumRole: 'cashier' },
+            { icon: Banknote, key: 'cash', href: '/cash', minimumRole: 'cashier' },
             { icon: ShoppingBag, key: 'orders', href: '/orders', minimumRole: 'cashier' },
+            { icon: HandCoins, key: 'receivables', href: '/receivables', minimumRole: 'cashier' },
             { icon: Users, key: 'customers', href: '/customers', minimumRole: 'cashier' }
         ]
     },
@@ -64,7 +72,10 @@ export const navGroups: NavGroup[] = [
     },
     {
         key: 'analytics',
-        items: [{ icon: BarChart3, key: 'reports', href: '/reports', minimumRole: 'manager' }]
+        items: [
+            { icon: BarChart3, key: 'reports', href: '/reports', minimumRole: 'manager' },
+            { icon: Receipt, key: 'expenses', href: '/expenses', minimumRole: 'manager' }
+        ]
     },
     {
         key: 'admin',

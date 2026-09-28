@@ -32,15 +32,15 @@ test('a sale takes stock, a manager refunds it, the stock comes back', async ({ 
     await cartSheet.getByRole('button', { name: 'Checkout' }).click()
     await till.getByRole('button', { name: 'Card' }).click()
     await till.getByRole('button', { name: 'Complete Order' }).click()
-    const toast = till.locator('[data-sonner-toast]').first()
-    await expect(toast).toContainText(/Order ORD-\d{6}-\d{6} completed/)
-    await expect(toast).toContainText('44.00') // the total the SERVER computed
-    // The bubble stays visible but drops back to an empty cart once checkout clears it.
-    await expect(till.getByRole('button', { name: 'Cart: 0 items, total $0.00' })).toBeVisible()
+    const done = till.getByRole('dialog', { name: 'Sale completed' })
+    await expect(done).toContainText(/ORD-\d{6}-\d{6}/)
+    await expect(done).toContainText('44.00') // the total the SERVER computed
+    // The bubble stays mounted and drops back to an empty cart once checkout clears it.
+    await expect(till.locator('button[aria-label="Cart: 0 items, total $0.00"]')).toHaveCount(1)
     expect(await stockOf(product.id)).toBe(8)
 
     // ---- the cashier sees the order but cannot refund it
-    await toast.getByRole('button', { name: 'View order' }).click()
+    await done.getByRole('button', { name: 'View order' }).click()
     await expect(till.getByRole('heading', { name: 'Order Details' })).toBeVisible()
     // Scoped: the print-only <ReceiptTicket> (always mounted, hidden on screen) repeats the product name too.
     const detailView = till.getByTestId('order-detail-view')

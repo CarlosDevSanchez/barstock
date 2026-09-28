@@ -21,10 +21,11 @@ export type PromotionListItem = Tables<'promotions'> & {
     available: number | null
 }
 
-const LIST_SELECT =
+/** Shared with `getPosSnapshot` (lib/server/services/pos.ts), so both return the same row shape. */
+export const LIST_SELECT =
     '*, items:promotion_items(id, product_id, quantity, product:products(id, name, is_active, deleted_at, selling_price, tax_rate, inventory(quantity, variant_id)))'
 
-type RawPromotionRow = Tables<'promotions'> & {
+export type RawPromotionRow = Tables<'promotions'> & {
     items: Array<{
         id: string
         product_id: string
@@ -37,7 +38,7 @@ type RawPromotionRow = Tables<'promotions'> & {
     }> | null
 }
 
-function mapPromotionRow(row: RawPromotionRow): PromotionListItem {
+export function mapPromotionRow(row: RawPromotionRow): PromotionListItem {
     const items: PromotionItemRow[] = (row.items ?? []).map(({ product, ...item }) => {
         if (!product) return { ...item, product: null }
         const { inventory, ...rest } = product

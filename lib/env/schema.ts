@@ -7,6 +7,10 @@ export const clientEnvSchema = z.object({
 })
 
 const R2_KEYS = ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET'] as const
+// U6: email and push are independent channels (a business can want one without the other), so each is its own
+// all-or-nothing group instead of one group of five that forced both to be configured together.
+const EMAIL_KEYS = ['RESEND_API_KEY', 'EMAIL_FROM'] as const
+const PUSH_KEYS = ['VAPID_PUBLIC_KEY', 'VAPID_PRIVATE_KEY', 'VAPID_SUBJECT'] as const
 
 /** Server variables: adds secrets that must NEVER carry the NEXT_PUBLIC_ prefix. */
 export const serverEnvSchema = clientEnvSchema
@@ -15,6 +19,8 @@ export const serverEnvSchema = clientEnvSchema
         SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
         // Public URL of the app; base for invitation and password-reset links.
         APP_URL: z.url(),
+        // Bearer secret for GET /api/cron/tick (Vercel Cron). Optional: when unset the route answers 503.
+        CRON_SECRET: z.string().min(1).optional(),
         // Cloudflare R2 (product and receipt-logo image storage, lib/server/storage.ts). Optional AS A GROUP: the
         // bucket is provisioned later, so `next build`/CI must keep working with none of these set. When absent,
         // the image endpoints answer 503 storage_not_configured and the UI hides the image picker.
@@ -31,18 +37,56 @@ export const serverEnvSchema = clientEnvSchema
         // (e.g. http://localhost:9000), as opposed to the Docker-internal host (http://r2:9000) the app container
         // uses to reach MinIO for uploads/deletes. Falls back to R2_ENDPOINT_OVERRIDE when unset (same host works
         // for both when the app itself runs outside Docker, e.g. `bun run dev` on the host).
-        R2_PUBLIC_ENDPOINT_OVERRIDE: z.string().url().optional()
+        R2_PUBLIC_ENDPOINT_OVERRIDE: z.string().url().optional(),
+        // Staff alerts (email via Resend, push via web-push). Optional AS A GROUP: build/CI work with none set;
+        // dispatchOutbox skips a channel when its keys are missing (email needs RESEND+FROM; push needs all VAPID_*).
+        RESEND_API_KEY: z.string().min(1).optional(),
+        EMAIL_FROM: z.string().min(1).optional(),
+        VAPID_PUBLIC_KEY: z.string().min(1).optional(),
+        VAPID_PRIVATE_KEY: z.string().min(1).optional(),
+        // mailto: or https: contact for push services to reach the app owner about a subscription, per the Web
+        // Push protocol (RFC 8292's VAPID `sub` claim).
+        VAPID_SUBJECT: z
+            .string()
+            .min(1)
+            .regex(/^(mailto:|https:\/\/)/, 'VAPID_SUBJECT must start with mailto: or https://')
+            .optional()
     })
     .superRefine((value, ctx) => {
-        const present = R2_KEYS.filter(key => value[key] !== undefined)
-        if (present.length === 0 || present.length === R2_KEYS.length) return
-        for (const key of R2_KEYS) {
-            if (value[key] === undefined) {
-                ctx.addIssue({
-                    code: 'custom',
-                    path: [key],
-                    message: 'All four R2 variables must be set together, or none'
-                })
+        const presentR2 = R2_KEYS.filter(key => value[key] !== undefined)
+        if (presentR2.length !== 0 && presentR2.length !== R2_KEYS.length) {
+            for (const key of R2_KEYS) {
+                if (value[key] === undefined) {
+                    ctx.addIssue({
+                        code: 'custom',
+                        path: [key],
+                        message: 'All four R2 variables must be set together, or none'
+                    })
+                }
+            }
+        }
+        const presentEmail = EMAIL_KEYS.filter(key => value[key] !== undefined)
+        if (presentEmail.length !== 0 && presentEmail.length !== EMAIL_KEYS.length) {
+            for (const key of EMAIL_KEYS) {
+                if (value[key] === undefined) {
+                    ctx.addIssue({
+                        code: 'custom',
+                        path: [key],
+                        message: 'Both email variables must be set together, or none'
+                    })
+                }
+            }
+        }
+        const presentPush = PUSH_KEYS.filter(key => value[key] !== undefined)
+        if (presentPush.length !== 0 && presentPush.length !== PUSH_KEYS.length) {
+            for (const key of PUSH_KEYS) {
+                if (value[key] === undefined) {
+                    ctx.addIssue({
+                        code: 'custom',
+                        path: [key],
+                        message: 'All three VAPID push variables must be set together, or none'
+                    })
+                }
             }
         }
     })

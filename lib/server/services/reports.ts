@@ -1,6 +1,7 @@
 import 'server-only'
 import { assertNoError } from '@/lib/server/errors'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
+import { businessDayReportSchema, type BusinessDayReport } from '@/lib/validation/cash'
 import {
     dashboardSummarySchema,
     salesReportSchema,
@@ -19,4 +20,10 @@ export async function getSalesReport(supabase: AppSupabaseClient, from: string, 
     const { data, error } = await supabase.rpc('sales_report', { p_from: from, p_to: to })
     assertNoError(error)
     return salesReportSchema.parse(data)
+}
+
+export async function getBusinessDayReport(supabase: AppSupabaseClient, id: string): Promise<BusinessDayReport> {
+    const { data, error } = await supabase.rpc('business_day_report', { p_business_day_id: id })
+    assertNoError(error)
+    return businessDayReportSchema.parse(data)
 }

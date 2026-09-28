@@ -8,14 +8,20 @@
 |---|---|---|
 | `NEXT_PUBLIC_SUPABASE_URL` | **Pública** (se incrusta en el bundle del navegador) | URL del proyecto Supabase. En local: `http://127.0.0.1:54321` |
 | `NEXT_PUBLIC_SUPABASE_ANON_KEY` | **Pública** | Clave `anon` (JWT). No es secreta por diseño: la seguridad depende de RLS |
-| `SUPABASE_SERVICE_ROLE_KEY` | **Solo servidor** | Clave `service_role`. **Salta RLS.** Se usa únicamente para invitar usuarios (`auth.admin`) |
+| `SUPABASE_SERVICE_ROLE_KEY` | **Solo servidor** | Clave `service_role`. **Salta RLS.** Invita usuarios (`auth.admin`), despacha el outbox de alertas y, en el cron, llama a RPCs de `service_role` |
 | `APP_URL` | Solo servidor | URL pública de la app; base de los enlaces de invitación y de restablecer contraseña |
+| `CRON_SECRET` | Solo servidor, **opcional** | Bearer de `GET /api/cron/tick` (cierra jornadas de más de 24 h). Si falta, la ruta responde 503. Vercel Cron envía `Authorization: Bearer $CRON_SECRET` |
 | `R2_ACCOUNT_ID` | Solo servidor | Cuenta de Cloudflare R2 (imágenes de producto y logo del ticket, Fase 6). **Opcional como grupo** |
 | `R2_ACCESS_KEY_ID` | Solo servidor | Token de API de R2 (Object Read & Write, limitado a `R2_BUCKET`). **Opcional como grupo** |
 | `R2_SECRET_ACCESS_KEY` | Solo servidor | Secreto del token anterior. **Opcional como grupo** |
 | `R2_BUCKET` | Solo servidor | Bucket privado (nunca público) donde se guardan las imágenes. **Opcional como grupo** |
 | `R2_ENDPOINT_OVERRIDE` | Solo servidor | **Solo desarrollo local, opcional e independiente del grupo anterior.** Sustituye el host real de R2 por un endpoint S3 compatible (el contenedor MinIO de `docker-compose.r2.yml`), usado por el servidor para subir/borrar. Nunca se define en producción |
 | `R2_PUBLIC_ENDPOINT_OVERRIDE` | Solo servidor | **Solo desarrollo local, opcional.** Host que usa el *navegador* para las URLs firmadas (p. ej. `http://localhost:9000`); distinto de `R2_ENDPOINT_OVERRIDE` cuando la app corre dentro de Docker y MinIO se referencia por nombre de contenedor (`http://r2:9000`) para ese tráfico servidor-a-servidor. Si no se define, usa el mismo valor que `R2_ENDPOINT_OVERRIDE` |
+| `RESEND_API_KEY` | Solo servidor | API key de Resend (alertas por correo). **Opcional como grupo** con `EMAIL_FROM` (independiente del grupo de push) |
+| `EMAIL_FROM` | Solo servidor | Remitente de las alertas (p. ej. `Barstock <alerts@ejemplo.com>`). **Opcional como grupo** con `RESEND_API_KEY` |
+| `VAPID_PUBLIC_KEY` | Solo servidor | Clave pública VAPID (Web Push). **Opcional como grupo** con las otras dos VAPID (independiente del grupo de correo) |
+| `VAPID_PRIVATE_KEY` | Solo servidor | Clave privada VAPID. **Opcional como grupo** con las otras dos VAPID |
+| `VAPID_SUBJECT` | Solo servidor | Subject VAPID: debe empezar por `mailto:` o `https://` (regex validada). **Opcional como grupo** con las otras dos VAPID |
 
 Plantilla versionada: [`.env.example`](../../.env.example). Copiarla a `.env.local`.
 
@@ -38,6 +44,17 @@ hace que las URLs firmadas que recibe el navegador usen un host que sí puede re
 Docker; `r2` como nombre de host solo existe dentro de esa red). Consola web: `http://localhost:9001` (usuario/clave `barstock-local` /
 `barstock-local-2026`). Ninguna de las dos variables debe definirse fuera de este flujo local; en Vercel/CI se dejan sin definir para
 hablar con el R2 real.
+
+### Notificaciones (email y push), dos grupos independientes **[Verificado]**
+
+Correo (`RESEND_API_KEY` + `EMAIL_FROM`) y push (`VAPID_PUBLIC_KEY` + `VAPID_PRIVATE_KEY` + `VAPID_SUBJECT`) son **dos grupos
+opcionales independientes** (U6): un negocio puede activar solo correo, solo push, ambos o ninguno. Cada grupo se valida
+con su propio `superRefine` en `lib/env/schema.ts` (todas las variables del grupo o ninguna); `VAPID_SUBJECT` además debe
+empezar por `mailto:` o `https://` (si no, error de validación al arrancar). Sin ninguna variable, `next build`/`next dev`
+siguen funcionando y `dispatchOutbox` retorna sin reclamar filas del outbox (ningún canal configurado). Con solo un grupo
+configurado, `dispatchOutbox` entrega por ese canal y dejas las filas pendientes para el otro (no las marca como
+procesadas por un canal que no tiene credenciales). Generar VAPID: `bunx web-push generate-vapid-keys`. Detalle del
+módulo: [`03-modulos/notificaciones.md`](../03-modulos/notificaciones.md).
 
 ## Validación
 

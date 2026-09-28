@@ -4,10 +4,13 @@ import type {
     AddTabMembersInput,
     OpenTabInput,
     PayTabInput,
+    PayTabSplitInput,
     RemoveTabItemInput,
     SetTabDiscountInput,
     VoidTabInput
 } from '@/lib/validation/tabs'
+import type { DeferTabInput } from '@/lib/validation/receivables'
+import type { OrderDetail } from '@/lib/api/orders'
 import { apiDelete, apiGet, apiList, apiPost, type Query } from './client'
 
 export type { TabDetail, TabListItem }
@@ -21,6 +24,18 @@ export const tabsApi = {
     removeItem: (id: string, itemId: string, body: RemoveTabItemInput) =>
         apiDelete<TabDetail>(`tabs/${id}/items/${itemId}`, body),
     setDiscount: (id: string, body: SetTabDiscountInput) => apiPost<TabDetail>(`tabs/${id}/discount`, body),
-    pay: (id: string, body: PayTabInput) => apiPost<TabDetail>(`tabs/${id}/payments`, body),
-    void: (id: string, body: VoidTabInput) => apiPost<TabDetail>(`tabs/${id}/void`, body)
+    pay: (id: string, body: PayTabInput, idempotencyKey?: string) =>
+        apiPost<TabDetail>(`tabs/${id}/payments`, body, {
+            headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
+        }),
+    paySplit: (id: string, body: PayTabSplitInput, idempotencyKey?: string) =>
+        apiPost<TabDetail>(`tabs/${id}/payments`, body, {
+            headers: idempotencyKey ? { 'Idempotency-Key': idempotencyKey } : undefined
+        }),
+    void: (id: string, body: VoidTabInput) => apiPost<TabDetail>(`tabs/${id}/void`, body),
+    /** Close an open tab as a pending receivable. Idempotency-Key is required. */
+    defer: (id: string, body: DeferTabInput, idempotencyKey: string) =>
+        apiPost<OrderDetail>(`tabs/${id}/defer`, body, {
+            headers: { 'Idempotency-Key': idempotencyKey }
+        })
 }

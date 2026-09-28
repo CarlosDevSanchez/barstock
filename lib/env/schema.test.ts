@@ -82,3 +82,69 @@ describe('R2 variables (lib/server/storage.ts), optional as a group', () => {
         expect(() => parseEnv(serverEnvSchema, { ...valid, R2_BUCKET: r2.R2_BUCKET })).toThrow(/R2_ACCOUNT_ID: missing/)
     })
 })
+
+describe('notification variables (lib/server/services/notifications.ts), two independent groups (U6)', () => {
+    const notify = {
+        RESEND_API_KEY: 're_test',
+        EMAIL_FROM: 'Barstock <alerts@example.com>',
+        VAPID_PUBLIC_KEY: 'vapid-pub',
+        VAPID_PRIVATE_KEY: 'vapid-priv',
+        VAPID_SUBJECT: 'mailto:ops@example.com'
+    }
+
+    test('none of the five is valid: build/CI must work before email/push are provisioned', () => {
+        expect(parseEnv(serverEnvSchema, valid)).toMatchObject(valid)
+    })
+
+    test('all five together are valid', () => {
+        expect(parseEnv(serverEnvSchema, { ...valid, ...notify })).toEqual({ ...valid, ...notify })
+    })
+
+    test('email alone (no push) is valid: the two groups are independent', () => {
+        const withEmailOnly = {
+            ...valid,
+            RESEND_API_KEY: notify.RESEND_API_KEY,
+            EMAIL_FROM: notify.EMAIL_FROM
+        }
+        expect(parseEnv(serverEnvSchema, withEmailOnly)).toEqual(withEmailOnly)
+    })
+
+    test('push alone (no email) is valid: the two groups are independent', () => {
+        const withPushOnly = {
+            ...valid,
+            VAPID_PUBLIC_KEY: notify.VAPID_PUBLIC_KEY,
+            VAPID_PRIVATE_KEY: notify.VAPID_PRIVATE_KEY,
+            VAPID_SUBJECT: notify.VAPID_SUBJECT
+        }
+        expect(parseEnv(serverEnvSchema, withPushOnly)).toEqual(withPushOnly)
+    })
+
+    test('a partial set is rejected, naming every missing variable in each incomplete group', () => {
+        let error: unknown
+        try {
+            parseEnv(serverEnvSchema, {
+                ...valid,
+                RESEND_API_KEY: notify.RESEND_API_KEY,
+                VAPID_PUBLIC_KEY: notify.VAPID_PUBLIC_KEY
+            })
+        } catch (e: unknown) {
+            error = e
+        }
+        expect(error).toBeInstanceOf(EnvError)
+        expect((error as EnvError).problems).toEqual([
+            'EMAIL_FROM: missing',
+            'VAPID_PRIVATE_KEY: missing',
+            'VAPID_SUBJECT: missing'
+        ])
+    })
+
+    test('VAPID_SUBJECT must start with mailto: or https:', () => {
+        const withBadSubject = {
+            ...valid,
+            VAPID_PUBLIC_KEY: notify.VAPID_PUBLIC_KEY,
+            VAPID_PRIVATE_KEY: notify.VAPID_PRIVATE_KEY,
+            VAPID_SUBJECT: 'ops@example.com'
+        }
+        expect(() => parseEnv(serverEnvSchema, withBadSubject)).toThrow(/VAPID_SUBJECT/)
+    })
+})

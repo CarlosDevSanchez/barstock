@@ -13,11 +13,16 @@ const baseOrder: OrderDetail = {
     id: 'order-1',
     order_number: 'ORD-260921-000001',
     customer_id: null,
+    debtor_name: null,
     status: 'completed',
     subtotal: 120,
     discount: 0,
     tax: 21,
     total: 141,
+    business_day_id: null,
+    cash_session_id: null,
+    refund_cash_session_id: null,
+    refund_after_close: false,
     notes: null,
     tab_id: null,
     created_by: 'user-1',
@@ -26,6 +31,19 @@ const baseOrder: OrderDetail = {
     refunded_at: null,
     refunded_by: null,
     refund_reason: null,
+    client_ref: null,
+    occurred_at: null,
+    source: 'online',
+    sync_issues: null,
+    reviewed_by: null,
+    reviewed_at: null,
+    settled_at: '2026-09-21T15:30:00Z',
+    due_date: null,
+    reminder_enabled: false,
+    reminder_note: null,
+    written_off_at: null,
+    written_off_by: null,
+    write_off_reason: null,
     customer: null,
     created_by_name: 'Jane Cashier',
     tab: null,
@@ -37,7 +55,10 @@ const baseOrder: OrderDetail = {
             amount: 141,
             reference_number: null,
             notes: null,
-            created_at: '2026-09-21T15:30:00Z'
+            created_at: '2026-09-21T15:30:00Z',
+            created_by: null,
+            business_day_id: null,
+            cash_session_id: null
         }
     ],
     items: [
@@ -47,6 +68,8 @@ const baseOrder: OrderDetail = {
             product_id: 'p-1',
             variant_id: null,
             promotion_id: null,
+            stock_taken: null,
+            unit_cost: null,
             quantity: 1,
             unit_price: 100,
             discount: 0,
@@ -64,6 +87,8 @@ const baseOrder: OrderDetail = {
             product_id: 'p-2',
             variant_id: null,
             promotion_id: null,
+            stock_taken: null,
+            unit_cost: null,
             quantity: 2,
             unit_price: 10,
             discount: 0,
@@ -129,7 +154,10 @@ describe('ReceiptTicket', () => {
                     amount: 100,
                     reference_number: null,
                     notes: null,
-                    created_at: '2026-09-21T15:30:00Z'
+                    created_at: '2026-09-21T15:30:00Z',
+                    created_by: null,
+                    business_day_id: null,
+                    cash_session_id: null
                 },
                 {
                     id: 'pay-2',
@@ -138,7 +166,10 @@ describe('ReceiptTicket', () => {
                     amount: 41,
                     reference_number: null,
                     notes: null,
-                    created_at: '2026-09-21T15:30:00Z'
+                    created_at: '2026-09-21T15:30:00Z',
+                    created_by: null,
+                    business_day_id: null,
+                    cash_session_id: null
                 }
             ]
         }
@@ -204,5 +235,21 @@ describe('ReceiptTicket', () => {
         )
         expect(screen.queryByTestId('receipt-logo')).toBeNull()
         expect(screen.getByTestId('receipt-ticket').querySelector('img')).toBeNull()
+    })
+
+    test('shows the PROVISIONAL stamp for a queued-but-not-synced sale (F4), and not otherwise', () => {
+        const { rerender } = render(
+            <IntlProvider>
+                <ReceiptTicket order={baseOrder} settings={testSettings} />
+            </IntlProvider>
+        )
+        expect(screen.queryByTestId('receipt-provisional-stamp')).toBeNull()
+
+        rerender(
+            <IntlProvider>
+                <ReceiptTicket order={baseOrder} settings={testSettings} provisional />
+            </IntlProvider>
+        )
+        expect(screen.getByTestId('receipt-provisional-stamp').textContent).toBe('PROVISIONAL — pending sync')
     })
 })

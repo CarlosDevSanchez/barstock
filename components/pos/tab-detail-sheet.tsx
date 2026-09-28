@@ -4,7 +4,7 @@ import { useMemo, useState } from 'react'
 import { useRouter } from 'next/navigation'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { CreditCard, DollarSign, Smartphone, Trash2 } from 'lucide-react'
+import { Trash2 } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
@@ -21,6 +21,8 @@ import {
 } from '@/components/ui/dialog'
 import { useMoney, useSession } from '@/components/session-provider'
 import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
+import { PaymentDialog } from '@/components/pos/payment-dialog'
+import { DeferTabDialog } from '@/components/pos/defer-tab-dialog'
 import { errorMessage } from '@/lib/api/client'
 import { tabsApi, type TabDetail } from '@/lib/api/tabs'
 import { groupOrderItemsByPromotion, type GroupableOrderItem } from '@/lib/order-item-groups'
@@ -37,13 +39,9 @@ interface TabDetailSheetProps {
     onClose: () => void
     /** A tab was paid, voided or otherwise changed: refresh whatever list is showing it. */
     onChanged: () => void
+    /** The tab just closed into an order. The POS opens the same "sale completed" dialog as a direct sale. */
+    onOrderClosed?: (orderId: string) => void
 }
-
-const PAYMENT_ICONS: Array<{ value: PaymentMethod; icon: typeof DollarSign }> = [
-    { value: 'cash', icon: DollarSign },
-    { value: 'card', icon: CreditCard },
-    { value: 'ewallet', icon: Smartphone }
-]
 
 function RemoveItemDialog({
     tabId,
@@ -156,7 +154,7 @@ function VoidTabDialog({ onClose, onVoid }: { onClose: () => void; onVoid: (reas
 }
 
 /** Full detail of one tab: items, members, totals, payments and the split/pay/void actions. */
-export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProps) {
+export function TabDetailSheet({ tabId, onClose, onChanged, onOrderClosed }: TabDetailSheetProps) {
     const t = useTranslations('tabs')
     const tPos = useTranslations('pos')
     const tc = useTranslations('common')
@@ -172,11 +170,39 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
     )
     const [removingItem, setRemovingItem] = useState<TabDetail['items'][number] | null>(null)
     const [voiding, setVoiding] = useState(false)
+    const [deferring, setDeferring] = useState(false)
     const [splitMode, setSplitMode] = useState<'equal' | 'custom' | null>(null)
     const [selectedMembers, setSelectedMembers] = useState<string[]>([])
     const [customAmounts, setCustomAmounts] = useState<Record<string, string>>({})
-    const [payMethod, setPayMethod] = useState<PaymentMethod>('cash')
-    const [payingKey, setPayingKey] = useState<string | null>(null)
+    /** What the `PaymentDialog` is currently open for: the whole tab (`memberId: null`) or one member's computed
+     * share. A fresh `idempotencyKey` is generated right here, once per "open the dialog" — reused on every retry
+     * within that same dialog session, same pattern as receivables' `PayDialog`. */
+    const [payingFor, setPayingFor] = useState<{
+        amountDue: number
+        memberId: string | null
+        idempotencyKey: string
+    } | null>(null)
+    const [processingPayment, setProcessingPayment] = useState(false)
+    // Tracks the last `tabId` this component rendered for, so the state reset below can happen DURING render
+    // (React's documented "adjust state when a prop changes" pattern) instead of in a `useEffect` — the lint
+    // rule (react-hooks/set-state-in-effect) flags a bare setState-in-effect for exactly this "derive state from
+    // a changed prop" case, since it causes an extra visible render; a render-time reset lets React redo this
+    // render immediately with the reset state before anything commits or paints.
+    const [tabIdForState, setTabIdForState] = useState(tabId)
+
+    // `useApiQuery` deliberately keeps showing the PREVIOUS tab's `data` while a new one loads ("so lists do not
+    // flash empty" — see hooks/use-api-query.ts), so this component is never naturally remounted when the parent
+    // swaps which tab is open (app/(dashboard)/pos/page.tsx doesn't key TabDetailSheet by tabId either). Without
+    // this, a payment dialog left open across a tab switch could submit a stale amountDue/memberId against the
+    // NEW tab. Reset every bit of local payment/split state whenever `tabId` itself changes.
+    if (tabId !== tabIdForState) {
+        setTabIdForState(tabId)
+        setSplitMode(null)
+        setSelectedMembers([])
+        setCustomAmounts({})
+        setPayingFor(null)
+        setProcessingPayment(false)
+    }
 
     const tab = tabQuery.data
     const itemGroups = useMemo(() => {
@@ -201,28 +227,49 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
         return groupOrderItemsByPromotion(groupable)
     }, [tab])
 
-    const applyChange = (tab: TabDetail) => {
+    const applyChange = (next: TabDetail) => {
         tabQuery.reload()
         onChanged()
-        if (tab.status === 'closed' && tab.order_id) {
-            const orderId = tab.order_id
-            toast.success(t('closed', { tabNumber: tab.tab_number }), {
+        if (next.status === 'closed' && next.order_id) {
+            if (onOrderClosed) {
+                onClose()
+                onOrderClosed(next.order_id)
+                return
+            }
+            const orderId = next.order_id
+            toast.success(t('closed', { tabNumber: next.tab_number }), {
                 action: { label: t('viewOrder'), onClick: () => router.push(`/orders/${orderId}`) }
             })
         }
     }
 
-    const pay = async (memberId: string | null, amount: number, key: string) => {
-        if (!tabId || amount <= 0) return
-        setPayingKey(key)
+    const submitPayment = async (payments: Array<{ method: PaymentMethod; amount: number }>) => {
+        if (!tabId || !payingFor) return
+        setProcessingPayment(true)
         try {
-            const tab = await tabsApi.pay(tabId, { member_id: memberId, payment_method: payMethod, amount })
+            const next =
+                payments.length === 2
+                    ? await tabsApi.paySplit(
+                          tabId,
+                          { member_id: payingFor.memberId, payments },
+                          payingFor.idempotencyKey
+                      )
+                    : await tabsApi.pay(
+                          tabId,
+                          {
+                              member_id: payingFor.memberId,
+                              payment_method: payments[0]!.method,
+                              amount: payments[0]!.amount
+                          },
+                          payingFor.idempotencyKey
+                      )
             toast.success(t('paymentRecorded'))
-            applyChange(tab)
+            setPayingFor(null)
+            applyChange(next)
         } catch (error: unknown) {
             toast.error(errorMessage(error, t('paymentFailed')))
         } finally {
-            setPayingKey(null)
+            setProcessingPayment(false)
         }
     }
 
@@ -432,30 +479,18 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                         {canPay && (
                                             <div className="space-y-3 rounded-xl border p-3">
                                                 <h3 className="text-sm font-semibold">{t('collectPayment')}</h3>
-                                                <div className="grid grid-cols-3 gap-2">
-                                                    {PAYMENT_ICONS.map(({ value, icon: Icon }) => (
-                                                        <Button
-                                                            key={value}
-                                                            type="button"
-                                                            variant={payMethod === value ? 'default' : 'outline'}
-                                                            size="sm"
-                                                            aria-pressed={payMethod === value}
-                                                            onClick={() => setPayMethod(value)}
-                                                        >
-                                                            <Icon className="h-4 w-4 mr-1" />
-                                                            {tc(`payment.${value}`)}
-                                                        </Button>
-                                                    ))}
-                                                </div>
 
                                                 <OfflineDisabledButton
                                                     className="w-full"
-                                                    disabled={payingKey !== null}
-                                                    onClick={() => pay(null, tab.totals.balance, 'full')}
+                                                    onClick={() =>
+                                                        setPayingFor({
+                                                            amountDue: tab.totals.balance,
+                                                            memberId: null,
+                                                            idempotencyKey: crypto.randomUUID()
+                                                        })
+                                                    }
                                                 >
-                                                    {payingKey === 'full'
-                                                        ? t('paying')
-                                                        : t('payFullBalance', { amount: money(tab.totals.balance) })}
+                                                    {t('payFullBalance', { amount: money(tab.totals.balance) })}
                                                 </OfflineDisabledButton>
 
                                                 {tab.members.length > 1 && (
@@ -525,14 +560,16 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                                                     <span className="font-medium">{money(share)}</span>
                                                                     <Button
                                                                         size="sm"
-                                                                        disabled={payingKey !== null}
+                                                                        disabled={share <= 0}
                                                                         onClick={() =>
-                                                                            pay(memberId, share, `equal:${memberId}`)
+                                                                            setPayingFor({
+                                                                                amountDue: share,
+                                                                                memberId,
+                                                                                idempotencyKey: crypto.randomUUID()
+                                                                            })
                                                                         }
                                                                     >
-                                                                        {payingKey === `equal:${memberId}`
-                                                                            ? t('paying')
-                                                                            : t('pay')}
+                                                                        {t('pay')}
                                                                     </Button>
                                                                 </div>
                                                             )
@@ -571,27 +608,33 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                                                                 />
                                                                 <Button
                                                                     size="sm"
-                                                                    disabled={
-                                                                        payingKey !== null ||
-                                                                        !(Number(customAmounts[member.id]) > 0)
-                                                                    }
+                                                                    disabled={!(Number(customAmounts[member.id]) > 0)}
                                                                     onClick={() =>
-                                                                        pay(
-                                                                            member.id,
-                                                                            Number(customAmounts[member.id]) || 0,
-                                                                            `custom:${member.id}`
-                                                                        )
+                                                                        setPayingFor({
+                                                                            amountDue:
+                                                                                Number(customAmounts[member.id]) || 0,
+                                                                            memberId: member.id,
+                                                                            idempotencyKey: crypto.randomUUID()
+                                                                        })
                                                                     }
                                                                 >
-                                                                    {payingKey === `custom:${member.id}`
-                                                                        ? t('paying')
-                                                                        : t('pay')}
+                                                                    {t('pay')}
                                                                 </Button>
                                                             </div>
                                                         ))}
                                                     </div>
                                                 )}
                                             </div>
+                                        )}
+
+                                        {isOpen && tab.totals.balance > 0 && (
+                                            <OfflineDisabledButton
+                                                variant="secondary"
+                                                className="w-full"
+                                                onClick={() => setDeferring(true)}
+                                            >
+                                                {t('deferAsReceivable')}
+                                            </OfflineDisabledButton>
                                         )}
 
                                         {isManager && isOpen && tab.payments.length === 0 && (
@@ -611,6 +654,22 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                 </SheetContent>
             </Sheet>
 
+            <PaymentDialog
+                open={payingFor !== null}
+                onOpenChange={open => !open && setPayingFor(null)}
+                title={
+                    payingFor?.memberId
+                        ? (tab?.members.find(member => member.id === payingFor.memberId)?.display_name ??
+                          t('collectPayment'))
+                        : t('collectPayment')
+                }
+                amountDue={payingFor?.amountDue ?? 0}
+                amountEditable
+                submitLabel={t('pay')}
+                processing={processingPayment}
+                onSubmit={payments => void submitPayment(payments)}
+            />
+
             {removingItem && tabId && (
                 <RemoveItemDialog
                     tabId={tabId}
@@ -629,6 +688,19 @@ export function TabDetailSheet({ tabId, onClose, onChanged }: TabDetailSheetProp
                     onVoid={async reason => {
                         await handleVoid(reason)
                         setVoiding(false)
+                    }}
+                />
+            )}
+
+            {deferring && tab && (
+                <DeferTabDialog
+                    tab={tab}
+                    onClose={() => setDeferring(false)}
+                    onDeferred={orderId => {
+                        setDeferring(false)
+                        onChanged()
+                        onClose()
+                        onOrderClosed?.(orderId)
                     }}
                 />
             )}

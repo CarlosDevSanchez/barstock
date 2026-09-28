@@ -49,9 +49,10 @@ alcance es seguro. Excluye reembolsos (`status = 'completed'`), respeta la venta
 
 Mismo patrón que las RPC de negocio de arriba (`SECURITY DEFINER`, `search_path=''`, errores `P0001`/`P0002`/`42501`); documentadas en detalle
 en [cuentas-abiertas](../03-modulos/cuentas-abiertas.md). Todas bloquean la cuenta con `SELECT … FOR UPDATE` antes de tocar nada:
-`open_tab`, `tab_add_members`, `tab_add_items` (cajero+); `tab_remove_item`, `void_tab` (gerente+); `tab_set_discount`, `tab_pay` (cajero+).
-Dos internas sin `GRANT` a nadie: `_tab_totals` (la fórmula de `create_sale` aplicada a `tab_items`) y `_close_tab` (convierte la cuenta pagada
-en una `orders` normal). `tab_summary(p_tab_id)` expone `_tab_totals` de solo lectura para el endpoint de detalle.
+`open_tab`, `tab_add_members`, `tab_add_items` (cajero+); `tab_remove_item`, `void_tab` (gerente+); `tab_set_discount`, `tab_pay` / `tab_pay_split` (cajero+; `p_idempotency_key` opcional, `20261007000001`).
+Dos internas sin `GRANT` a nadie: `_tab_totals` (la fórmula de `create_sale` aplicada a `tab_items`) y `_create_order_from_tab` / `_close_tab` (convierten la cuenta en una `orders`; `_create_order_from_tab` acepta `p_debtor_name`). `tab_summary(p_tab_id)` expone `_tab_totals` de solo lectura para el endpoint de detalle.
+
+`defer_tab` v2 (`20261008000001`): `(tab_id, due_date, reminder, note, customer_id?, debtor_name?, payments?, idempotency_key?)`. `list_receivables(status, customer_id, q?, limit?)` — `customer_name = coalesce(cliente, debtor_name)`. Detalle en [cuentas por cobrar](../03-modulos/cuentas-por-cobrar.md).
 
 ## Reportes (`…05`) — `SECURITY INVOKER`
 
@@ -74,7 +75,7 @@ Solo cuentan órdenes `completed` (los reembolsos se excluyen). Los días se agr
 | `protect_profile_columns` | `profiles` | `id`/`email` inmutables; solo admin cambia `role`/`is_active`; protege al último admin |
 | `create_inventory_for_product` | `products` | Crea la fila de inventario (cantidad 0, umbral de `settings.low_stock_threshold` o 10). El seed fija cantidades iniciales |
 | `orders_refresh_customer_totals` | `orders` | Recalcula `customers.total_spent` (Σ órdenes `completed`) y `loyalty_points = floor(total_spent)` (D7). Los reembolsos restan |
-| `audit_row_change` (`AFTER INSERT OR UPDATE OR DELETE`) | `products`, `categories`, `promotions`, `promotion_items`, `inventory`, `orders`, `customers`, `suppliers`, `settings`, `profiles`, `tabs`, `tab_items`, `tab_payments` | Escribe una fila en `audit_log` con el actor (de `auth.uid()`/`profiles`, o `system` sin JWT), la acción y, en un `UPDATE`, solo las columnas que cambiaron (`{before, after}`, sin `updated_at`). Un `UPDATE` que no cambia nada no genera fila. `…0016` |
+| `audit_row_change` (`AFTER INSERT OR UPDATE OR DELETE`) | `products`, `categories`, `promotions`, `promotion_items`, `inventory`, `orders`, `customers`, `suppliers`, `settings`, `profiles`, `tabs`, `tab_items`, `tab_payments`, `expense_categories`, `expenses` | Escribe una fila en `audit_log` con el actor (de `auth.uid()`/`profiles`, o `system` sin JWT), la acción y, en un `UPDATE`, solo las columnas que cambiaron (`{before, after}`, sin `updated_at`). Un `UPDATE` que no cambia nada no genera fila. `…0016` |
 | `audit_log_immutable` (`BEFORE UPDATE OR DELETE`, `BEFORE TRUNCATE`) | `audit_log` | Lanza `raise exception` siempre, para cualquier rol (incluido `service_role`): es la capa que hace el log append-only. `…0016` |
 
 ### `log_auth_event(p_action text, p_metadata jsonb default '{}') → void` — cualquier usuario, `SECURITY DEFINER` (`…0016`)
@@ -83,7 +84,15 @@ Registra un evento de sesión (`login`, `logout`, `invite`, `password_reset`) en
 `auth.uid()`: la función lo lee del JWT y **no acepta un parámetro para forjarlo**. Un `login_failed` no pasa por aquí
 (no hay sesión todavía): el servidor lo inserta con el cliente `service_role`. Ver [Auditoría](../03-modulos/auditoria.md).
 
+## Jornada y cajas (`20261003000001`)
+
+`open_business_day`, `close_business_day`, `adjust_business_day` (admin), `open_cash_session`, `add_cash_movement`, `close_cash_session`, `cash_session_summary`, `business_day_report` (gerente+) y `refresh_business_days`. `_auto_close_stale_business_days` no se concede a `authenticated`: solo a `service_role` (el cron) y la llaman por dentro las funciones de venta y de apertura. `create_sale`, `_close_tab`, `tab_pay` y `tab_pay_split` solo añaden esa llamada y las columnas de jornada/caja. `create_expense` (gerente+) y `void_expense` (admin) son la única escritura de gastos. Cada tabla nueva tiene el trigger `audit_row_change`.
+
 ## Ausencias conocidas
 
 - No hay trigger que cree inventario para **variantes** (las variantes no se venden desde el POS todavía, D10).
-- `purchase_orders` no repone stock al recibirse (sin UI, etapa 2).
+- `receive_purchase` / `void_purchase` / `supplier_purchase_history` (migración `20261005000001_purchases.sql`): reciben o anulan una compra en una transacción; `_session_cash` resta el total de OC `received` de esa caja (`purchases`). **No** tocan `products.cost_price`. Auditoría `audit_row_change` en `purchase_orders` y `purchase_order_items`. **[Por verificar]**.
+
+
+### Secuencias (compras)
+`purchase_order_number_seq` alimenta `po_number` (`PO-YYMMDD-######`). **[Por verificar]**.

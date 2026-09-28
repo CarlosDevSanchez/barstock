@@ -3,6 +3,7 @@
 import { Plus } from 'lucide-react'
 import { useTranslations } from 'next-intl'
 import { Button } from '@/components/ui/button'
+import { useMoney } from '@/components/session-provider'
 import type { TabListItem } from '@/lib/api/tabs'
 
 interface TabsPanelProps {
@@ -15,6 +16,7 @@ interface TabsPanelProps {
 /** The "Tabs" side of the cart sheet: every open tab, tap one to see its detail and take payments. */
 export function TabsPanel({ tabs, loading, onOpenNew, onSelect }: TabsPanelProps) {
     const t = useTranslations('tabs')
+    const money = useMoney()
 
     return (
         <div className="space-y-3">
@@ -39,9 +41,14 @@ export function TabsPanel({ tabs, loading, onOpenNew, onSelect }: TabsPanelProps
                                     <span className="font-medium truncate">{tab.label}</span>
                                     <span className="text-xs text-muted-foreground shrink-0">{tab.tab_number}</span>
                                 </div>
-                                {tab.customer && (
-                                    <p className="text-xs text-muted-foreground truncate">{tab.customer.name}</p>
-                                )}
+                                <div className="flex justify-between items-center gap-2">
+                                    {tab.customer ? (
+                                        <p className="text-xs text-muted-foreground truncate">{tab.customer.name}</p>
+                                    ) : (
+                                        <span />
+                                    )}
+                                    <span className="text-sm font-semibold shrink-0">{money(tab.balance)}</span>
+                                </div>
                             </button>
                         </li>
                     ))}

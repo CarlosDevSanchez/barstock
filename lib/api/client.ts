@@ -24,6 +24,15 @@ interface RequestOptions {
     formData?: FormData
     query?: Query
     signal?: AbortSignal
+    headers?: Record<string, string>
+    /** Default true. The offline sync engine (lib/offline/sync.ts) passes false: a 401 there means "pause this
+     * entry and try again once there is a session again", not "send the whole tab to /login". */
+    redirectOnUnauthorized?: boolean
+}
+
+export interface ApiCallOptions {
+    headers?: Record<string, string>
+    redirectOnUnauthorized?: boolean
 }
 
 const BASE = '/api/v1/'
@@ -56,9 +65,19 @@ function toApiError(status: number, payload: unknown): ApiError {
     )
 }
 
+/** True while a deliberate sign-out runs (components/shell/account-menu.tsx). Requests already in flight come back 401
+ * once the session is gone; redirecting on them raced the logout's own navigation and landed on `/login?next=<page>`,
+ * so the NEXT person on a shared till was sent to the previous user's page. The logout ends in a full page load,
+ * which resets this module state. */
+let signingOut = false
+
+export function setSigningOut(value: boolean) {
+    signingOut = value
+}
+
 /** Sends the user to /login when the session is gone (except for the auth endpoints themselves, where 401 means "bad credentials"). */
 function handleUnauthorized(path: string) {
-    if (typeof window === 'undefined' || path.startsWith('auth/')) return
+    if (typeof window === 'undefined' || signingOut || path.startsWith('auth/')) return
     const next = window.location.pathname + window.location.search
     // A full navigation is intentional: it discards in-memory client state (cart, auth store) tied to the dead session.
     // eslint-disable-next-line @next/next/no-location-assign-relative-destination
@@ -76,13 +95,16 @@ export function isStale(value: unknown): boolean {
 async function request(
     method: string,
     path: string,
-    { body, formData, query, signal }: RequestOptions = {}
+    { body, formData, query, signal, headers, redirectOnUnauthorized = true }: RequestOptions = {}
 ): Promise<{ payload: unknown; fromCache: boolean }> {
     let response: Response
     try {
         response = await fetch(buildUrl(path, query), {
             method,
-            headers: formData || body === undefined ? undefined : { 'Content-Type': 'application/json' },
+            headers: {
+                ...(formData || body === undefined ? undefined : { 'Content-Type': 'application/json' }),
+                ...headers
+            },
             body: formData ?? (body === undefined ? undefined : JSON.stringify(body)),
             credentials: 'same-origin',
             signal
@@ -96,7 +118,7 @@ async function request(
     if (response.status === 204) return { payload: undefined, fromCache }
     const payload = await readJson(response)
     if (!response.ok) {
-        if (response.status === 401) handleUnauthorized(path)
+        if (response.status === 401 && redirectOnUnauthorized) handleUnauthorized(path)
         throw toApiError(response.status, payload)
     }
     return { payload, fromCache }
@@ -108,8 +130,13 @@ function markIfStale<T>(value: T, fromCache: boolean): T {
 }
 
 /** GET a single resource: returns `data` from the `{ data }` envelope. */
-export async function apiGet<T>(path: string, query?: Query, signal?: AbortSignal): Promise<T> {
-    const { payload, fromCache } = await request('GET', path, { query, signal })
+export async function apiGet<T>(
+    path: string,
+    query?: Query,
+    signal?: AbortSignal,
+    options?: ApiCallOptions
+): Promise<T> {
+    const { payload, fromCache } = await request('GET', path, { query, signal, ...options })
     return markIfStale((payload as Single<T>).data, fromCache)
 }
 
@@ -123,8 +150,8 @@ export async function apiList<T, S = undefined>(
     return markIfStale(payload as Paginated<T, S>, fromCache)
 }
 
-export async function apiPost<T = void>(path: string, body?: unknown): Promise<T> {
-    const { payload } = await request('POST', path, { body })
+export async function apiPost<T = void>(path: string, body?: unknown, options?: ApiCallOptions): Promise<T> {
+    const { payload } = await request('POST', path, { body, ...options })
     return (payload as Single<T> | undefined)?.data as T
 }
 

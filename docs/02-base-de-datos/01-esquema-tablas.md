@@ -12,7 +12,7 @@ Los importes son `NUMERIC(14,2)` (hasta ≈ 10¹²). En COP y otras monedas de u
 | `user_role` | `admin`, `manager`, `cashier` |
 | `payment_method` | `cash`, `card`, `ewallet` |
 | `order_status` | `draft`, `pending`, `completed`, `refunded` (**la aplicación solo produce `completed` y `refunded`**) |
-| `po_status` | `draft`, `pending`, `received`, `cancelled` (sin uso: compras sin UI) |
+| `po_status` | `draft`, `pending`, `received`, `cancelled` (`received`/`cancelled` vía `receive_purchase` / `void_purchase`) |
 | `tab_status` | `open`, `closed`, `voided` |
 
 ## Usuarios
@@ -39,7 +39,7 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 `low_stock_threshold` NOT NULL default 10 (`CHECK ≥ 0`), `location`, `last_restocked_at`. Único por (`product_id`, `variant_id`) **y** por `product_id` cuando `variant_id IS NULL` (índice parcial; `UNIQUE` a secas no impide duplicados con NULL).
 
 **`inventory_transactions`** — bitácora de movimientos: `inventory_id` → `inventory` CASCADE NOT NULL, `transaction_type` **`CHECK IN ('purchase','sale','adjustment','return')`**, `quantity` (`CHECK ≠ 0`; negativo = salida),
-`reference_id` (orden o compra; **sin FK**), `notes`, `created_by` → `auth.users`. Solo la escriben los RPC.
+`reference_id` (orden o compra; **sin FK**), `supplier_id` → `suppliers` (compras), `unit_cost` (compras), `notes`, `created_by` → `auth.users`. Solo la escriben los RPC. **[Por verificar]** tras `20261005000001_purchases.sql`.
 
 ## Personas
 **`customers`** — `name` NOT NULL, `email` UNIQUE, `phone`, `address`, **`loyalty_points`** y **`total_spent`** NOT NULL default 0 (**derivados por trigger** de las órdenes `completed`; no escribibles por la API), `is_active` NOT NULL default true.
@@ -48,12 +48,27 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 
 ## Ventas
 **`orders`** — `order_number` UNIQUE NOT NULL (`ORD-YYMMDD-NNNNNN`, secuencia `order_number_seq`), `customer_id` → `customers` (NULL = mostrador), `status` NOT NULL default `pending`, `subtotal`, `discount`, `tax`, `total` NOT NULL,
-`notes`, `created_by` → `auth.users`, **`refunded_at`, `refunded_by` → `auth.users`, `refund_reason`**. `CHECK` importes ≥ 0 y **`total = subtotal − discount + tax`** (`NOT VALID`: se exige en filas nuevas; validar tras depurar datos antiguos).
+`notes`, `created_by` → `auth.users`, **`refunded_at`, `refunded_by` → `auth.users`, `refund_reason`**, **`debtor_name`** (`text` nullable, 2–120 caracteres recortados; una `pending` exige `customer_id` **o** `debtor_name`). `CHECK` importes ≥ 0 y **`total = subtotal − discount + tax`** (`NOT VALID`: se exige en filas nuevas; validar tras depurar datos antiguos). Ver [cuentas por cobrar](../03-modulos/cuentas-por-cobrar.md).
+Offline (F2): `client_ref UUID UNIQUE` (nullable; misma clave que la idempotencia del cobro), `occurred_at timestamptz` (nullable; hora del dispositivo), `source text NOT NULL default 'online' CHECK IN ('online','offline')`, `sync_issues jsonb` (nullable), `reviewed_by/reviewed_at` (reservados para F4).
 
-**`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, **`promotion_id` → `promotions` (nullable; líneas nacidas de un paquete; permite promo soft-deleted)**, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`. `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
+**`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, **`promotion_id` → `promotions` (nullable; líneas nacidas de un paquete; permite promo soft-deleted)**, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`, **`unit_cost`** (`NUMERIC(14,2)`, nullable: foto de `products.cost_price` al vender; las líneas anteriores quedan en null). `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
 
 **`payments`** — `order_id` → `orders` CASCADE NOT NULL, `payment_method` NOT NULL, `amount` (`CHECK ≥ 0`), `reference_number`, `notes`. Una orden nacida de una venta directa tiene un pago; una nacida de una
 cuenta ([cuentas-abiertas](../03-modulos/cuentas-abiertas.md)) puede tener varios (uno por cada pago parcial). `orders.tab_id` → `tabs` (NULL en una venta directa).
+
+### Columnas añadidas en la revisión adversarial ([H6](../04-auditoria/hallazgos/H6-revision-adversarial-a-f.md))
+
+- **`orders.refund_cash_session_id`** (`uuid`, nullable, → `cash_sessions`): la caja **original del pago**
+  reembolsado (`payments.cash_session_id`), no la caja de quien reembolsa. La rellena `refund_order` cuando la
+  orden tuvo pagos en efectivo y esa caja sigue abierta.
+- **`orders.refund_after_close`** (`boolean`, default `false`): se pone en `true` cuando la caja del pago original
+  ya está cerrada al reembolsar — el monto no se resta de ninguna caja y la orden queda marcada para revisión
+  manual, en vez de imputarse a un lugar equivocado.
+- **`expenses.voided_after_close`** y **`purchase_orders.voided_after_close`** (`boolean`, default `false`):
+  se ponen en `true` si `void_expense`/`void_purchase` se ejecuta con la caja ya cerrada. `_session_cash` ignora
+  esas anulaciones para cajas cerradas (el monto sigue restado del esperado que ya se guardó al cerrar).
+- **`notification_outbox.payload.delivered_to`** (dentro del `jsonb`, no una columna nueva): array de
+  `profiles.id` que ya recibieron el contenido de esa fila (F3). Ver [notificaciones](../03-modulos/notificaciones.md).
 
 ## Cuentas abiertas (`tabs`)
 Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo. Solo lectura desde la API (`cashier+`); toda escritura pasa por RPC (`0008_tabs.sql`).
@@ -69,14 +84,17 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 
 **`tab_payments`** — `tab_id` → `tabs` CASCADE NOT NULL, `member_id` → `tab_members` (opcional: un pago puede no asignarse a nadie en particular), `payment_method` NOT NULL, `amount` (`CHECK > 0`), `created_by` → `auth.users`.
 
-## Compras y gastos (solo esquema; sin API ni UI)
-**`purchase_orders`** (`po_number` UNIQUE, `supplier_id`, `status`, `total_amount ≥ 0`, `ordered_by`/`received_by`, fechas) · **`purchase_order_items`** (`purchase_order_id`, `product_id` NOT NULL, `variant_id`, `quantity > 0`, `unit_price ≥ 0`, `total` **GENERATED** `quantity × unit_price`) · **`expenses`** (`category` texto libre, `description`, `amount ≥ 0`, `date`, `created_by`).
+## Compras (solo esquema) y gastos
+**`purchase_orders`** (`po_number` UNIQUE, `supplier_id`, `status`, `total_amount ≥ 0`, `invoice_number`, `business_day_id`, `cash_session_id`, `ordered_by`/`received_by`, fechas) · **`purchase_order_items`** (`purchase_order_id`, `product_id` NOT NULL, `variant_id`, `quantity > 0`, `unit_price ≥ 0`, `total` **GENERATED** `quantity × unit_price`) · **`expense_categories`** (`name` UNIQUE, `is_active`; semilla: Arriendo, Servicios, Nómina, Insumos, Otros) · **`expenses`** (`category_id` → `expense_categories`, `description`, `amount ≥ 0`, `payment_method`, `supplier_id` opcional, `business_day_id`, `cash_session_id`, `occurred_at`, `deleted_at`, `void_reason`, `created_by`). La columna de texto `category` y la fecha `date` se migraron a «Otros» (el texto original queda en `description`) y a `occurred_at`. Ver [Gastos](../03-modulos/gastos.md).
 
 ## Configuración
 **`settings`** — `key` UNIQUE NOT NULL, `value jsonb NOT NULL`. Una fila por clave (`store_name`, `currency`, `timezone`, `tax_rate`, `low_stock_threshold`, `receipt_template`…). Ver [Ajustes](../03-modulos/ajustes.md).
 
 ## Auditoría
 **`audit_log`** — `id bigint identity`, `occurred_at`, `actor_id` (**sin FK**), `actor_email`, `actor_role`, `action CHECK IN ('insert','update','delete','login','login_failed','logout','invite','password_reset')`, `entity`, `entity_id`, `changes jsonb`, `source CHECK IN ('db','api')`. Append-only: sin política de escritura, privilegios revocados y triggers que bloquean `UPDATE`/`DELETE`/`TRUNCATE` incluso para `service_role`. Ver [Auditoría](../03-modulos/auditoria.md).
+
+## Idempotencia
+**`idempotency_keys`** — `key uuid PK` (la manda el cliente, cabecera `Idempotency-Key`), `user_id NOT NULL`, `action text NOT NULL`, `request_hash text NOT NULL`, `result jsonb` (nulo hasta que la llamada dueña termina, en la misma transacción), `created_at`. Sin política RLS (solo la usan las RPC `SECURITY DEFINER`) y `revoke all` de `anon`/`authenticated`. Hoy solo la usa `create_sale` (evita el doble cobro de un reintento de red); ver [pos-checkout](../03-modulos/pos-checkout.md) y [F0 del diseño offline](../06-roadmap/offline-y-sincronizacion.md).
 
 ## Diferencias respecto a la baseline
 | Cambio | Migración |
@@ -92,3 +110,14 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `tabs`, `tab_members`, `tab_items`, `tab_payments`, `orders.tab_id`, enum `tab_status` y sus RPC | `…0008` |
 | `promotions`, `promotion_items`, `order_items.promotion_id` (soft-delete; sin hard delete API) | `20260924000001` |
 | `audit_log` (append-only), trigger genérico en 13 tablas, `log_auth_event` RPC | `20260926000001` |
+| `idempotency_keys`; `create_sale` gana `p_idempotency_key` (drop + recreate, firma antigua eliminada) | `20260927000001` |
+| `orders.client_ref/occurred_at/source/sync_issues/reviewed_by/reviewed_at`; `create_sale` gana `p_occurred_at`/`p_expected_total` (drop + recreate); `dashboard_summary`/`sales_report`/`top_selling_products` agrupan por `coalesce(occurred_at, created_at)`; setting `offline_max_hours` | `20260928000001` |
+| `mark_order_reviewed` (RPC, `SECURITY DEFINER`, gerente+): marca `orders.reviewed_by/reviewed_at` para una orden con `sync_issues`; idempotente | `20260929000001` |
+| `order_items.stock_taken`; `create_sale` endurecido (hash de idempotencia sin `occurred_at`/`expected_total`, revisado antes que cliente/producto; venta de mostrador y precio de último valor conocido en vez de rechazar; descuento recortado; `sync_issues.offline_sale` obligatorio); `refund_order` usa `coalesce(stock_taken, quantity)`; `audit_log` acepta `action = 'discard'`; `log_outbox_discard` (RPC, gerente+) — tras revisión adversarial de F0-F4 | `20260930000001` |
+| `order_items.stock_taken` gana `CHECK` de rango; `create_sale`: `sync_issues.customer_unavailable`/`.stale_pricing` pasan de booleano a detalle (id del cliente pedido, ids de productos/promociones obsoletos); `log_outbox_discard` (drop + recreate) gana `p_client_ref` (rechaza con 409 si ya existe una orden con esa clave) y `p_owner_user_id`, y `p_payment_method` pasa de `text` al enum real — tras una segunda revisión adversarial | `20261001000001` |
+| `inventory.low_stock_threshold`; RPC `set_low_stock_threshold` (gerente+) | `20261002000001` |
+| `create_sale` y `tab_pay_split` aceptan 1 o 2 pagos (`p_payments`); `sales_report` cuenta órdenes distintas por método | `20261002000002` |
+| `business_days`, `cash_registers`, `cash_sessions`, `cash_session_users`, `cash_movements`; `orders`/`payments`/`tab_payments` ganan jornada y caja; settings `default_opening_float` y `cash_count_tolerance` (0); registro «Caja 1» | `20261003000001` |
+| `expense_categories`, `expenses` (categoría, método, jornada, caja, `occurred_at`, anulación), `order_items.unit_cost`; `create_expense` / `void_expense`; el efectivo esperado resta gastos en efectivo | `20261004000001` |
+| `tab_pay` / `tab_pay_split` ganan `p_idempotency_key` opcional (drop + recreate); `tabs.balance()` como columna computada para el listado | `20261007000001` |
+| `orders.debtor_name` + CHECKs; `defer_tab` v2 (`p_customer_id` / `p_debtor_name` / `p_payments` / `p_idempotency_key`); `list_receivables` gana `p_q` y devuelve `debtor_name` | `20261008000001` |

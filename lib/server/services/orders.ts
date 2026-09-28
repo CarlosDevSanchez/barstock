@@ -33,7 +33,7 @@ const DETAIL_SELECT =
 /** Cashiers only see their own orders, managers and admins all of them: RLS decides, not this code. */
 export async function listOrders(
     supabase: AppSupabaseClient,
-    { page, pageSize, q, status, customer_id, from: dateFrom, to: dateTo }: OrdersQuery
+    { page, pageSize, q, status, customer_id, from: dateFrom, to: dateTo, needs_review }: OrdersQuery
 ): Promise<Page<OrderListItem>> {
     let query = supabase
         .from('orders')
@@ -45,6 +45,8 @@ export async function listOrders(
     if (customer_id) query = query.eq('customer_id', customer_id)
     if (dateFrom) query = query.gte('created_at', `${dateFrom}T00:00:00Z`)
     if (dateTo) query = query.lte('created_at', `${dateTo}T23:59:59.999Z`)
+    // An offline sale synced with a difference (F2/F4): stock short, price recalculated, or its time clamped.
+    if (needs_review) query = query.not('sync_issues', 'is', null).is('reviewed_at', null)
 
     const { from, to } = pageRange({ page, pageSize })
     const { data, count, error } = await query.range(from, to)
@@ -72,6 +74,13 @@ export async function getOrder(supabase: AppSupabaseClient, id: string): Promise
 
 export async function refundOrder(supabase: AppSupabaseClient, id: string, reason: string): Promise<OrderDetail> {
     const { error } = await supabase.rpc('refund_order', { p_order_id: id, p_reason: reason })
+    assertNoError(error)
+    return getOrder(supabase, id)
+}
+
+/** Manager review of an offline sale that synced with a difference (F4): only sets reviewed_by/reviewed_at. */
+export async function reviewOrder(supabase: AppSupabaseClient, id: string): Promise<OrderDetail> {
+    const { error } = await supabase.rpc('mark_order_reviewed', { p_order_id: id })
     assertNoError(error)
     return getOrder(supabase, id)
 }

@@ -13,10 +13,13 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { Pagination } from '@/components/pagination'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
-import { useMoney } from '@/components/session-provider'
+import { useMoney, useSession } from '@/components/session-provider'
+import { currencyDecimals } from '@/lib/money'
+import { sumMoney } from '@/lib/tab-split'
 import { ApiError } from '@/lib/api/client'
 import { customersApi } from '@/lib/api/customers'
 import { ordersApi } from '@/lib/api/orders'
+import { receivablesApi } from '@/lib/api/receivables'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { usePagination } from '@/hooks/use-pagination'
 import { CustomerDialog } from '../page'
@@ -29,6 +32,7 @@ export default function CustomerDetailPage() {
     const params = useParams<{ id: string }>()
     const router = useRouter()
     const money = useMoney()
+    const { settings } = useSession()
     const { page, pageSize, setPage, setPageSize } = usePagination()
     const [editing, setEditing] = useState(false)
 
@@ -44,9 +48,19 @@ export default function CustomerDetailPage() {
         signal => ordersApi.list({ customer_id: params.id, status: 'completed', pageSize: 1 }, signal),
         `customer-completed-orders:${params.id}`
     )
+    const receivablesQuery = useApiQuery(
+        signal => receivablesApi.list({ status: 'pending', customer_id: params.id }, signal),
+        `customer-receivables:${params.id}`
+    )
 
     const statusLabel = (value: string) => {
-        if (value === 'completed' || value === 'refunded' || value === 'draft' || value === 'pending') {
+        if (
+            value === 'completed' ||
+            value === 'refunded' ||
+            value === 'draft' ||
+            value === 'pending' ||
+            value === 'written_off'
+        ) {
             return tc(`orderStatus.${value}`)
         }
         return value
@@ -65,9 +79,15 @@ export default function CustomerDetailPage() {
         }
         return <QueryError error={customerQuery.error} onRetry={customerQuery.reload} />
     }
-    if (!customerQuery.data || !ordersQuery.data || !completedQuery.data) {
-        return ordersQuery.error ? (
-            <QueryError error={ordersQuery.error} onRetry={ordersQuery.reload} />
+    if (!customerQuery.data || !ordersQuery.data || !completedQuery.data || !receivablesQuery.data) {
+        return ordersQuery.error || receivablesQuery.error ? (
+            <QueryError
+                error={ordersQuery.error ?? receivablesQuery.error!}
+                onRetry={() => {
+                    void ordersQuery.reload()
+                    void receivablesQuery.reload()
+                }}
+            />
         ) : (
             <PageSpinner />
         )
@@ -77,6 +97,11 @@ export default function CustomerDetailPage() {
     const orders = ordersQuery.data.data
     const totalOrders = ordersQuery.data.total
     const completedOrders = completedQuery.data.total
+    // E7: sum in minor units so a float remainder never off-by-a-cent the displayed total.
+    const openBalance = sumMoney(
+        receivablesQuery.data.map(row => row.balance),
+        currencyDecimals(settings.currency)
+    )
 
     return (
         <div className="space-y-6">
@@ -144,6 +169,19 @@ export default function CustomerDetailPage() {
                     </CardContent>
                 </Card>
             </div>
+
+            <Card className="rounded-2xl">
+                <CardHeader>
+                    <CardTitle>{t('openBalance')}</CardTitle>
+                </CardHeader>
+                <CardContent>
+                    {openBalance > 0 ? (
+                        <div className="text-2xl font-bold">{money(openBalance)}</div>
+                    ) : (
+                        <p className="text-sm text-muted-foreground">{t('noOpenBalance')}</p>
+                    )}
+                </CardContent>
+            </Card>
 
             <Card className="rounded-2xl">
                 <CardHeader>

@@ -32,6 +32,17 @@ export const payTabSchema = z.object({
     amount: positiveMoney
 })
 
+export const payTabSplitSchema = z.object({
+    member_id: nullableUuid,
+    payments: z
+        .array(z.object({ method: z.enum(PAYMENT_METHODS), amount: positiveMoney }))
+        .min(1)
+        .max(2)
+})
+
+/** Same route as a single payment: `payments` (1–2) or the original method + amount. */
+export const payTabBodySchema = z.union([payTabSplitSchema, payTabSchema])
+
 export const voidTabSchema = z.object({ reason })
 
 export const TAB_STATUSES = ['open', 'closed', 'voided'] as const
@@ -45,5 +56,7 @@ export type AddTabItemsInput = z.output<typeof addTabItemsSchema>
 export type RemoveTabItemInput = z.output<typeof removeTabItemSchema>
 export type SetTabDiscountInput = z.output<typeof setTabDiscountSchema>
 export type PayTabInput = z.output<typeof payTabSchema>
+export type PayTabSplitInput = z.output<typeof payTabSplitSchema>
+export type PayTabBody = z.output<typeof payTabBodySchema>
 export type VoidTabInput = z.output<typeof voidTabSchema>
 export type TabsQuery = z.output<typeof tabsQuerySchema>

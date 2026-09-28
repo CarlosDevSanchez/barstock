@@ -17,6 +17,14 @@ import {
     taxRate
 } from './common'
 
+/** `money` allows 0; a payment line must be strictly positive. */
+const positiveMoney = money.refine(value => value > 0, 'validation.minZero')
+
+const lowStockThresholdNumber = numberField()
+    .int('validation.wholeNumber')
+    .min(0, 'validation.minZero')
+    .max(100_000, 'validation.tooLarge')
+
 // Only columns a client may write appear here: ids, timestamps, totals, loyalty and role are server-owned,
 // and zod strips unknown keys (mass-assignment protection). Optional columns rely on DB defaults, so the
 // *Update schemas are plain `.partial()` (zod defaults would silently reset fields on PATCH).
@@ -46,9 +54,11 @@ export const productCreateSchema = z.object({
     tax_rate: taxRate.optional(),
     // image_url is legacy (unused, kept in the DB) and image_key is server-generated (never client-writable): see
     // app/api/v1/products/[id]/image/route.ts and lib/server/storage.ts.
-    is_active: z.boolean().optional()
+    is_active: z.boolean().optional(),
+    // Optional initial threshold. Absent means the settings default (create_inventory_for_product). Not a products column.
+    low_stock_threshold: z.preprocess(toNumber, lowStockThresholdNumber.optional())
 })
-export const productUpdateSchema = productCreateSchema.partial()
+export const productUpdateSchema = productCreateSchema.omit({ low_stock_threshold: true }).partial()
 
 /** One product line inside a fixed-price package. Unique product_id per promotion (enforced here + DB UNIQUE). */
 export const promotionItemSchema = z.object({
@@ -97,6 +107,10 @@ export const supplierCreateSchema = z.object({
 export const supplierUpdateSchema = supplierCreateSchema.partial()
 
 // ---- Inventory
+export const inventoryThresholdSchema = z.object({
+    low_stock_threshold: z.preprocess(toNumber, lowStockThresholdNumber)
+})
+
 export const inventoryAdjustSchema = z.object({
     // A number input delivers a string: convert it (and never treat '' as 0).
     delta: z.preprocess(
@@ -139,13 +153,44 @@ export const saleItemSchema = z
             ...(value.discount !== undefined ? { discount: value.discount } : {})
         }
     })
-export const saleSchema = z.object({
-    customer_id: nullableUuid,
-    items: z.array(saleItemSchema).min(1, 'validation.cartEmpty').max(100),
-    payment_method: z.enum(PAYMENT_METHODS),
-    discount: money.optional()
+const salePaymentSchema = z.object({
+    method: z.enum(PAYMENT_METHODS),
+    amount: positiveMoney
 })
+
+export const saleSchema = z
+    .object({
+        customer_id: nullableUuid,
+        items: z.array(saleItemSchema).min(1, 'validation.cartEmpty').max(100),
+        payment_method: z.enum(PAYMENT_METHODS).optional(),
+        payments: z.array(salePaymentSchema).min(1).max(2).optional(),
+        discount: money.optional(),
+        // Offline sales only (F2, docs/06-roadmap/offline-y-sincronizacion.md): when the device rang this up without a
+        // network connection. `occurred_at` is the device's clock at the time; `expected_total` is the provisional total
+        // it showed — the server always recalculates and only records the difference (`sync_issues.price_mismatch`).
+        occurred_at: z.iso.datetime().optional(),
+        expected_total: money.optional()
+    })
+    .refine(value => value.payments !== undefined || value.payment_method !== undefined, {
+        message: 'validation.required',
+        path: ['payment_method']
+    })
 export const refundSchema = z.object({ reason: z.string().trim().min(3, 'validation.reasonRequired').max(500) })
+// A manager's decision to discard a queued (never-synced) offline sale: logged to the audit trail, not the order
+// itself (there is none - it never reached the server). See lib/offline/outbox.ts, components/offline/sync-center.tsx.
+export const outboxDiscardSchema = z.object({
+    // The same value as the outbox entry's client_ref: lets the RPC refuse a discard for a sale that actually
+    // reached the server (an order already exists with this client_ref) instead of logging a false "never
+    // arrived" claim. See lib/offline/outbox.ts, components/offline/sync-center.tsx.
+    client_ref: z.guid(),
+    // Whoever queued the sale (may differ from the manager discarding it, on a shared device) — recorded in the
+    // audit entry so it says who actually collected the money, not just who chose to discard it.
+    owner_user_id: z.guid(),
+    provisional_number: z.string().regex(/^OFF-[0-9A-F]{8}$/, 'validation.invalid'),
+    expected_total: money,
+    payment_method: z.enum(PAYMENT_METHODS),
+    reason: z.string().trim().min(3, 'validation.reasonRequired').max(500)
+})
 
 // ---- Users (admin only)
 export const inviteUserSchema = z.object({
@@ -189,6 +234,12 @@ export const settingsSchema = z.object({
         numberField().int('validation.wholeNumber').min(0, 'validation.minZero').max(100_000, 'validation.tooLarge')
     ),
     tax_rate: taxRate,
+    // How long a till may operate offline before create_sale clamps an offline sale's occurred_at to this window
+    // (sync_issues.occurred_at_clamped). See F2, docs/06-roadmap/offline-y-sincronizacion.md.
+    offline_max_hours: z.preprocess(
+        toNumber,
+        numberField().int('validation.wholeNumber').min(1, 'validation.minOne').max(168, 'validation.tooLarge')
+    ),
     receipt_template: z.object({ header: z.string().trim().max(200), footer: z.string().trim().max(200) })
 })
 // store_logo_key is server-generated (never client-writable): see app/api/v1/settings/logo/route.ts and
@@ -198,7 +249,7 @@ export type SettingsInput = z.infer<typeof settingsSchema>
 export type SettingKey = keyof SettingsInput
 
 // ---- Query strings
-export const ORDER_STATUSES = ['draft', 'pending', 'completed', 'refunded'] as const
+export const ORDER_STATUSES = ['draft', 'pending', 'completed', 'refunded', 'written_off'] as const
 const optionalDate = z.preprocess(value => blankToNull(value) ?? undefined, z.iso.date().optional())
 
 export const productsQuerySchema = paginationSchema.extend({
@@ -220,7 +271,9 @@ export const ordersQuerySchema = paginationSchema.extend({
     status: z.preprocess(value => blankToNull(value) ?? undefined, z.enum(ORDER_STATUSES).optional()),
     customer_id: optionalUuid,
     from: optionalDate,
-    to: optionalDate
+    to: optionalDate,
+    // Offline sales that synced with a difference (F4): sync_issues is not null and no manager has reviewed it yet.
+    needs_review: queryBoolean
 })
 
 export const AUDIT_ACTIONS = [
@@ -231,7 +284,8 @@ export const AUDIT_ACTIONS = [
     'login_failed',
     'logout',
     'invite',
-    'password_reset'
+    'password_reset',
+    'discard'
 ] as const
 export const auditQuerySchema = paginationSchema.omit({ q: true }).extend({
     actor_id: optionalUuid,
@@ -254,6 +308,7 @@ export type CustomerUpdate = z.output<typeof customerUpdateSchema>
 export type SupplierCreate = z.output<typeof supplierCreateSchema>
 export type SupplierUpdate = z.output<typeof supplierUpdateSchema>
 export type SaleInput = z.output<typeof saleSchema>
+export type OutboxDiscardInput = z.output<typeof outboxDiscardSchema>
 export type InviteUserInput = z.output<typeof inviteUserSchema>
 export type UpdateUserInput = z.output<typeof updateUserSchema>
 export type ProductsQuery = z.output<typeof productsQuerySchema>

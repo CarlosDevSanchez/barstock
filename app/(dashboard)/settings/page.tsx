@@ -31,7 +31,8 @@ function toFormValues(settings: SettingsInput): FormInput {
     return {
         ...settings,
         tax_rate: String(Math.round(settings.tax_rate * 10_000) / 100),
-        low_stock_threshold: String(settings.low_stock_threshold)
+        low_stock_threshold: String(settings.low_stock_threshold),
+        offline_max_hours: String(settings.offline_max_hours)
     }
 }
 
@@ -168,6 +169,14 @@ export default function SettingsPage() {
                                     type="number"
                                     min="0"
                                     description={t('lowStockThresholdHint')}
+                                />
+                                <TextField
+                                    name="offline_max_hours"
+                                    label={t('offlineMaxHours')}
+                                    type="number"
+                                    min="1"
+                                    max="168"
+                                    description={t('offlineMaxHoursHint')}
                                 />
                             </CardContent>
                         </Card>

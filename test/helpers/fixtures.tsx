@@ -23,6 +23,7 @@ export const settings: SettingsWithLogoUrl = {
     timezone: 'UTC',
     low_stock_threshold: 10,
     tax_rate: 0.1,
+    offline_max_hours: 12,
     receipt_template: { header: '', footer: '' }
 }
 
@@ -31,7 +32,9 @@ export const userWithRole = (role: SessionUser['role'], locale: AppLocale = 'en'
     email: `${role}@test.dev`,
     fullName: null,
     role,
-    locale
+    locale,
+    notifyEmail: true,
+    notifyPush: true
 })
 
 /** Component tests stay on English messages so existing assertions keep working. */

@@ -9,9 +9,19 @@ void mock.module('next/navigation', () => ({
     useRouter: () => ({ push: () => {}, refresh: () => {} }),
     usePathname: () => '/dashboard'
 }))
+class MockApiError extends Error {}
 void mock.module('@/lib/api/client', () => ({
+    ApiError: MockApiError,
+    isStale: () => false,
+    apiGet: async () => {
+        throw new Error('no session in this test')
+    },
+    apiList: async () => ({ data: [], page: 1, pageSize: 0, total: 0 }),
     apiPost: async () => undefined,
+    apiPostForm: async () => undefined,
     apiPatch: async () => undefined,
+    apiDelete: async () => undefined,
+    setSigningOut: () => {},
     errorMessage: (error: unknown, fallback = 'Something went wrong') =>
         error instanceof Error ? error.message : fallback
 }))
@@ -35,18 +45,31 @@ const linksFor = (role: 'cashier' | 'manager' | 'admin') => {
 }
 
 describe('navigation follows the role', () => {
-    const CASHIER = ['Dashboard', 'POS', 'Orders', 'Customers', 'Products', 'Categories', 'Inventory']
+    const CASHIER = [
+        'Dashboard',
+        'POS',
+        'Till',
+        'Orders',
+        'Receivables',
+        'Customers',
+        'Products',
+        'Categories',
+        'Inventory'
+    ]
     const MANAGER = [
         'Dashboard',
         'POS',
+        'Till',
         'Orders',
+        'Receivables',
         'Customers',
         'Products',
         'Categories',
         'Promotions',
         'Inventory',
         'Suppliers',
-        'Reports'
+        'Reports',
+        'Expenses'
     ]
 
     test('a cashier sees the till and the catalog, but not suppliers, reports, settings or users', () => {
