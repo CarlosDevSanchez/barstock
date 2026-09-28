@@ -100,8 +100,17 @@ describe('packagesAvailable', () => {
             ])
         ).toBe(2)
     })
-    test('null when any component has no inventory row', () => {
-        expect(packagesAvailable([{ quantity: 1, stock: null }])).toBeNull()
+    test('zero when a tracked component has no inventory row (create_sale would reject it)', () => {
+        expect(packagesAvailable([{ quantity: 1, stock: null }])).toBe(0)
+    })
+    test('untracked components never limit; only-untracked packages have no limit (null)', () => {
+        expect(
+            packagesAvailable([
+                { quantity: 1, stock: null, untracked: true },
+                { quantity: 2, stock: 5 }
+            ])
+        ).toBe(2)
+        expect(packagesAvailable([{ quantity: 2, stock: null, untracked: true }])).toBeNull()
     })
     test('zero when stock cannot cover one package', () => {
         expect(packagesAvailable([{ quantity: 6, stock: 5 }])).toBe(0)

@@ -99,10 +99,15 @@ describe('dashboard', () => {
         expect(summary.low_stock_count).toBeGreaterThanOrEqual(1)
         const all = await adminClient()
             .from('inventory')
-            .select('quantity, low_stock_threshold, products!inner(deleted_at, is_active)')
+            .select('quantity, low_stock_threshold, products!inner(deleted_at, is_active, stock_mode)')
             .is('variant_id', null)
         const expected = (all.data ?? []).filter(
-            row => row.quantity <= row.low_stock_threshold && row.products.is_active && !row.products.deleted_at
+            row =>
+                row.quantity <= row.low_stock_threshold &&
+                row.products.is_active &&
+                !row.products.deleted_at &&
+                // Untracked products and presentations have no stock of their own to run low.
+                row.products.stock_mode === 'own'
         ).length
         expect(summary.low_stock_count).toBe(expected)
     })

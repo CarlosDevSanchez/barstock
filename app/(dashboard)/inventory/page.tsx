@@ -36,6 +36,7 @@ import { OfflineDisabledButton } from '@/components/pwa/offline-disabled-button'
 import { errorMessage } from '@/lib/api/client'
 import { cashApi } from '@/lib/api/cash'
 import { inventoryApi, type InventoryListItem } from '@/lib/api/inventory'
+import { productsApi } from '@/lib/api/products'
 import { promotionsApi } from '@/lib/api/promotions'
 import { purchasesApi } from '@/lib/api/purchases'
 import { suppliersApi } from '@/lib/api/suppliers'
@@ -347,6 +348,23 @@ interface PurchaseLine {
     unit_cost: string
 }
 
+/**
+ * The units of a base product read as its largest presentation: "= 2 × Box x15 + 7". Stock is always counted in the
+ * base's unit (a presentation has no stock of its own), this only helps the shelf count.
+ */
+function PresentationEquivalent({ item }: { item: InventoryListItem }) {
+    const t = useTranslations('inventory')
+    const largest = item.presentations[0]
+    if (!largest || largest.stock_units < 2) return null
+    const packs = Math.floor(item.quantity / largest.stock_units)
+    const loose = item.quantity - packs * largest.stock_units
+    return (
+        <span className="block text-xs text-muted-foreground">
+            {t('equivalent', { packs, name: largest.name, loose })}
+        </span>
+    )
+}
+
 function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onSaved: () => void }) {
     const t = useTranslations('inventory')
     const tc = useTranslations('common')
@@ -363,8 +381,10 @@ function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onS
     // so a catalog bigger than one page stays reachable from every line's product picker.
     const [productSearch, setProductSearch] = useState('')
     const debouncedProductSearch = useDebouncedValue(productSearch)
+    // Products that hold stock: their own (`own`) or a presentation's base (`linked`: buying 2 boxes × 15 adds 30
+    // units to the base). Untracked products (coffee) cannot be purchased into stock.
     const catalogQuery = useApiQuery(
-        signal => inventoryApi.list({ pageSize: 50, q: debouncedProductSearch }, signal),
+        signal => productsApi.list({ pageSize: 50, q: debouncedProductSearch, stock_mode: 'own,linked' }, signal),
         `purchase-dialog-catalog#${debouncedProductSearch}`
     )
     const products = useMemo(() => catalogQuery.data?.data ?? [], [catalogQuery.data])
@@ -387,7 +407,7 @@ function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onS
     // effect (see AdjustDialog above for why the old always-on fallback was wrong).
     const selectedSupplier = supplierId || (debouncedSupplierSearch ? '' : (suppliers.data?.data[0]?.id ?? ''))
     const selectedSession = sessionId || sessions[0]?.id || ''
-    const productById = useMemo(() => new Map(products.map(item => [item.product.id, item.product])), [products])
+    const productById = useMemo(() => new Map(products.map(item => [item.id, item])), [products])
 
     const onSave = async () => {
         const parsed = purchaseReceiveSchema.safeParse({
@@ -450,7 +470,7 @@ function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onS
                         // line already has selected (by the name cached on the line itself) — so the <select> always
                         // shows the real selection, never a stale or empty one (bloqueante 3, H6).
                         const selectedOutsidePage =
-                            line.product_id && !products.some(item => item.product.id === line.product_id)
+                            line.product_id && !products.some(item => item.id === line.product_id)
                                 ? { product_id: line.product_id, name: line.product_name || line.product_id }
                                 : null
                         return (
@@ -487,11 +507,26 @@ function RegisterPurchaseDialog({ onClose, onSaved }: { onClose: () => void; onS
                                                   ]
                                                 : []),
                                             ...products.map(item => ({
-                                                value: item.product.id,
-                                                label: item.product.name
+                                                value: item.id,
+                                                label: item.name,
+                                                sublabel:
+                                                    item.stock_mode === 'linked'
+                                                        ? t('presentationOf', {
+                                                              units: item.stock_units,
+                                                              base: item.stock_base?.name ?? ''
+                                                          })
+                                                        : undefined
                                             }))
                                         ]}
                                     />
+                                    {catalog?.stock_mode === 'linked' && Number(line.quantity) > 0 && (
+                                        <p className="text-xs text-muted-foreground">
+                                            {t('purchaseAddsUnits', {
+                                                units: Number(line.quantity) * catalog.stock_units,
+                                                base: catalog.stock_base?.name ?? ''
+                                            })}
+                                        </p>
+                                    )}
                                 </div>
                                 <div className="grid grid-cols-2 gap-2">
                                     <div className="space-y-1">
@@ -847,6 +882,7 @@ export default function InventoryPage() {
                                                         >
                                                             {item.quantity}
                                                         </span>
+                                                        <PresentationEquivalent item={item} />
                                                     </TableCell>
                                                     <TableCell>
                                                         <span className="inline-flex items-center gap-1">
@@ -901,7 +937,12 @@ export default function InventoryPage() {
                                 <ListCardRow
                                     title={item.product.name}
                                     subtitle={
-                                        item.variant ? `${item.product.sku} · ${item.variant.name}` : item.product.sku
+                                        <>
+                                            {item.variant
+                                                ? `${item.product.sku} · ${item.variant.name}`
+                                                : item.product.sku}
+                                            <PresentationEquivalent item={item} />
+                                        </>
                                     }
                                     value={
                                         <Badge variant={isLowStock ? 'destructive' : 'default'}>

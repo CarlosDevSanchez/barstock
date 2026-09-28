@@ -7,6 +7,7 @@ import { Card, CardContent } from '@/components/ui/card'
 import { useMoney } from '@/components/session-provider'
 import { useImageFallback } from '@/hooks/use-image-fallback'
 import type { ProductListItem } from '@/lib/api/products'
+import { isSellable, isUntracked } from '@/lib/stock'
 import { QtyConfirmOverlay } from './qty-confirm-overlay'
 
 interface ProductCardProps {
@@ -15,7 +16,7 @@ interface ProductCardProps {
     pending: boolean
     /** Draft quantity while pending (parent-owned). */
     qty: number
-    /** Max units still addable: stock − already in cart. */
+    /** Max units still addable: what is left of its stock (shared with other presentations) after the cart. */
     maxQty: number
     onSelect: () => void
     onChangeQty: (qty: number) => void
@@ -31,8 +32,9 @@ export function ProductCard({ product, pending, qty, maxQty, onSelect, onChangeQ
     const t = useTranslations('pos')
     const money = useMoney()
     const { showImage, onError: onImageError } = useImageFallback(product.image_url)
-    // stock null = no inventory row, which the database refuses to sell.
-    const soldOut = product.stock === null || product.stock <= 0
+    // A tracked product without stock (or without an inventory row) cannot be sold; an untracked one always can.
+    const soldOut = !isSellable(product)
+    const untracked = isUntracked(product)
     const canAdd = !soldOut && maxQty > 0
 
     return (
@@ -79,9 +81,19 @@ export function ProductCard({ product, pending, qty, maxQty, onSelect, onChangeQ
                     <Badge
                         variant={soldOut ? 'destructive' : 'secondary'}
                         className="text-[10px] max-w-full truncate whitespace-nowrap"
-                        aria-label={soldOut ? t('outOfStock') : t('available', { count: product.stock ?? 0 })}
+                        aria-label={
+                            soldOut
+                                ? t('outOfStock')
+                                : untracked
+                                  ? t('alwaysAvailable')
+                                  : t('available', { count: product.stock ?? 0 })
+                        }
                     >
-                        {soldOut ? t('outOfStock') : t('left', { count: product.stock ?? 0 })}
+                        {soldOut
+                            ? t('outOfStock')
+                            : untracked
+                              ? t('alwaysAvailable')
+                              : t('left', { count: product.stock ?? 0 })}
                     </Badge>
                     {product.category && (
                         <Badge variant="outline" className="text-[10px] max-w-full truncate whitespace-nowrap">

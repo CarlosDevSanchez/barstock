@@ -1,6 +1,6 @@
 # Módulo: Inventario
 
-> Actualizado tras la fase D · `app/(dashboard)/inventory/page.tsx` · API `inventory`, `inventory/[id]/adjust`, `purchases` · RPC `adjust_inventory`, `receive_purchase` · Confianza: **[Verificado]** (incluye recepción de compras vía `receive_purchase`).
+> Actualizado con los modos de stock (`20261009000001`) · `app/(dashboard)/inventory/page.tsx` · API `inventory`, `inventory/[id]/adjust`, `purchases` · RPC `adjust_inventory`, `receive_purchase` · Confianza: **[Verificado]** (incluye recepción de compras vía `receive_purchase`).
 
 ## Quién puede qué
 | Rol | Ver | Ajustar stock | Recibir compra |
@@ -19,14 +19,20 @@ El stock **no se puede escribir directamente** (privilegios `INSERT/UPDATE/DELET
 | Compra a proveedor (`receive_purchase`) | `purchase`, positiva, `reference_id` = OC, `supplier_id`, `unit_cost` |
 | Anulación de compra (`void_purchase`) | `purchase`, negativa, mismo proveedor/costo, motivo en `notes` |
 
+Una **presentación** (`stock_mode = 'linked'`) mueve la fila de su **base** (`cantidad × stock_units`); un producto **sin control** (`none`) no mueve
+ninguna. Ver [modos de stock](productos.md#modos-de-stock).
+
 Reglas: nunca negativo (`CHECK` + `UPDATE … WHERE quantity + delta >= 0`); un ajuste exige motivo (≥ 3 caracteres) y cambio distinto de 0; concurrente seguro. **La recepción no actualiza `products.cost_price`.**
 
 ## Pantalla
 - Tarjetas (calculadas por el servidor sobre **todo** el conjunto filtrado, no solo la página): **unidades totales**, **stock bajo** y **valor del stock a costo**.
 - Sección **Paquetes vendibles** (solo lectura): promociones activas con `available = floor(min(stock_i / qty_i))` y receta+stock por componente.
 - Lista paginada con búsqueda por nombre/SKU y filtro "Low stock only". **Stock bajo = `quantity <= low_stock_threshold`**.
+- **Solo aparecen productos que controlan su stock** (`own`). Los productos sin control y las presentaciones no tienen fila propia visible; el
+  dashboard tampoco los cuenta como stock bajo. Bajo la cantidad de un base se lee su equivalente en la presentación más grande: «= 2 × Caja x15 + 7
+  sueltas» (`presentations` en cada fila de `GET /inventory`).
 - Gerente/admin: botón de ajuste → diálogo con **cambio** y **motivo**; si el delta es **positivo**, opción **Entrada de proveedor** (proveedor, costo unitario, factura, caja opcional) que llama a `receive_purchase` con una línea.
-- Gerente/admin: **Registrar compra** (varias líneas) en la cabecera.
+- Gerente/admin: **Registrar compra** (varias líneas) en la cabecera. El selector lista productos `own` y **presentaciones** (`GET /products?stock_mode=own,linked`): comprar «2 × Caja x15» avisa «Suma 30 unidades a Cigarrillo».
 - Si el costo de compra ≠ `cost_price` del catálogo, aviso informativo (sin escribir el costo).
 - Gerente/admin: lápiz junto al umbral → `PATCH /api/v1/inventory/{id}`.
 

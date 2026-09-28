@@ -31,7 +31,8 @@ function promo(id: string, name: string): PromotionListItem {
                     deleted_at: null,
                     selling_price: 5,
                     tax_rate: 0,
-                    stock: 20
+                    stock: 20,
+                    stock_mode: 'own'
                 }
             }
         ]

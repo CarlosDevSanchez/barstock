@@ -91,3 +91,53 @@ test('a manager adjusts stock with a reason, and cannot take it below zero', asy
     await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'stock is now' })).toBeVisible()
     expect(await stockOf(product.id)).toBe(15)
 })
+
+test('a box and loose singles sell from the same stock; an untracked coffee never runs out', async ({ browser }) => {
+    const single = await createProduct({ name: uniq('E2E Cigarette'), selling_price: 2, tax_rate: 0, stock: 30 })
+    const box = await createProduct({
+        name: uniq('E2E Box x15'),
+        selling_price: 10,
+        tax_rate: 0,
+        stock_mode: 'linked',
+        stock_product_id: single.id,
+        stock_units: 15
+    })
+    const coffee = await createProduct({ name: uniq('E2E Coffee'), selling_price: 3, tax_rate: 0, stock_mode: 'none' })
+
+    const till = await newSession(browser, 'cashier')
+    await till.goto('/pos')
+    const search = till.getByPlaceholder('Search by name, SKU, or barcode...')
+    const add = async (name: string, qty: number) => {
+        await search.fill(name)
+        await till.getByRole('button', { name: `Add ${name} to cart` }).click()
+        for (let i = 1; i < qty; i++) await till.getByRole('button', { name: 'Increase quantity' }).click()
+        await till.getByRole('button', { name: 'Confirm' }).click()
+    }
+    await add(box.name, 1)
+    await add(single.name, 4)
+    await search.fill(coffee.name)
+    await expect(till.getByRole('button', { name: `Add ${coffee.name} to cart` })).toContainText('Always available')
+    await add(coffee.name, 2)
+
+    await till.getByRole('button', { name: /^Cart:/ }).click()
+    const cartSheet = till.getByRole('dialog', { name: /^Cart/ })
+    // 10 + 4 × 2 + 2 × 3 = 24.00
+    await expect(cartSheet.getByText('Total', { exact: true }).locator('..')).toContainText('24.00')
+    await cartSheet.getByRole('button', { name: 'Checkout' }).click()
+    await till.getByRole('button', { name: 'Card' }).click()
+    await till.getByRole('button', { name: 'Complete Order' }).click()
+    await expect(till.getByRole('dialog', { name: 'Sale completed' })).toContainText('24.00')
+    // 30 − 15 (the box) − 4 (singles); the coffee has no stock to take.
+    expect(await stockOf(single.id)).toBe(11)
+    expect(await stockOf(coffee.id)).toBe(0)
+
+    // The base's row reads its units as boxes; the presentation and the coffee have no row of their own.
+    const office = await newSession(browser, 'manager')
+    await office.goto('/inventory')
+    await office.getByPlaceholder('Search by product name or SKU...').fill(single.name)
+    await expect(office.getByRole('row', { name: new RegExp(single.name) })).toContainText(
+        `= 0 × ${box.name} + 11 loose`
+    )
+    await office.getByPlaceholder('Search by product name or SKU...').fill(coffee.name)
+    await expect(office.getByRole('row', { name: new RegExp(coffee.name) })).toHaveCount(0)
+})

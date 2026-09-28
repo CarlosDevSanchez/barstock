@@ -46,6 +46,7 @@ import { PromotionsStrip, promoPendingKey } from '@/components/pos/promotions-st
 import { PrintableReceipt } from '@/components/orders/printable-receipt'
 import { TabDetailSheet } from '@/components/pos/tab-detail-sheet'
 import { TopProducts } from '@/components/pos/top-products'
+import { isUntracked, maxAddable, type StockInfo, type StockLine } from '@/lib/stock'
 
 const PAGE_SIZE = 30
 const ALL = 'all'
@@ -132,8 +133,6 @@ export default function POSPage() {
     const discount = useCartStore(state => state.discount)
     const { addItem, addPromotion, removeItem, updateQuantity, setGlobalDiscount, clearCart } = useCartStore()
 
-    const qtyInCartProduct = (productId: string) =>
-        items.find(item => item.kind === 'product' && item.productId === productId)?.quantity ?? 0
     const qtyInCartPromo = (promotionId: string) =>
         items.find(item => item.kind === 'promotion' && item.promotionId === promotionId)?.quantity ?? 0
 
@@ -273,6 +272,21 @@ export default function POSPage() {
             : { kind: 'promotion', item, promotion: promotions.get(item.promotionId) }
     )
 
+    // Product lines as stock consumers: a box and loose singles of the same base share its units (lib/stock.ts).
+    const stockLines = (except?: CartLineView): StockLine[] =>
+        lines.flatMap(line =>
+            line.kind === 'product' && line.product && line !== except
+                ? [{ product: line.product, quantity: line.item.quantity }]
+                : []
+        )
+    const maxAddableFor = (product: StockInfo) => maxAddable(product, stockLines())
+    /** Highest quantity a cart line may reach (null = no cap: an untracked product). */
+    const maxQuantityFor = (line: CartLineView): number | null => {
+        if (line.kind === 'promotion') return line.promotion?.available ?? null
+        if (!line.product || isUntracked(line.product)) return null
+        return maxAddable(line.product, stockLines(line))
+    }
+
     const lookupSettled =
         (productIds === '' || (cartProducts.data !== undefined && !cartProducts.loading)) &&
         (promoIds === '' || (cartPromos.data !== undefined && !cartPromos.loading))
@@ -281,14 +295,20 @@ export default function POSPage() {
         if (line.kind === 'product') {
             const { item, product } = line
             if (!product) return lookupSettled ? t('noLongerAvailable') : null
-            if (!product.is_active || product.stock === null) return t('noLongerAvailable')
-            if (item.quantity > product.stock) return t('onlyInStock', { count: product.stock })
+            if (!product.is_active) return t('noLongerAvailable')
+            if (isUntracked(product)) return null
+            if (product.stock === null) return t('noLongerAvailable')
+            const max = maxQuantityFor(line) ?? 0
+            if (item.quantity > max) return t('onlyInStock', { count: max })
             return null
         }
         const { item, promotion } = line
         if (!promotion) return lookupSettled ? t('noLongerAvailable') : null
-        if (!promotion.is_active || promotion.available === null) return t('noLongerAvailable')
-        if (item.quantity > promotion.available) return t('onlyInStock', { count: promotion.available })
+        if (!promotion.is_active) return t('noLongerAvailable')
+        // null = only untracked components: no stock limit.
+        if (promotion.available !== null && item.quantity > promotion.available) {
+            return t('onlyInStock', { count: promotion.available })
+        }
         return null
     }
 
@@ -477,7 +497,7 @@ export default function POSPage() {
                     reloadSignal={topReloadSignal}
                     pendingId={pendingId}
                     pendingQty={pendingQty}
-                    qtyInCart={qtyInCartProduct}
+                    maxAddableFor={maxAddableFor}
                     onSelect={handleSelectProduct}
                     onChangeQty={handleChangePendingQty}
                     onConfirm={handleConfirmPending}
@@ -487,7 +507,7 @@ export default function POSPage() {
                     catalog={catalog}
                     pendingId={pendingId}
                     pendingQty={pendingQty}
-                    qtyInCart={qtyInCartProduct}
+                    maxAddableFor={maxAddableFor}
                     onSelect={handleSelectProduct}
                     onChangeQty={handleChangePendingQty}
                     onConfirm={handleConfirmPending}
@@ -532,6 +552,7 @@ export default function POSPage() {
                     lines={lines}
                     lookupSettled={lookupSettled}
                     problemWith={problemWith}
+                    maxQuantityFor={maxQuantityFor}
                     totals={totals}
                     discount={discount}
                     onDiscountChange={setGlobalDiscount}

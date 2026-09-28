@@ -4,14 +4,16 @@ import { useTranslations } from 'next-intl'
 import { useMoney } from '@/components/session-provider'
 import { productsApi } from '@/lib/api/products'
 import { useApiQuery } from '@/hooks/use-api-query'
-import { QtyConfirmOverlay, maxAddable } from './qty-confirm-overlay'
+import { isSellable, type StockInfo } from '@/lib/stock'
+import { QtyConfirmOverlay } from './qty-confirm-overlay'
 
 interface TopProductsProps {
     /** Bump this after a sale completes to refresh the ranking. */
     reloadSignal: number
     pendingId: string | null
     pendingQty: number
-    qtyInCart: (productId: string) => number
+    /** Units of a product still addable given the cart (presentations share their base's stock). */
+    maxAddableFor: (product: StockInfo) => number
     onSelect: (productId: string) => void
     onChangeQty: (qty: number) => void
     onConfirm: () => void
@@ -24,7 +26,7 @@ export function TopProducts({
     reloadSignal,
     pendingId,
     pendingQty,
-    qtyInCart,
+    maxAddableFor,
     onSelect,
     onChangeQty,
     onConfirm
@@ -40,8 +42,9 @@ export function TopProducts({
             <h2 className="text-sm font-semibold text-muted-foreground mb-2">{t('topProducts')}</h2>
             <div className="flex gap-2 overflow-x-auto snap-x snap-mandatory pb-2 -mx-4 px-4 max-sm:mx-0 max-sm:px-0">
                 {top.data.map(product => {
-                    const soldOut = product.stock === null || product.stock <= 0
-                    const maxQty = maxAddable(product.stock, qtyInCart(product.product_id))
+                    const stockInfo: StockInfo = { ...product, id: product.product_id }
+                    const soldOut = !isSellable(stockInfo)
+                    const maxQty = maxAddableFor(stockInfo)
                     const canAdd = !soldOut && maxQty > 0
                     const pending = pendingId === product.product_id
                     return (

@@ -127,7 +127,8 @@
     "unknownCurrency": "Unknown currency",
     "unknownTimezone": "Unknown time zone",
     "minPassword": "At least 10 characters",
-    "passwordsMismatch": "Passwords do not match"
+    "passwordsMismatch": "Passwords do not match",
+    "minTwoUnits": "Must be at least 2"
   },
   "errors": {
     "generic": "Something went wrong",
@@ -285,7 +286,8 @@
     "decreasePackages": "Decrease packages",
     "increasePackages": "Increase packages",
     "packagesUnit": "packages",
-    "promoStockDetail": "{recipe} → {count, plural, one {# package available} other {# packages available}}"
+    "promoStockDetail": "{recipe} → {count, plural, one {# package available} other {# packages available}}",
+    "alwaysAvailable": "Always available"
   },
   "products": {
     "title": "Products",
@@ -336,7 +338,25 @@
     "changeImage": "Change Image",
     "removeImage": "Remove Image",
     "imageResizeFailed": "Could not process that image. Try a different file.",
-    "imageSaveFailed": "The product was saved, but the image could not be saved."
+    "imageSaveFailed": "The product was saved, but the image could not be saved.",
+    "stockMode": "Inventory",
+    "stockModeOwn": "Tracks its own stock",
+    "stockModeNone": "No stock tracking (always available)",
+    "stockModeLinked": "Presentation of another product",
+    "stockModeOwnHint": "Units are adjusted and purchased from Inventory.",
+    "stockModeNoneHint": "Always sellable and hidden from Inventory. Useful for coffee, prepared drinks or services.",
+    "stockModeLinkedHint": "Sold at its own price, but takes units from the base product stock (e.g. a box of 15 cigarettes).",
+    "stockBase": "Base product *",
+    "stockBasePlaceholder": "Pick the base product",
+    "baseStock": "{stock} in stock",
+    "stockUnits": "Base units per sale *",
+    "stockUnitsHint": "How many units of the base product selling 1 takes.",
+    "stockLinkPreview": "Selling 1 takes {units} × {base} · available now: {available}",
+    "useSuggestedCost": "Use suggested cost: {cost}",
+    "stockUntracked": "Not tracked",
+    "stockOfBase": "(×{units} of {base})",
+    "createPresentation": "Create presentation",
+    "createPresentationAria": "Create a presentation of {name}"
   },
   "settings": {
     "title": "Settings",
@@ -411,7 +431,7 @@
     "colItems": "Components",
     "colPackages": "Packages available",
     "packagesAvailable": "{count, plural, one {# package} other {# packages}}",
-    "packagesUnavailable": "No inventory",
+    "packagesUnavailable": "No limit",
     "componentStock": "stock {count}",
     "componentStockUnknown": "no stock",
     "bottleneck": "Limits",
@@ -484,7 +504,7 @@
     "packagesColAvailable": "Packages",
     "packagesColRecipe": "Recipe",
     "packagesEmpty": "No active promotions",
-    "packagesUnavailable": "No inventory",
+    "packagesUnavailable": "No limit",
     "registerPurchase": "Record purchase",
     "supplierEntry": "Supplier intake",
     "asAdjustment": "Manual adjustment",
@@ -504,7 +524,10 @@
     "costMismatch": "Purchase cost ({purchase}) differs from catalog cost ({catalog}). The catalog is left unchanged.",
     "addLine": "Add product",
     "removeLine": "Remove",
-    "savePurchase": "Save purchase"
+    "savePurchase": "Save purchase",
+    "equivalent": "= {packs} × {name}{loose, plural, =0 {} other { + # loose}}",
+    "presentationOf": "Presentation: ×{units} of {base}",
+    "purchaseAddsUnits": "Adds {units} units to {base}"
   },
   "orders": {
     "title": "Orders",

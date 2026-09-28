@@ -66,15 +66,21 @@ export function allocatePackagePrice(
     })
 }
 
-/** Packages sellable from component stock: floor(min(stock_i / qty_i)); null if any component lacks inventory. */
-export function packagesAvailable(components: Array<{ quantity: number; stock: number | null }>): number | null {
+/** Packages sellable from component stock: floor(min(stock_i / qty_i)); null when no component tracks stock. */
+export function packagesAvailable(
+    components: Array<{ quantity: number; stock: number | null; untracked?: boolean }>
+): number | null {
     if (components.length === 0) return 0
     let min = Number.POSITIVE_INFINITY
     for (const c of components) {
-        if (c.stock === null || c.quantity <= 0) return null
+        // An untracked component (coffee) never limits the package.
+        if (c.untracked) continue
+        // A tracked component without an inventory row cannot be sold (create_sale rejects it).
+        if (c.stock === null || c.quantity <= 0) return 0
         min = Math.min(min, Math.floor(c.stock / c.quantity))
     }
-    return Number.isFinite(min) ? min : 0
+    // Only untracked components: no limit.
+    return Number.isFinite(min) ? min : null
 }
 
 /**

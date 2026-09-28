@@ -6,7 +6,7 @@ import { zodResolver } from '@hookform/resolvers/zod'
 import type { z } from 'zod'
 import { useTranslations } from 'next-intl'
 import { toast } from 'sonner'
-import { Plus, Edit, Trash2, Package, RefreshCcw } from 'lucide-react'
+import { Plus, Edit, Trash2, Package, RefreshCcw, Layers } from 'lucide-react'
 import { Button } from '@/components/ui/button'
 import { Card } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
@@ -24,6 +24,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { SelectField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { ProductImageField } from '@/components/product-image-field'
+import { StockModeFields } from '@/components/products/stock-mode-fields'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
 import { PageHeader } from '@/components/page-header'
@@ -35,10 +36,11 @@ import { moneyStep } from '@/lib/money'
 import { categoriesApi } from '@/lib/api/categories'
 import { ApiError, errorMessage } from '@/lib/api/client'
 import { productsApi, type ProductListItem } from '@/lib/api/products'
+import type { StockMode } from '@/lib/stock'
 import { roleAtLeast } from '@/lib/auth/roles'
 import { suggestSku } from '@/lib/sku'
 import { taxRatePercent } from '@/lib/validation/common'
-import { productCreateSchema } from '@/lib/validation/resources'
+import { normalizeStockMode, productFieldsSchema, refineStockMode } from '@/lib/validation/resources'
 import type { Tables } from '@/types/database'
 import { useApiQuery } from '@/hooks/use-api-query'
 import { useDebouncedValue } from '@/hooks/use-debounced-value'
@@ -46,10 +48,13 @@ import { useImageFallback } from '@/hooks/use-image-fallback'
 import { usePagination } from '@/hooks/use-pagination'
 
 // The API stores the tax rate as a fraction (0.10); people type a percentage (10).
-const productFormSchema = productCreateSchema.extend({
-    tax_rate: taxRatePercent,
-    cost_price: productCreateSchema.shape.selling_price
-})
+const productFormSchema = productFieldsSchema
+    .extend({
+        tax_rate: taxRatePercent,
+        cost_price: productFieldsSchema.shape.selling_price
+    })
+    .superRefine(refineStockMode)
+    .transform(normalizeStockMode)
 
 // A new product starts with the store's default tax rate (Settings), shown as a percentage.
 const emptyValues = (defaultTaxPercent: string) => ({
@@ -61,10 +66,17 @@ const emptyValues = (defaultTaxPercent: string) => ({
     cost_price: '',
     selling_price: '',
     tax_rate: defaultTaxPercent,
-    low_stock_threshold: ''
+    low_stock_threshold: '',
+    stock_mode: 'own' as StockMode,
+    stock_product_id: '',
+    stock_units: ''
 })
 
-function valuesFor(product: ProductListItem | null, defaultTaxPercent: string) {
+function valuesFor(product: ProductListItem | null, defaultTaxPercent: string, base: ProductListItem | null) {
+    // "Create presentation" on a base product: a new product already linked to it (the manager fills name, units).
+    if (!product && base) {
+        return { ...emptyValues(defaultTaxPercent), stock_mode: 'linked' as StockMode, stock_product_id: base.id }
+    }
     if (!product) return emptyValues(defaultTaxPercent)
     return {
         name: product.name,
@@ -75,27 +87,33 @@ function valuesFor(product: ProductListItem | null, defaultTaxPercent: string) {
         cost_price: String(product.cost_price),
         selling_price: String(product.selling_price),
         tax_rate: String(Math.round(product.tax_rate * 10_000) / 100),
-        low_stock_threshold: ''
+        low_stock_threshold: '',
+        stock_mode: product.stock_mode,
+        stock_product_id: product.stock_product_id ?? '',
+        stock_units: product.stock_mode === 'linked' ? String(product.stock_units) : ''
     }
 }
 
 interface ProductDialogProps {
     product: ProductListItem | null
+    /** Set when creating a presentation of this (base) product. */
+    base: ProductListItem | null
     categories: Array<{ value: string; label: string }>
     onClose: () => void
     onSaved: () => void
 }
 
-function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogProps) {
+function ProductDialog({ product, base, categories, onClose, onSaved }: ProductDialogProps) {
     const t = useTranslations('products')
     const tc = useTranslations('common')
     const { settings } = useSession()
     const priceStep = moneyStep(settings.currency)
     const form = useForm<z.input<typeof productFormSchema>, unknown, z.output<typeof productFormSchema>>({
         resolver: zodResolver(productFormSchema),
-        defaultValues: valuesFor(product, String(Math.round(settings.tax_rate * 10_000) / 100))
+        defaultValues: valuesFor(product, String(Math.round(settings.tax_rate * 10_000) / 100), base)
     })
     const submitting = form.formState.isSubmitting
+    const stockMode = useWatch({ control: form.control, name: 'stock_mode' })
 
     // The image is uploaded/removed only after the product itself is saved (it needs an id): see onSubmit below.
     const [imageFile, setImageFile] = useState<File | null>(null)
@@ -235,7 +253,11 @@ function ProductDialog({ product, categories, onClose, onSaved }: ProductDialogP
                                 step={priceStep}
                                 min="0"
                             />
-                            {!product && (
+                            <StockModeFields
+                                productId={product?.id ?? null}
+                                initialBase={product?.stock_base ?? (base ? { id: base.id, name: base.name } : null)}
+                            />
+                            {!product && stockMode === 'own' && (
                                 <TextField
                                     name="low_stock_threshold"
                                     label={t('lowStockThreshold')}
@@ -266,6 +288,23 @@ function conflictFieldOf(error: ApiError): string | null {
     const details = error.details
     if (typeof details !== 'object' || details === null || !('field' in details)) return null
     return typeof details.field === 'string' ? details.field : null
+}
+
+/** Stock as the catalog should read it: "No tracking", the product's own units, or "N (of Base)" for a presentation. */
+function StockCell({ product }: { product: ProductListItem }) {
+    const t = useTranslations('products')
+    if (product.stock_mode === 'none') return <span className="text-muted-foreground">{t('stockUntracked')}</span>
+    if (product.stock_mode === 'linked') {
+        return (
+            <span>
+                {product.stock ?? '-'}{' '}
+                <span className="text-muted-foreground">
+                    {t('stockOfBase', { units: product.stock_units, base: product.stock_base?.name ?? '' })}
+                </span>
+            </span>
+        )
+    }
+    return <>{product.stock ?? '-'}</>
 }
 
 /** 40px thumbnail for the products table: falls back to the reserve icon when there is no image, or it fails to load. */
@@ -303,6 +342,16 @@ export default function ProductsPage() {
     const search = useDebouncedValue(searchQuery)
     // undefined = closed, null = creating, product = editing
     const [editing, setEditing] = useState<ProductListItem | null | undefined>(undefined)
+    // The base product when "Create presentation" opened the dialog (editing is then null).
+    const [presentationOf, setPresentationOf] = useState<ProductListItem | null>(null)
+    const openCreate = (base: ProductListItem | null) => {
+        setPresentationOf(base)
+        setEditing(null)
+    }
+    const closeDialog = () => {
+        setEditing(undefined)
+        setPresentationOf(null)
+    }
     const [toDelete, setToDelete] = useState<ProductListItem | null>(null)
 
     const products = useApiQuery(
@@ -321,7 +370,7 @@ export default function ProductsPage() {
                 title={t('title')}
                 description={canManage ? t('subtitleManage') : t('subtitleBrowse')}
                 primaryAction={
-                    canManage ? { label: t('addProduct'), icon: Plus, onClick: () => setEditing(null) } : undefined
+                    canManage ? { label: t('addProduct'), icon: Plus, onClick: () => openCreate(null) } : undefined
                 }
             />
 
@@ -378,7 +427,9 @@ export default function ProductsPage() {
                                                 <TableCell className="font-semibold text-emerald-600">
                                                     {money(product.selling_price)}
                                                 </TableCell>
-                                                <TableCell>{product.stock ?? '-'}</TableCell>
+                                                <TableCell>
+                                                    <StockCell product={product} />
+                                                </TableCell>
                                                 <TableCell>
                                                     <Badge variant={product.is_active ? 'default' : 'secondary'}>
                                                         {product.is_active ? tc('active') : tc('inactive')}
@@ -387,6 +438,19 @@ export default function ProductsPage() {
                                                 {canManage && (
                                                     <TableCell className="text-right">
                                                         <div className="flex justify-end gap-2">
+                                                            {product.stock_mode === 'own' && (
+                                                                <Button
+                                                                    size="sm"
+                                                                    variant="ghost"
+                                                                    aria-label={t('createPresentationAria', {
+                                                                        name: product.name
+                                                                    })}
+                                                                    title={t('createPresentation')}
+                                                                    onClick={() => openCreate(product)}
+                                                                >
+                                                                    <Layers className="h-4 w-4" />
+                                                                </Button>
+                                                            )}
                                                             <Button
                                                                 size="sm"
                                                                 variant="ghost"
@@ -423,13 +487,19 @@ export default function ProductsPage() {
                                             {money(product.selling_price)}
                                         </span>
                                         <span className="text-xs text-muted-foreground">
-                                            {t('colStock')}: {product.stock ?? '-'}
+                                            {t('colStock')}: <StockCell product={product} />
                                         </span>
                                     </div>
                                 }
                                 menu={
                                     canManage && (
                                         <>
+                                            {product.stock_mode === 'own' && (
+                                                <DropdownMenuItem onClick={() => openCreate(product)}>
+                                                    <Layers className="mr-2 h-4 w-4" />
+                                                    {t('createPresentation')}
+                                                </DropdownMenuItem>
+                                            )}
                                             <DropdownMenuItem onClick={() => setEditing(product)}>
                                                 <Edit className="mr-2 h-4 w-4" />
                                                 {tc('edit')}
@@ -462,12 +532,13 @@ export default function ProductsPage() {
 
             {editing !== undefined && (
                 <ProductDialog
-                    key={editing?.id ?? 'new'}
+                    key={editing?.id ?? `new-${presentationOf?.id ?? ''}`}
                     product={editing}
+                    base={presentationOf}
                     categories={categoryOptions}
-                    onClose={() => setEditing(undefined)}
+                    onClose={closeDialog}
                     onSaved={() => {
-                        setEditing(undefined)
+                        closeDialog()
                         products.reload()
                     }}
                 />

@@ -668,7 +668,9 @@ export type Database = {
           product_id: string
           promotion_id: string | null
           quantity: number
+          stock_product_id: string | null
           stock_taken: number | null
+          stock_units: number | null
           tax: number
           tax_rate: number | null
           total: number
@@ -684,7 +686,9 @@ export type Database = {
           product_id: string
           promotion_id?: string | null
           quantity: number
+          stock_product_id?: string | null
           stock_taken?: number | null
+          stock_units?: number | null
           tax?: number
           tax_rate?: number | null
           total: number
@@ -700,7 +704,9 @@ export type Database = {
           product_id?: string
           promotion_id?: string | null
           quantity?: number
+          stock_product_id?: string | null
           stock_taken?: number | null
+          stock_units?: number | null
           tax?: number
           tax_rate?: number | null
           total?: number
@@ -1013,6 +1019,9 @@ export type Database = {
           name: string
           selling_price: number
           sku: string
+          stock_mode: string
+          stock_product_id: string | null
+          stock_units: number
           tax_rate: number
           updated_at: string
         }
@@ -1030,6 +1039,9 @@ export type Database = {
           name: string
           selling_price?: number
           sku: string
+          stock_mode?: string
+          stock_product_id?: string | null
+          stock_units?: number
           tax_rate?: number
           updated_at?: string
         }
@@ -1047,6 +1059,9 @@ export type Database = {
           name?: string
           selling_price?: number
           sku?: string
+          stock_mode?: string
+          stock_product_id?: string | null
+          stock_units?: number
           tax_rate?: number
           updated_at?: string
         }
@@ -1056,6 +1071,13 @@ export type Database = {
             columns: ["category_id"]
             isOneToOne: false
             referencedRelation: "categories"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "products_stock_product_id_fkey"
+            columns: ["stock_product_id"]
+            isOneToOne: false
+            referencedRelation: "products"
             referencedColumns: ["id"]
           },
         ]
@@ -1181,6 +1203,8 @@ export type Database = {
           product_id: string
           purchase_order_id: string
           quantity: number
+          stock_product_id: string | null
+          stock_units: number | null
           total: number | null
           unit_price: number
           variant_id: string | null
@@ -1191,6 +1215,8 @@ export type Database = {
           product_id: string
           purchase_order_id: string
           quantity: number
+          stock_product_id?: string | null
+          stock_units?: number | null
           total?: number | null
           unit_price: number
           variant_id?: string | null
@@ -1201,6 +1227,8 @@ export type Database = {
           product_id?: string
           purchase_order_id?: string
           quantity?: number
+          stock_product_id?: string | null
+          stock_units?: number | null
           total?: number | null
           unit_price?: number
           variant_id?: string | null
@@ -1447,6 +1475,8 @@ export type Database = {
           product_id: string
           promotion_id: string | null
           quantity: number
+          stock_product_id: string | null
+          stock_units: number | null
           tab_id: string
           tax_rate: number
           unit_price: number
@@ -1461,6 +1491,8 @@ export type Database = {
           product_id: string
           promotion_id?: string | null
           quantity: number
+          stock_product_id?: string | null
+          stock_units?: number | null
           tab_id: string
           tax_rate: number
           unit_price: number
@@ -1475,6 +1507,8 @@ export type Database = {
           product_id?: string
           promotion_id?: string | null
           quantity?: number
+          stock_product_id?: string | null
+          stock_units?: number | null
           tab_id?: string
           tax_rate?: number
           unit_price?: number
@@ -1717,12 +1751,30 @@ export type Database = {
         }[]
       }
       _enqueue_due_receivables: { Args: never; Returns: undefined }
+      _lock_inventory: { Args: { p_ids: string[] }; Returns: undefined }
       _mark_outbox_delivery: {
         Args: { p_ids: number[]; p_recipient: string }
         Returns: undefined
       }
       _purge_outbox: { Args: never; Returns: undefined }
+      _return_stock: {
+        Args: {
+          p_base_qty: number
+          p_notes: string
+          p_product_id: string
+          p_reference: string
+          p_stock_product_id: string
+          p_uid: string
+          p_units: number
+          p_variant_id: string
+        }
+        Returns: undefined
+      }
       _session_cash: { Args: { p_session_id: string }; Returns: Json }
+      _stock_target: {
+        Args: { p_product_id: string; p_variant_id?: string }
+        Returns: Record<string, unknown>
+      }
       _tab_totals: {
         Args: { p_tab_id: string }
         Returns: {
@@ -1733,6 +1785,20 @@ export type Database = {
           tax: number
           total: number
         }[]
+      }
+      _take_stock: {
+        Args: {
+          p_label: string
+          p_lenient?: boolean
+          p_product_id: string
+          p_quantity: number
+          p_reference: string
+          p_stock_product_id?: string
+          p_uid: string
+          p_units?: number
+          p_variant_id: string
+        }
+        Returns: Record<string, unknown>
       }
       add_cash_movement: {
         Args: {
@@ -1987,6 +2053,10 @@ export type Database = {
           quantity: number
           selling_price: number
           stock: number
+          stock_base_quantity: number
+          stock_mode: string
+          stock_product_id: string
+          stock_units: number
         }[]
       }
       update_receivable: {

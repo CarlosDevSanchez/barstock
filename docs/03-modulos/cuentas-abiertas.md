@@ -19,6 +19,8 @@ Cuatro tablas nuevas (`supabase/migrations/20260922000002_tabs.sql`), documentad
 
 ## Reglas de negocio
 - **Stock:** se descuenta **al añadir** el producto a la cuenta (no al cerrarla) y se repone al quitar un ítem o anular. La cuenta es una venta ya en curso: el producto físico ya se separó.
+  Con los [modos de stock](productos.md#modos-de-stock): una presentación descuenta de su base y un producto sin control no descuenta nada. Cada
+  `tab_items` guarda la foto `stock_product_id/stock_units` de su primer añadido; añadir más, quitar, anular y la orden resultante usan esa foto.
 - **Precio:** foto tomada la primera vez que se añade ese producto/variante/(promo); añadir más solo suma cantidad (y discount de línea en promos), nunca vuelve a cotizar las unidades ya puestas. Un SKU suelto y el mismo SKU dentro de un combo son **líneas distintas** (`promotion_id` en el unique).
 - **Detalle de cuenta:** las líneas de un paquete se muestran **como un solo bloque** (nombre + receta sin precios unitarios + un total). No hay botón de quitar por componente en la UI; quitar ítems sueltos sigue disponible solo en productos no-promo (RPC sin cambios).
 - **Visibilidad:** las cuentas son compartidas entre **todos los cajeros** (cualquiera puede atender cualquier mesa); no hay concepto de "mi cuenta".
