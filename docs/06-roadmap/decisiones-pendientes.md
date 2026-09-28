@@ -12,7 +12,8 @@
 | D2 | ¿Un solo negocio, o varias sucursales/tiendas? | Esquema (`store_id`), RLS | Si hay riesgo de multi-sucursal, añadir `store_id` **antes** de más datos | Pendiente |
 | D3 | Regla fiscal: ¿tasa por producto o global? ¿precio con o sin impuesto? ¿redondeo por línea o por total? ¿descuento antes o después del impuesto? | [H3](../04-auditoria/hallazgos/H3-impuestos-y-dinero.md), `create_sale` | Tasa por producto, precios sin impuesto, redondeo por línea, descuento antes del impuesto — **validar con contabilidad** | **Supuesto aplicado, sin validar** (ver abajo) |
 | D4 | Moneda: ¿única o varias? ¿formato regional? | UI, `settings` | Una moneda por instalación, configurable; `Intl.NumberFormat` | **Decidido (2026-09-21)**: COP por defecto, decimales según la moneda (`money_scale` / `currencyDecimals`) |
-| D5 | Pagos: ¿mixtos (efectivo+tarjeta)? ¿vuelto? ¿propinas? ¿integración con terminal? | `payments`, UI de cobro | Permitir varios pagos por orden (el esquema ya lo permite) y calcular vuelto | **Decidido (2026-09-24)**: 1 o 2 métodos por venta o por cobro de cuenta; la suma en línea debe cuadrar. El cambio es solo visual (no se guarda). Sin propinas ni terminal |
+| D5 | Pagos: ¿mixtos (efectivo+tarjeta)? ¿vuelto? ¿propinas? ¿integración con terminal? | `payments`, UI de cobro | Permitir varios pagos por orden (el esquema ya lo permite) y calcular vuelto | **Decidido (2026-09-24; UI 2026-09-25)**: 1 o 2 métodos por venta, cobro de cuenta o abono. La suma de un split debe cuadrar el monto a pagar (que puede ser **menor** que el saldo: abono libre). «Recibido» y «Cambio»/«Falta» se muestran en vivo (`cashDifference`) y son solo visuales (no se guardan). Sin propinas ni terminal |
+| D-debtor | ¿Cuenta por cobrar sin cliente (solo un nombre)? | `defer_tab`, `orders.debtor_name` | Permitir `customer_id` **o** `debtor_name` (2–120) | **Decidido (2026-09-25)**: sí; ver abajo |
 | D6 | Descuentos: ¿topes por rol? ¿motivo obligatorio? ¿aprobación de gerente? | `create_sale`, RLS | Tope por rol y motivo sobre cierto monto, auditado | Pendiente |
 | D7 | Fidelidad: ¿cómo se acumulan y canjean los puntos? ¿los reembolsos los restan? | [clientes](../03-modulos/clientes.md) | Derivar de las órdenes (trigger/vista), no editar a mano | **Supuesto aplicado, sin validar**: `floor(total_spent)`, reembolsos restan. En COP ≈ 1 punto por peso — escala por revisar |
 | D8 | Reembolsos: ¿parciales? ¿ventana de tiempo? ¿quién autoriza? ¿devuelve al stock siempre? | `refund_order` | Solo gerente/admin, con motivo; parcial por ítem como evolución | Pendiente |
@@ -85,6 +86,11 @@ BD descompone con precio **asignado**, no `selling_price` de lista). Soft-delete
 cuentas abiertas** vía `tab_add_items` (`tab_items.promotion_id` + `discount`; unique incluye promo). Top 5 / reportes
 por SKU cuentan componentes. Impuesto por producto sobre la base asignada (sigue atado a D3).
 Impacto: migraciones `20260924000001` / `20260924000002` / `20260925000001`, `lib/promotion-allocate.ts`, POS, ticket agrupado.
+
+### D-debtor — Decidido 2026-09-25
+Decisión: una cuenta abierta se puede diferir a pendiente **sin** ficha de cliente: basta un nombre libre (`orders.debtor_name`, 2–120 caracteres). Una `pending` exige `customer_id` **o** `debtor_name`. `list_receivables.customer_name` = `coalesce(cliente, debtor_name)`.
+Motivo: en el mostrador a menudo se fía a alguien que no está en el catálogo (un conocido, una mesa).
+Impacto: migración `20261008000001_defer_tab_v2.sql`, `defer-tab-dialog.tsx`, [cuentas por cobrar](../03-modulos/cuentas-por-cobrar.md).
 
 ### D-margin — Decidido 2026-09-22
 Decisión: en `sales_report` (solo gerente+): **ingreso** = lo cobrado (`orders.total` / líneas asignadas);

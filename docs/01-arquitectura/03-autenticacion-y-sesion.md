@@ -53,6 +53,10 @@ Entre 10 y 72 caracteres (72 = límite de bcrypt), validado en el esquema (`rese
 
 ### Logout
 `POST /auth/logout` → `signOut` (revoca la sesión en el servidor) y `AppShell` **vacía el carrito**: no se deja a la siguiente persona de la caja.
+Durante el logout, `setSigningOut(true)` (`lib/api/client.ts`) silencia la redirección por `401` del cliente: una petición que salió antes del
+logout y vuelve `401` después redirigía a `/login?next=<página del usuario anterior>` y pisaba la navegación del propio logout (flaky en CI
+del PR #13; prueba `e2e/roles.e2e.ts` «a request answered 401 mid sign-out…»). El logout termina con una **carga completa** de `/login`
+(`window.location.assign`), que reinicia esa bandera y descarta la caché del router con páginas de la sesión anterior.
 
 ### Desactivar o cambiar el rol
 Admin → `/users` → `PATCH /users/{id}`. Efecto en la **siguiente petición** del usuario (`401`). No puede desactivarse a sí mismo ni quitarse el rol de admin,

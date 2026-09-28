@@ -109,6 +109,7 @@ export function buildProvisionalOrder(input: ProvisionalOrderInput): OrderDetail
         id: crypto.randomUUID(),
         order_number: input.provisionalNumber,
         customer_id: null,
+        debtor_name: null,
         status: 'completed',
         subtotal: input.totals.subtotal,
         discount: input.totals.discount,

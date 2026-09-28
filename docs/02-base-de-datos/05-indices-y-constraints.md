@@ -30,7 +30,7 @@ Se eliminaron `idx_products_sku` e `idx_products_barcode` (redundantes con los `
 | `inventory` | `quantity ≥ 0` (**nunca stock negativo**), `low_stock_threshold ≥ 0` |
 | `inventory_transactions` | `transaction_type IN ('purchase','sale','adjustment','return')`, `quantity ≠ 0` |
 | `customers` | `loyalty_points ≥ 0`, `total_spent ≥ 0` |
-| `orders` | importes `≥ 0`; **`total = subtotal − discount + tax`** (`NOT VALID`) |
+| `orders` | importes `≥ 0`; **`total = subtotal − discount + tax`** (`NOT VALID`); `debtor_name` nulo o 2–120 caracteres recortados; `pending` exige `customer_id` **o** `debtor_name` |
 | `order_items` | `quantity > 0`, importes `≥ 0`; **`total = unit_price × quantity − discount + tax`** (`NOT VALID`) |
 | `payments`, `expenses` | `amount ≥ 0` |
 | `purchase_orders` / `_items` | `total_amount ≥ 0`; `quantity > 0`, `unit_price ≥ 0` |

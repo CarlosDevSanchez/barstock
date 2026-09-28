@@ -277,7 +277,11 @@ describe('refund_order', () => {
 
         const pending = await service()
             .from('orders')
-            .insert({ order_number: `PEND-${crypto.randomUUID().slice(0, 8)}`, status: 'pending' })
+            .insert({
+                order_number: `PEND-${crypto.randomUUID().slice(0, 8)}`,
+                status: 'pending',
+                debtor_name: 'Pending refund'
+            })
             .select('id')
             .single()
         const refusal = await manager.rpc('refund_order', {

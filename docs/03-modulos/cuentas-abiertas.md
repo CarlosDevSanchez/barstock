@@ -41,10 +41,10 @@ Todas bloquean la fila de la cuenta (`SELECT … FOR UPDATE`) y exigen `status =
 | `tab_add_items(tab_id, items[])` | cajero | Producto o promoción; precio/impuesto desde la BD (asignado en combos), descuenta stock atómicamente, *upsert* en `tab_items` |
 | `tab_remove_item(tab_id, item_id, quantity, reason)` | **gerente+** | Reduce o quita la línea, repone stock; falla si el total resultante quedaría por debajo de lo ya pagado |
 | `tab_set_discount(tab_id, discount)` | cajero | Solo si no hay pagos |
-| `tab_pay(tab_id, member_id, method, amount)` | cajero | Rechaza un monto mayor al saldo; **cierra la cuenta sola** cuando el saldo llega a 0 |
-| `tab_pay_split(tab_id, member_id, payments jsonb)` | cajero | Igual, con 1 o 2 pagos en una transacción. Si la suma supera el saldo, no inserta ninguno |
+| `tab_pay(tab_id, member_id, method, amount, idempotency_key?)` | cajero | Rechaza un monto mayor al saldo; **cierra la cuenta sola** cuando el saldo llega a 0. `p_idempotency_key` es opcional: la misma clave + el mismo payload no cobra dos veces; clave igual y payload distinto → 409 |
+| `tab_pay_split(tab_id, member_id, payments jsonb, idempotency_key?)` | cajero | Igual, con 1 o 2 pagos en una transacción (métodos distintos). Si la suma supera el saldo, no inserta ninguno. Misma idempotencia opcional |
 | `void_tab(tab_id, reason)` | **gerente+** | Solo sin pagos; repone todo el stock |
-| `defer_tab(tab_id, due_date, reminder, note)` | cajero | Cierra la tab como orden `pending` (cuenta por cobrar). Exige cliente y balance > 0. Ver [cuentas por cobrar](cuentas-por-cobrar.md) |
+| `defer_tab(tab_id, due_date, reminder, note, customer_id?, debtor_name?, payments?, idempotency_key?)` | cajero | Cierra la tab como orden `pending`. Cliente **o** nombre libre (`debtor_name` 2–120); abono inicial opcional (suma **estrictamente menor** que el saldo). `Idempotency-Key` **obligatoria** en `POST /tabs/{id}/defer`. Ver [cuentas por cobrar](cuentas-por-cobrar.md) |
 
 ## Cierre (`_create_order_from_tab` / `_close_tab`)
 `_close_tab` es un wrapper de `_create_order_from_tab(tab_id, 'completed')`. Cuando el saldo llega a 0 vía `tab_pay`/`tab_pay_split`: inserta una `orders` normal (`status='completed'`, `settled_at` ahora, `tab_id` apuntando a la cuenta), copia `tab_items` → `order_items` **sin volver a tocar el stock** (ya se descontó al añadir), copia `tab_payments` → `payments`
@@ -62,12 +62,12 @@ el trigger de clientes actualiza `total_spent`/`loyalty_points`, y **`refund_ord
 - **`Sheet` del carrito** con dos pestañas: *Carrito* y *Cuentas*. En *Carrito*, además de *Checkout*, el botón **"Añadir a cuenta"** abre un diálogo para elegir una cuenta abierta o crear una nueva (etiqueta,
   cliente opcional, personas separadas por coma) y envía las líneas con `tab_add_items`.
 - **Detalle de una cuenta** (`tab-detail-sheet.tsx`): ítems (con botón "Quitar" solo para gerente+), personas, resumen (subtotal/impuesto/descuento/total/pagado/saldo), pagos hechos, y el cobro:
-  - **"Cobrar saldo completo"** en un solo pago, o **dividido** en dos métodos (`tab_pay_split`). Al cerrar la cuenta, el POS abre el mismo diálogo «Venta completada» que una venta directa.
+  - **"Cobrar saldo completo"** abre el mismo `PaymentDialog` de la venta directa (`amountEditable`): se puede pagar menos que el saldo (abono libre), dividir en dos métodos, y si hay efectivo se muestra «Recibido» y «Cambio»/«Falta» (solo visual). Un pago envía `Idempotency-Key` (UUID generado al abrir el diálogo). Al cerrar la cuenta, el POS abre el mismo diálogo «Venta completada» que una venta directa.
   - **"Partes iguales":** se eligen las personas y `lib/tab-split.ts` reparte el saldo en unidades mínimas de la moneda (el resto va a las primeras partes, uno por uno, así la suma es siempre exacta); cada parte
     tiene su propio botón *Cobrar*.
   - **"Montos libres":** un campo por persona con lo que falta calculado en vivo (`lib/tab-split.ts#validateCustom`).
   - **La BD es la barrera real:** `tab_pay` valida cada cobro contra el saldo vivo, así que la sugerencia del cliente nunca puede resultar en un cobro de más.
-  - **"Cerrar como cuenta por cobrar"** (solo si hay cliente): diferir el saldo restante. Ver [cuentas por cobrar](cuentas-por-cobrar.md).
+  - **"Cerrar como cuenta por cobrar"** (`defer-tab-dialog.tsx`): no exige cliente — basta un nombre libre. Se puede registrar un abono inicial (mismos `PaymentFields` que el cobro). Ver [cuentas por cobrar](cuentas-por-cobrar.md).
   - **"Anular cuenta"** (gerente+, solo sin pagos) pide un motivo (≥ 3 caracteres).
   - Al cerrarse: `toast` con el número de orden y enlace a `/orders/{id}`.
 
@@ -76,7 +76,7 @@ Registrados en [decisiones-pendientes](../06-roadmap/decisiones-pendientes.md): 
 
 ## Límites conocidos
 - Sin página de historial de cuentas cerradas/anuladas aparte de su orden (`/tabs` como listado propio queda fuera de alcance).
-- Sin propinas ni vuelto en el cobro de una cuenta (igual que la venta directa, D5).
+- Sin propinas. El vuelto de un cobro en efectivo se muestra en `PaymentDialog` (D5) pero no se guarda.
 - La sugerencia de "partes iguales"/"montos libres" es solo del lado del cliente; si dos cajeros cobran a la vez el saldo puede agotarse antes de que el segundo confirme (la RPC lo rechaza con un error, no con datos incorrectos).
 
 Relacionados: [POS](pos-checkout.md), [Cuentas por cobrar](cuentas-por-cobrar.md), [Órdenes y reembolsos](ordenes-y-reembolsos.md), [RLS](../02-base-de-datos/03-rls-y-politicas.md), [triggers y funciones](../02-base-de-datos/04-triggers-y-funciones.md).

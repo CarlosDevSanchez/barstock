@@ -49,9 +49,10 @@ alcance es seguro. Excluye reembolsos (`status = 'completed'`), respeta la venta
 
 Mismo patrón que las RPC de negocio de arriba (`SECURITY DEFINER`, `search_path=''`, errores `P0001`/`P0002`/`42501`); documentadas en detalle
 en [cuentas-abiertas](../03-modulos/cuentas-abiertas.md). Todas bloquean la cuenta con `SELECT … FOR UPDATE` antes de tocar nada:
-`open_tab`, `tab_add_members`, `tab_add_items` (cajero+); `tab_remove_item`, `void_tab` (gerente+); `tab_set_discount`, `tab_pay` (cajero+).
-Dos internas sin `GRANT` a nadie: `_tab_totals` (la fórmula de `create_sale` aplicada a `tab_items`) y `_close_tab` (convierte la cuenta pagada
-en una `orders` normal). `tab_summary(p_tab_id)` expone `_tab_totals` de solo lectura para el endpoint de detalle.
+`open_tab`, `tab_add_members`, `tab_add_items` (cajero+); `tab_remove_item`, `void_tab` (gerente+); `tab_set_discount`, `tab_pay` / `tab_pay_split` (cajero+; `p_idempotency_key` opcional, `20261007000001`).
+Dos internas sin `GRANT` a nadie: `_tab_totals` (la fórmula de `create_sale` aplicada a `tab_items`) y `_create_order_from_tab` / `_close_tab` (convierten la cuenta en una `orders`; `_create_order_from_tab` acepta `p_debtor_name`). `tab_summary(p_tab_id)` expone `_tab_totals` de solo lectura para el endpoint de detalle.
+
+`defer_tab` v2 (`20261008000001`): `(tab_id, due_date, reminder, note, customer_id?, debtor_name?, payments?, idempotency_key?)`. `list_receivables(status, customer_id, q?, limit?)` — `customer_name = coalesce(cliente, debtor_name)`. Detalle en [cuentas por cobrar](../03-modulos/cuentas-por-cobrar.md).
 
 ## Reportes (`…05`) — `SECURITY INVOKER`
 

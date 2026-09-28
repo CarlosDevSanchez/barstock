@@ -12,6 +12,10 @@ import { useMoney, useSession } from '@/components/session-provider'
 import { ConfirmDialog } from '@/components/confirm-dialog'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
+import { PageHeader } from '@/components/page-header'
+import { Pagination } from '@/components/pagination'
+import { MultiSelectDropdown } from '@/components/multi-select-dropdown'
+import { ListCardRow, ResponsiveList } from '@/components/responsive-list'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
@@ -19,7 +23,9 @@ import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { useApiQuery } from '@/hooks/use-api-query'
+import { usePagination } from '@/hooks/use-pagination'
 
 const toLocalInput = (iso: string) => {
     const date = new Date(iso)
@@ -63,38 +69,31 @@ export default function CashPage() {
         }
     }
 
-    const toggleUser = (id: string) => {
-        setResponsibles(current => {
-            const base = current.length ? current : [user.id]
-            return base.includes(id) ? base.filter(item => item !== id) : [...base, id]
-        })
-    }
-
     return (
         <div className="space-y-6">
-            <div className="flex flex-wrap items-end justify-between gap-4">
-                <div>
-                    <h1 className="text-3xl font-bold">{t('title')}</h1>
-                    <p className="text-muted-foreground">{t('subtitle')}</p>
-                </div>
-                {data.day ? (
-                    <Button variant="outline" onClick={() => setCloseDay(true)}>
-                        {t('closeDay')}
-                    </Button>
-                ) : (
-                    <Button
-                        disabled={opening}
-                        onClick={() => {
-                            setOpening(true)
-                            run(() => cashApi.openDay())
-                                .catch(() => undefined)
-                                .finally(() => setOpening(false))
-                        }}
-                    >
-                        {t('openDay')}
-                    </Button>
-                )}
-            </div>
+            <PageHeader
+                title={t('title')}
+                description={t('subtitle')}
+                actions={
+                    data.day ? (
+                        <Button variant="outline" onClick={() => setCloseDay(true)}>
+                            {t('closeDay')}
+                        </Button>
+                    ) : (
+                        <Button
+                            disabled={opening}
+                            onClick={() => {
+                                setOpening(true)
+                                run(() => cashApi.openDay())
+                                    .catch(() => undefined)
+                                    .finally(() => setOpening(false))
+                            }}
+                        >
+                            {t('openDay')}
+                        </Button>
+                    )
+                }
+            />
 
             {data.day ? (
                 <p className="text-sm text-muted-foreground">
@@ -136,21 +135,20 @@ export default function CashPage() {
                                 onChange={event => setFloatAmount(event.target.value)}
                             />
                         </div>
-                        <fieldset className="space-y-1">
-                            <legend className="text-sm font-medium">{t('responsibles')}</legend>
-                            <div className="flex flex-wrap gap-3">
-                                {data.staff.map(person => (
-                                    <label key={person.id} className="flex items-center gap-2 text-sm">
-                                        <input
-                                            type="checkbox"
-                                            checked={chosenUsers.includes(person.id)}
-                                            onChange={() => toggleUser(person.id)}
-                                        />
-                                        {person.full_name ?? person.id.slice(0, 8)}
-                                    </label>
-                                ))}
-                            </div>
-                        </fieldset>
+                        <div className="space-y-1">
+                            <Label htmlFor="cash-responsibles">{t('responsibles')}</Label>
+                            <MultiSelectDropdown
+                                id="cash-responsibles"
+                                className="w-56"
+                                values={chosenUsers}
+                                onChange={setResponsibles}
+                                placeholder={t('responsibles')}
+                                options={data.staff.map(person => ({
+                                    value: person.id,
+                                    label: person.full_name ?? person.id.slice(0, 8)
+                                }))}
+                            />
+                        </div>
                         <Button
                             disabled={!chosenRegister || chosenUsers.length === 0}
                             onClick={() =>
@@ -257,32 +255,99 @@ function DayHistory({
     onChanged: () => void
 }) {
     const t = useTranslations('cash')
+    const tc = useTranslations('common')
     const days = useApiQuery(signal => cashApi.listDays(undefined, signal), 'cash-history')
     const [adjust, setAdjust] = useState<BusinessDay | null>(null)
+    const { page, pageSize, setPage, setPageSize } = usePagination()
     if (days.error) return <QueryError error={days.error} onRetry={days.reload} />
     if (!days.data) return null
+    // `listDays` returns the full history (no server-side paging), so the table pages through it client-side.
+    const pageDays = days.data.slice((page - 1) * pageSize, page * pageSize)
     return (
         <section className="space-y-3">
             <h2 className="text-lg font-semibold">{t('history')}</h2>
-            <ul className="space-y-2">
-                {days.data.map(day => (
-                    <li key={day.id} className="flex flex-wrap items-center justify-between gap-2 text-sm">
-                        <span>
-                            {when(day.opened_at)}
-                            {day.closed_at ? ` – ${when(day.closed_at)}` : ''}
-                            {day.close_kind === 'auto' ? ` · ${t('auto')}` : ''}
-                        </span>
-                        <span className="flex items-center gap-2">
-                            {day.needs_review ? <Badge variant="outline">{t('needsReview')}</Badge> : null}
-                            {admin && day.needs_review ? (
-                                <Button variant="outline" size="sm" onClick={() => setAdjust(day)}>
-                                    {t('adjust')}
-                                </Button>
-                            ) : null}
-                        </span>
-                    </li>
-                ))}
-            </ul>
+            {days.data.length === 0 ? (
+                <p className="text-sm text-muted-foreground">{t('historyEmpty')}</p>
+            ) : (
+                <ResponsiveList
+                    items={pageDays}
+                    keyOf={day => day.id}
+                    table={
+                        <Card className="rounded-2xl p-6">
+                            <Table>
+                                <TableHeader>
+                                    <TableRow>
+                                        <TableHead>{t('opened')}</TableHead>
+                                        <TableHead>{t('closed')}</TableHead>
+                                        <TableHead>{tc('status')}</TableHead>
+                                        {admin ? <TableHead className="text-right">{tc('actions')}</TableHead> : null}
+                                    </TableRow>
+                                </TableHeader>
+                                <TableBody>
+                                    {pageDays.map(day => (
+                                        <TableRow key={day.id}>
+                                            <TableCell>{when(day.opened_at)}</TableCell>
+                                            <TableCell>{day.closed_at ? when(day.closed_at) : '—'}</TableCell>
+                                            <TableCell>
+                                                <div className="flex flex-wrap gap-1.5">
+                                                    {day.close_kind === 'auto' ? (
+                                                        <Badge variant="outline">{t('auto')}</Badge>
+                                                    ) : null}
+                                                    {day.needs_review ? (
+                                                        <Badge variant="outline">{t('needsReview')}</Badge>
+                                                    ) : null}
+                                                </div>
+                                            </TableCell>
+                                            {admin ? (
+                                                <TableCell className="text-right">
+                                                    {day.needs_review ? (
+                                                        <Button
+                                                            variant="outline"
+                                                            size="sm"
+                                                            onClick={() => setAdjust(day)}
+                                                        >
+                                                            {t('adjust')}
+                                                        </Button>
+                                                    ) : null}
+                                                </TableCell>
+                                            ) : null}
+                                        </TableRow>
+                                    ))}
+                                </TableBody>
+                            </Table>
+                        </Card>
+                    }
+                    renderCard={day => (
+                        <ListCardRow
+                            title={when(day.opened_at)}
+                            subtitle={`${day.closed_at ? when(day.closed_at) : '—'}${
+                                day.close_kind === 'auto' ? ` · ${t('auto')}` : ''
+                            }`}
+                            value={day.needs_review ? <Badge variant="outline">{t('needsReview')}</Badge> : undefined}
+                            menu={
+                                admin && day.needs_review ? (
+                                    <button
+                                        type="button"
+                                        className="hover:bg-accent block w-full rounded-sm px-2 py-1.5 text-left text-sm"
+                                        onClick={() => setAdjust(day)}
+                                    >
+                                        {t('adjust')}
+                                    </button>
+                                ) : undefined
+                            }
+                        />
+                    )}
+                />
+            )}
+            {days.data.length > 0 ? (
+                <Pagination
+                    page={page}
+                    pageSize={pageSize}
+                    total={days.data.length}
+                    onPageChange={setPage}
+                    onPageSizeChange={setPageSize}
+                />
+            ) : null}
             <AdjustDialog
                 day={adjust}
                 onOpenChange={open => {

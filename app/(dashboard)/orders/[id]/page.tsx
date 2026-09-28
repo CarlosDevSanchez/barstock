@@ -286,7 +286,7 @@ export default function OrderDetailPage() {
                             <div className="flex justify-between gap-4">
                                 <span className="text-muted-foreground">{t('name')}</span>
                                 <span className="min-w-0 truncate text-right font-semibold">
-                                    {order.customer?.name || t('walkInCustomer')}
+                                    {order.customer?.name || order.debtor_name || t('walkInCustomer')}
                                 </span>
                             </div>
                             {order.customer?.email && (

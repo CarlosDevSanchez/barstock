@@ -48,7 +48,7 @@ servidor — ver [productos](../03-modulos/productos.md#imagenes-de-producto)), 
 
 ## Ventas
 **`orders`** — `order_number` UNIQUE NOT NULL (`ORD-YYMMDD-NNNNNN`, secuencia `order_number_seq`), `customer_id` → `customers` (NULL = mostrador), `status` NOT NULL default `pending`, `subtotal`, `discount`, `tax`, `total` NOT NULL,
-`notes`, `created_by` → `auth.users`, **`refunded_at`, `refunded_by` → `auth.users`, `refund_reason`**. `CHECK` importes ≥ 0 y **`total = subtotal − discount + tax`** (`NOT VALID`: se exige en filas nuevas; validar tras depurar datos antiguos).
+`notes`, `created_by` → `auth.users`, **`refunded_at`, `refunded_by` → `auth.users`, `refund_reason`**, **`debtor_name`** (`text` nullable, 2–120 caracteres recortados; una `pending` exige `customer_id` **o** `debtor_name`). `CHECK` importes ≥ 0 y **`total = subtotal − discount + tax`** (`NOT VALID`: se exige en filas nuevas; validar tras depurar datos antiguos). Ver [cuentas por cobrar](../03-modulos/cuentas-por-cobrar.md).
 Offline (F2): `client_ref UUID UNIQUE` (nullable; misma clave que la idempotencia del cobro), `occurred_at timestamptz` (nullable; hora del dispositivo), `source text NOT NULL default 'online' CHECK IN ('online','offline')`, `sync_issues jsonb` (nullable), `reviewed_by/reviewed_at` (reservados para F4).
 
 **`order_items`** — `order_id` → `orders` CASCADE NOT NULL, `product_id` → `products` NOT NULL, `variant_id`, **`promotion_id` → `promotions` (nullable; líneas nacidas de un paquete; permite promo soft-deleted)**, `quantity` (`CHECK > 0`), `unit_price`, `discount`, `tax`, `total`, **`unit_cost`** (`NUMERIC(14,2)`, nullable: foto de `products.cost_price` al vender; las líneas anteriores quedan en null). `CHECK` importes ≥ 0 y **`total = unit_price × quantity − discount + tax`** (`NOT VALID`). Guarda el **precio con el que se vendió**.
@@ -119,3 +119,5 @@ Ver [cuentas-abiertas](../03-modulos/cuentas-abiertas.md) para el flujo completo
 | `create_sale` y `tab_pay_split` aceptan 1 o 2 pagos (`p_payments`); `sales_report` cuenta órdenes distintas por método | `20261002000002` |
 | `business_days`, `cash_registers`, `cash_sessions`, `cash_session_users`, `cash_movements`; `orders`/`payments`/`tab_payments` ganan jornada y caja; settings `default_opening_float` y `cash_count_tolerance` (0); registro «Caja 1» | `20261003000001` |
 | `expense_categories`, `expenses` (categoría, método, jornada, caja, `occurred_at`, anulación), `order_items.unit_cost`; `create_expense` / `void_expense`; el efectivo esperado resta gastos en efectivo | `20261004000001` |
+| `tab_pay` / `tab_pay_split` ganan `p_idempotency_key` opcional (drop + recreate); `tabs.balance()` como columna computada para el listado | `20261007000001` |
+| `orders.debtor_name` + CHECKs; `defer_tab` v2 (`p_customer_id` / `p_debtor_name` / `p_payments` / `p_idempotency_key`); `list_receivables` gana `p_q` y devuelve `debtor_name` | `20261008000001` |

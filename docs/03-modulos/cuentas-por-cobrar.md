@@ -1,8 +1,8 @@
 # Módulo: Cuentas por cobrar
 
-> Nuevo en la fase E · `app/(dashboard)/receivables/page.tsx` · API `GET /receivables`, `POST /tabs/{id}/defer`, `POST /receivables/{id}/payments`, `PATCH /receivables/{id}`, `POST /receivables/{id}/write-off` · Migraciones `20261005000002_order_status_written_off.sql` + `20261005000003_receivables.sql` · Confianza: **[Verificado]** (`test/integration/receivables.test.ts`, UI `/receivables` y tarjeta del dashboard en local).
+> Nuevo en la fase E · `app/(dashboard)/receivables/page.tsx` · API `GET /receivables`, `POST /tabs/{id}/defer`, `POST /receivables/{id}/payments`, `PATCH /receivables/{id}`, `POST /receivables/{id}/write-off` · Migraciones `20261005000002_order_status_written_off.sql` + `20261005000003_receivables.sql` + `20261008000001_defer_tab_v2.sql` · Confianza: **[Verificado]** (`test/integration/receivables.test.ts`, UI `/receivables` y tarjeta del dashboard en local).
 
-Una cuenta abierta con cliente puede **cerrarse como pendiente** (`defer_tab`): el stock ya bajó al añadir ítems, se crea una orden `pending` con el saldo restante y la cuenta (`tab`) queda `closed`. El ingreso **no** cuenta en reportes hasta que el saldo se paga por completo (`pay_receivable` → `completed` + `settled_at`).
+Una cuenta abierta puede **cerrarse como pendiente** (`defer_tab`): hace falta un cliente (el de la tab, uno elegido al diferir) o un nombre libre (`orders.debtor_name`). El stock ya bajó al añadir ítems; se crea una orden `pending` con el saldo restante y la cuenta (`tab`) queda `closed`. Se puede registrar un abono inicial (1–2 métodos, suma **estrictamente menor** que el saldo) en la misma transacción. El ingreso **no** cuenta en reportes hasta que el saldo se paga por completo (`pay_receivable` → `completed` + `settled_at`).
 
 ## Quién
 
@@ -14,7 +14,7 @@ Una cuenta abierta con cliente puede **cerrarse como pendiente** (`defer_tab`): 
 
 ## Columnas en `orders`
 
-`settled_at`, `due_date`, `reminder_enabled`, `reminder_note`, `written_off_at`, `written_off_by`, `write_off_reason`. Estado nuevo: `written_off` (enum en migración aparte: Postgres no deja usarlo en la misma transacción que lo crea).
+`settled_at`, `due_date`, `reminder_enabled`, `reminder_note`, `debtor_name`, `written_off_at`, `written_off_by`, `write_off_reason`. Una `pending` exige `customer_id` o `debtor_name`. Estado nuevo: `written_off` (enum en migración aparte: Postgres no deja usarlo en la misma transacción que lo crea).
 
 Backfill: órdenes `completed`/`refunded` existentes reciben `settled_at = coalesce(occurred_at, created_at)`.
 
@@ -22,13 +22,13 @@ Backfill: órdenes `completed`/`refunded` existentes reciben `settled_at = coale
 
 | RPC | Qué hace |
 |---|---|
-| `_create_order_from_tab(tab_id, status)` | Interna. Extrae el cuerpo de `_close_tab`. Si `completed`, pone `settled_at = now()`; si `pending`, lo deja null. Copia ítems, pagos parciales de la tab y cierra la tab. |
+| `_create_order_from_tab(tab_id, status, debtor_name?)` | Interna. Extrae el cuerpo de `_close_tab`. Si `completed`, pone `settled_at = now()`; si `pending`, lo deja null. Copia ítems, pagos parciales de la tab y cierra la tab. `p_debtor_name` entra en el INSERT (un CHECK de Postgres no puede ser DEFERRABLE, así que no se puede rellenar `debtor_name` después). |
 | `_close_tab` | Wrapper → `_create_order_from_tab(..., 'completed')` |
-| `defer_tab` | Tab abierta, con `customer_id`, balance > 0. Crea orden `pending` y guarda vencimiento/recordatorio/nota. |
+| `defer_tab` | Tab abierta, balance > 0. Deudor: `p_customer_id` (activo), el `customer_id` de la tab, o `p_debtor_name` (2–120). Abono inicial opcional (1–2 métodos, suma < saldo) se escribe en `tab_payments` y `_create_order_from_tab` lo copia. `Idempotency-Key` **obligatoria** en `POST /tabs/{id}/defer`. |
 | `pay_receivable` | 1–2 pagos (`method`/`amount`, métodos distintos). `FOR UPDATE` de la orden. Suma ≤ saldo. Idempotencia como `create_sale`, pero la cabecera `Idempotency-Key` es **obligatoria** en `POST /receivables/{id}/payments` (400 si falta) — un cobro nunca debe poder reintentarse sin ella. Al llegar a 0: `completed`, `settled_at = now()`; `business_day_id` se actualiza con la jornada activa **solo si hay una abierta**, si no conserva el que ya tenía (no se pierde el vínculo con la jornada donde se difirió). |
 | `update_receivable` | Solo `pending`. |
 | `write_off_receivable` | Solo `pending` → `written_off`. **No** pone `settled_at`. |
-| `list_receivables` | Filas con saldo, `days_overdue`, `reminder_note`, etc. `p_status` acepta **solo** `null` (pending + written_off), `'pending'` o `'written_off'`: cualquier otro valor es `P0001` (S1 — antes era texto libre y `SECURITY DEFINER`, así que un cajero podía leer estados que no debía). `p_limit` 1–500 (default 200), orden por `due_date nulls last`. |
+| `list_receivables` | Filas con saldo, `days_overdue`, `reminder_note`, `debtor_name`, `customer_id`. `customer_name` = `coalesce(cliente, debtor_name)`. `p_q` busca por ese nombre. `p_status` acepta **solo** `null` (pending + written_off), `'pending'` o `'written_off'`. `p_limit` 1–500 (default 200), orden por `due_date nulls last`. |
 | `refund_order` | Rechaza `pending` con `P0001` antes del chequeo genérico. |
 
 `create_sale` ahora escribe `settled_at = coalesce(occurred_at, now())`.
@@ -42,15 +42,13 @@ Backfill: órdenes `completed`/`refunded` existentes reciben `settled_at = coale
 
 ## UI
 
-- POS: «Cerrar como cuenta por cobrar» solo si la tab tiene cliente.
+- POS: «Cerrar como cuenta por cobrar» si hay saldo (cliente opcional; se puede poner solo un nombre).
 - `/receivables`: lista, pago (1–2 métodos), editar (gerente), castigar (admin).
   - Editar preserva `reminder_note` como valor inicial del diálogo (antes se perdía porque `list_receivables` no
     la devolvía).
-  - El diálogo de pago dividido reutiliza la misma lógica pura del POS (`lib/tab-split.ts`:
-    `splitRemainder`/`paymentGap`): el segundo monto se autocompleta con lo que falta del saldo, muestra
-    «Falta»/«Sobra» mientras no cuadre y el botón queda deshabilitado si los montos no suman el saldo o si se
-    repite el método (antes había que calcular el segundo monto a mano y no había ninguna validación en el
-    cliente).
+  - El diálogo de abono es el mismo `PaymentDialog` del POS (`amountEditable`): el monto se puede bajar del
+    saldo (abono parcial), un pago dividido no puede repetir método (la segunda fila excluye el primero) y, si
+    hay efectivo, muestra recibido y cambio vía `cashDifference`.
 - Cliente: bloque «Saldo pendiente».
 - Ticket: línea «PENDIENTE DE PAGO» si `status = pending`.
 - Dashboard: tarjeta «Por cobrar».

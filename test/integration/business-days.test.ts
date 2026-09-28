@@ -204,6 +204,47 @@ describe('business days and cash sessions', () => {
         expect(closed.data).toMatchObject({ expected_cash: 80, cash_sales: 80, open_tab_cash: 0 })
     })
 
+    test('a defer_tab cash abono counts once in the session expected total', async () => {
+        await closeAnyDay()
+        await cashier.rpc('open_business_day', {})
+        const session = await cashier.rpc('open_cash_session', {
+            p_register_id: await registerId(),
+            p_opening_float: 0,
+            p_user_ids: [users.cashier.id]
+        })
+        expect(session.error).toBeNull()
+        const product = await createProduct({ selling_price: 80, tax_rate: 0, stock: 2 })
+        const tab = await cashier.rpc('open_tab', {
+            p_label: 'Defer abono',
+            p_customer_id: null as unknown as string,
+            p_members: []
+        })
+        expect(tab.error).toBeNull()
+        expect(
+            (
+                await cashier.rpc('tab_add_items', {
+                    p_tab_id: tab.data!,
+                    p_items: [{ product_id: product.id, quantity: 1 }]
+                })
+            ).error
+        ).toBeNull()
+        const deferred = await (
+            cashier as unknown as {
+                rpc: (fn: string, args: Record<string, unknown>) => PromiseLike<{ error: { code?: string } | null }>
+            }
+        ).rpc('defer_tab', {
+            p_tab_id: tab.data,
+            p_due_date: '2099-01-15',
+            p_reminder: false,
+            p_note: null,
+            p_debtor_name: 'Cash abono',
+            p_payments: [{ method: 'cash', amount: 30 }]
+        })
+        expect(deferred.error).toBeNull()
+        const summary = await manager.rpc('cash_session_summary', { p_session_id: session.data! })
+        expect(summary.data).toMatchObject({ expected_cash: 30, cash_sales: 30, open_tab_cash: 0 })
+    })
+
     test('a day open for 25 hours closes itself on the next sale', async () => {
         await closeAnyDay()
         const opened = await cashier.rpc('open_business_day', {})
