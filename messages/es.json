@@ -356,7 +356,16 @@
     "stockUntracked": "Sin control",
     "stockOfBase": "(×{units} de {base})",
     "createPresentation": "Crear presentación",
-    "createPresentationAria": "Crear una presentación de {name}"
+    "createPresentationAria": "Crear una presentación de {name}",
+    "marginTitle": "Márgenes (antes de impuestos)",
+    "targetMargin": "% margen objetivo",
+    "markupAmount": "Margen unitario",
+    "suggestedPrice": "Precio sugerido",
+    "unitProfit": "Utilidad por unidad",
+    "realMargin": "% real",
+    "marginHint": "Se calcula a partir del costo y del precio de venta; no se puede editar. El % objetivo se cambia en Ajustes.",
+    "belowTarget": "El precio de venta está por debajo del precio sugerido.",
+    "useSuggestedPrice": "Usar precio sugerido: {price}"
   },
   "settings": {
     "title": "Ajustes",
@@ -393,7 +402,9 @@
     "addLogo": "Añadir logotipo",
     "changeLogo": "Cambiar logotipo",
     "removeLogo": "Quitar logotipo",
-    "logoResizeFailed": "No se pudo procesar esa imagen. Prueba con otro archivo."
+    "logoResizeFailed": "No se pudo procesar esa imagen. Prueba con otro archivo.",
+    "targetMargin": "% de margen objetivo",
+    "targetMarginHint": "Porcentaje sobre el costo con el que se calcula el precio sugerido de cada producto."
   },
   "categories": {
     "title": "Categorías",

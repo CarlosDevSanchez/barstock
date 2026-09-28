@@ -13,7 +13,7 @@
 ## Qué hace
 - **Lista** paginada (25) con búsqueda por nombre, SKU o código de barras (`ILIKE`, en servidor, con *debounce*); columnas producto, SKU, categoría, costo (gerente+), precio, **stock** (ver [modos de stock](#modos-de-stock): «Sin control», las unidades propias, o «2 (×15 de Cigarrillo)») y estado.
   Gerente+: en la fila de un producto que controla su stock, **«Crear presentación»** abre el formulario ya enlazado a ese base.
-- **Formulario** (`react-hook-form` + `productCreateSchema`): nombre*, descripción, SKU*, código de barras, categoría, **tasa de impuesto en %**, costo* y precio*. Un producto nuevo arranca con la
+- **Formulario** (`react-hook-form` + `productCreateSchema`): nombre*, descripción, SKU*, código de barras, categoría, **tasa de impuesto en %**, costo* y precio* (con el panel de [márgenes](#márgenes)). Un producto nuevo arranca con la
   tasa por defecto de **Ajustes**. `''` se guarda como `null` (barcode, categoría, descripción): varios productos sin código de barras no chocan con `UNIQUE`.
 - **Borrado:** `ConfirmDialog` → `DELETE` = `deleted_at = now()` y `is_active = false`. Desaparece del catálogo y del POS; **las ventas pasadas lo conservan**. El SKU queda reservado.
 
@@ -51,6 +51,26 @@ Sección **Inventario** del formulario (`components/products/stock-mode-fields.t
 - Las líneas vendidas guardan una **foto** de dónde salió el stock (`order_items.stock_product_id/stock_units`): un reembolso devuelve al
   mismo sitio aunque el producto cambie después. Detalle en [funciones](../02-base-de-datos/04-triggers-y-funciones.md#modos-de-stock-20261009000001).
 - Decisión y supuestos: D-stock en [decisiones pendientes](../06-roadmap/decisiones-pendientes.md). Recetas de insumos (café → gramos) quedan fuera.
+
+## Márgenes
+Bajo el precio de venta, el formulario muestra un panel **de solo lectura** (`components/products/margin-summary.tsx`, cálculo en
+`lib/margin.ts`) que se recalcula mientras se escriben el costo y el precio. Reproduce la hoja de cálculo con la que el negocio fijaba precios
+(`EJEMPLO PORCENTAJE PRODUCTO.xlsx`):
+
+| Campo | Fórmula | Ejemplo (costo 2 217, venta 5 000, objetivo 35 %) |
+|---|---|---|
+| % margen objetivo | `settings.target_margin` ([Ajustes](ajustes.md)); 35 % por defecto | 35 % |
+| Margen unitario | costo × objetivo | 776 |
+| Precio sugerido | costo + margen unitario | 2 993 |
+| Utilidad por unidad | venta − costo | 2 783 |
+| % real | (venta − costo) / venta | 55,66 % |
+
+- Es **informativo**: no se guarda en `products` ni impide guardar un precio por debajo del sugerido. En ese caso se muestra un aviso y
+  el botón «Usar precio sugerido», que solo rellena el campo.
+- Los importes se redondean a la escala de la moneda (`roundMoney`) y son **sin impuesto**, igual que `selling_price`: el IVA se suma en la venta.
+- Utilidad y % real negativos (venta < costo) se muestran en rojo. Sin precio, el % real queda en «—».
+- Ojo: el objetivo es un **markup sobre el costo** y el % real es un **margen sobre la venta**; no se comparan directamente (35 % sobre el
+  costo equivale a un 25,9 % sobre la venta). Supuesto D-pricing en [decisiones pendientes](../06-roadmap/decisiones-pendientes.md).
 
 ## Endpoints
 `GET /products?page&pageSize&q&category_id&active&ids` · `GET /products/{id}` · `POST /products` (gerente) · `PATCH /products/{id}` (gerente, solo lo enviado) · `DELETE /products/{id}` (gerente, 204).

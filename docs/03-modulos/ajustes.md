@@ -18,6 +18,7 @@ Antes: la pantalla era decorativa (no persistía nada) y había tres fuentes de 
 | `currency` | código ISO 4217 **existente** (`Intl.supportedValuesOf`) | **Todo el dinero de la UI** (`useMoney`); defecto **COP**. Los decimales de cobro salen de `currencyDecimals` / `money_scale` (0 en COP) |
 | `timezone` | zona IANA válida | Agrupación por días en dashboard y reportes (SQL); defecto `America/Bogota` |
 | `tax_rate` | fracción 0–1 (el formulario usa %) | **Tasa por defecto al crear un producto** (cada producto conserva la suya; **no interviene en las ventas**); defecto `0.19` (supuesto D3) |
+| `target_margin` | fracción 0–10 (el formulario usa %) | **Markup objetivo sobre el costo** con el que el formulario de producto calcula el precio sugerido ([márgenes](productos.md#márgenes)); solo informativo, no interviene en las ventas; defecto `0.35` (supuesto D-pricing) |
 | `low_stock_threshold` | entero ≥ 0 | Umbral de la fila de inventario de los **productos nuevos** (los existentes conservan el suyo) |
 | `offline_max_hours` | entero 1–168 | Ventana máxima que `create_sale` acepta para `occurred_at` en una venta offline; fuera de rango se recorta (`sync_issues.occurred_at_clamped`); defecto `12`. Ver [pos-checkout](pos-checkout.md) y [offline-y-sincronizacion](../06-roadmap/offline-y-sincronizacion.md) (F2) |
 | `receipt_template` | `{ header, footer }` (≤ 200) | Encabezado/pie del [ticket de 80 mm](ordenes-y-reembolsos.md) |
