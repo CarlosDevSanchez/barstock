@@ -192,6 +192,12 @@ describe('settings', () => {
         expect(settingsUpdateSchema.safeParse({ timezone: 'Mars/Base' }).success).toBe(false)
         expect(settingsUpdateSchema.safeParse({ tax_rate: 10 }).success).toBe(false)
     })
+    test('target_margin is a fraction that may exceed 100 %', () => {
+        expect(settingsUpdateSchema.parse({ target_margin: 0.35 })).toEqual({ target_margin: 0.35 })
+        expect(settingsUpdateSchema.parse({ target_margin: 2 })).toEqual({ target_margin: 2 })
+        expect(settingsUpdateSchema.safeParse({ target_margin: -0.1 }).success).toBe(false)
+        expect(settingsUpdateSchema.safeParse({ target_margin: 35 }).success).toBe(false)
+    })
     test('PATCH keeps only the sent keys', () => {
         expect(settingsUpdateSchema.parse({ store_name: 'Shop' })).toEqual({ store_name: 'Shop' })
     })

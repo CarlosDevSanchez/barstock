@@ -112,6 +112,14 @@ Motivo: evitar reportar precio de lista (p. ej. 20 000) cuando se cobró el pa
 aceptable con costo de catálogo actual.
 Impacto: migración `20260924000003_sales_report_promo_margin.sql`, `/reports`, [reportes](../03-modulos/reportes.md).
 
+### D-pricing — Supuesto 2026-09-28 [Por verificar]
+Supuesto: el formulario de producto muestra márgenes de solo lectura con las fórmulas de la hoja del negocio (`EJEMPLO PORCENTAJE
+PRODUCTO.xlsx`): margen unitario = costo × objetivo, precio sugerido = costo + margen, utilidad = venta − costo, % real = utilidad / venta.
+El objetivo es un ajuste de tienda (`settings.target_margin`, 35 % por defecto, solo admin). Por validar con el propietario: si el 35 %
+es el valor correcto, si debe variar por categoría o producto, y si el % real debería compararse con el objetivo como margen sobre venta.
+Impacto: `lib/margin.ts`, `components/products/margin-summary.tsx`, `/settings`. Sin migración (clave nueva en `settings`).
+Detalle: [productos § Márgenes](../03-modulos/productos.md#márgenes).
+
 ## Detalle de las decisiones de mayor impacto
 
 ### D3 — Regla fiscal

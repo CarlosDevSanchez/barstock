@@ -72,6 +72,25 @@ export const taxRatePercent = z.preprocess(
         .max(1, 'validation.maxPercent')
         .refine(hasAtMostDecimals(4), 'validation.atMostTwoDecimals')
 )
+/** Target markup on the cost as a fraction (0.35 = 35 %); may exceed 100 % (a drink sold at 3× its cost). */
+export const targetMargin = z.preprocess(
+    toNumber,
+    numberField()
+        .min(0, 'validation.minZero')
+        .max(10, 'validation.tooLarge')
+        .refine(hasAtMostDecimals(4), 'validation.atMostFourDecimals')
+)
+/** Target markup typed as a percentage in a form ("35") and converted to the fraction the API stores (0.35). */
+export const targetMarginPercent = z.preprocess(
+    value => {
+        const number = toNumber(value)
+        return typeof number === 'number' && Number.isFinite(number) ? Math.round(number * 100) / 10000 : number
+    },
+    numberField()
+        .min(0, 'validation.minZero')
+        .max(10, 'validation.tooLarge')
+        .refine(hasAtMostDecimals(4), 'validation.atMostTwoDecimals')
+)
 export const positiveInt = (max: number) =>
     z.preprocess(
         toNumber,

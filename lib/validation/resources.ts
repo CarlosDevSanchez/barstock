@@ -14,6 +14,7 @@ import {
     nullableUuid,
     positiveInt,
     requiredText,
+    targetMargin,
     taxRate
 } from './common'
 
@@ -279,6 +280,8 @@ export const settingsSchema = z.object({
         numberField().int('validation.wholeNumber').min(0, 'validation.minZero').max(100_000, 'validation.tooLarge')
     ),
     tax_rate: taxRate,
+    // Markup on the cost the product form measures prices against (informative only: never enforced on a sale).
+    target_margin: targetMargin,
     // How long a till may operate offline before create_sale clamps an offline sale's occurred_at to this window
     // (sync_issues.occurred_at_clamped). See F2, docs/06-roadmap/offline-y-sincronizacion.md.
     offline_max_hours: z.preprocess(

@@ -27,6 +27,9 @@ const latestFor = async (entity: string, entityId: string): Promise<AuditRow[]> 
         .eq('entity', entity)
         .eq('entity_id', entityId)
         .order('occurred_at', { ascending: false })
+        // Rows written in one transaction share occurred_at (now() is the transaction start): break the tie by id so
+        // "most recent first" is deterministic.
+        .order('id', { ascending: false })
     if (error) throw error
     return data as AuditRow[]
 }
@@ -100,10 +103,11 @@ describe('writes are recorded with the right actor and diff', () => {
         expect(response.status).toBe(201)
         const order = dataOf<{ id: string }>(response)
 
-        // Most recent first: create_sale's own INSERT into orders.
+        // create_sale inserts the order and then updates its totals in the same transaction: look for the INSERT.
         const rows = await latestFor('orders', order.id)
-        expect(rows[0]).toMatchObject({ action: 'insert', actor_role: 'cashier', source: 'api' })
-        expect(rows[0]!.actor_id).toBeTruthy()
+        const insert = rows.find(row => row.action === 'insert')
+        expect(insert).toMatchObject({ action: 'insert', actor_role: 'cashier', source: 'api' })
+        expect(insert!.actor_id).toBeTruthy()
     })
 
     test('adjust_inventory logs an update on inventory with only the changed columns', async () => {

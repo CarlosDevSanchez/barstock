@@ -16,11 +16,11 @@ import { ProductImageField } from '@/components/product-image-field'
 import { useSession } from '@/components/session-provider'
 import { errorMessage } from '@/lib/api/client'
 import { settingsApi } from '@/lib/api/settings'
-import { taxRatePercent } from '@/lib/validation/common'
+import { targetMarginPercent, taxRatePercent } from '@/lib/validation/common'
 import { settingsSchema, type SettingsInput } from '@/lib/validation/resources'
 
-// The API stores the default tax rate as a fraction (0.10); the form shows a percentage (10).
-const formSchema = settingsSchema.extend({ tax_rate: taxRatePercent })
+// The API stores the default tax rate and the target margin as fractions (0.10); the form shows percentages (10).
+const formSchema = settingsSchema.extend({ tax_rate: taxRatePercent, target_margin: targetMarginPercent })
 type FormInput = z.input<typeof formSchema>
 type FormOutput = z.output<typeof formSchema>
 
@@ -31,6 +31,7 @@ function toFormValues(settings: SettingsInput): FormInput {
     return {
         ...settings,
         tax_rate: String(Math.round(settings.tax_rate * 10_000) / 100),
+        target_margin: String(Math.round(settings.target_margin * 10_000) / 100),
         low_stock_threshold: String(settings.low_stock_threshold),
         offline_max_hours: String(settings.offline_max_hours)
     }
@@ -162,6 +163,15 @@ export default function SettingsPage() {
                                     min="0"
                                     max="100"
                                     description={t('defaultTaxRateHint')}
+                                />
+                                <TextField
+                                    name="target_margin"
+                                    label={t('targetMargin')}
+                                    type="number"
+                                    step="0.01"
+                                    min="0"
+                                    max="1000"
+                                    description={t('targetMarginHint')}
                                 />
                                 <TextField
                                     name="low_stock_threshold"

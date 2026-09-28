@@ -24,6 +24,7 @@ import { ConfirmDialog } from '@/components/confirm-dialog'
 import { SelectField, TextField } from '@/components/form-fields'
 import { Pagination } from '@/components/pagination'
 import { ProductImageField } from '@/components/product-image-field'
+import { MarginSummary } from '@/components/products/margin-summary'
 import { StockModeFields } from '@/components/products/stock-mode-fields'
 import { QueryError } from '@/components/query-error'
 import { PageSpinner } from '@/components/page-spinner'
@@ -253,6 +254,7 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                                 step={priceStep}
                                 min="0"
                             />
+                            <MarginSummary />
                             <StockModeFields
                                 productId={product?.id ?? null}
                                 initialBase={product?.stock_base ?? (base ? { id: base.id, name: base.name } : null)}

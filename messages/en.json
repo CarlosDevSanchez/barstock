@@ -356,7 +356,16 @@
     "stockUntracked": "Not tracked",
     "stockOfBase": "(×{units} of {base})",
     "createPresentation": "Create presentation",
-    "createPresentationAria": "Create a presentation of {name}"
+    "createPresentationAria": "Create a presentation of {name}",
+    "marginTitle": "Margins (before tax)",
+    "targetMargin": "Target margin %",
+    "markupAmount": "Unit markup",
+    "suggestedPrice": "Suggested price",
+    "unitProfit": "Profit per unit",
+    "realMargin": "Real %",
+    "marginHint": "Calculated from the cost and the selling price; not editable. Change the target % in Settings.",
+    "belowTarget": "The selling price is below the suggested price.",
+    "useSuggestedPrice": "Use suggested price: {price}"
   },
   "settings": {
     "title": "Settings",
@@ -393,7 +402,9 @@
     "addLogo": "Add Logo",
     "changeLogo": "Change Logo",
     "removeLogo": "Remove Logo",
-    "logoResizeFailed": "Could not process that image. Try a different file."
+    "logoResizeFailed": "Could not process that image. Try a different file.",
+    "targetMargin": "Target margin %",
+    "targetMarginHint": "Markup on the cost used to calculate each product's suggested price."
   },
   "categories": {
     "title": "Categories",

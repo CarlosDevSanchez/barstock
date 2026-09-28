@@ -332,3 +332,40 @@ describe('stock modes in the product form', () => {
         })
     })
 })
+
+describe('margins in the product form', () => {
+    const openNewProduct = async (storeSettings = settings) => {
+        renderPage('manager', storeSettings)
+        await screen.findAllByText('Wireless Mouse')
+        clickAddProduct()
+        return screen.findByRole('dialog')
+    }
+    const shown = (key: string) => screen.getByTestId(`margin-${key}`).textContent
+
+    test('shows the spreadsheet figures as the cost and price are typed (read-only, no inputs)', async () => {
+        await openNewProduct({ ...settings, currency: 'COP' })
+        expect(shown('target')).toBe('35%')
+        expect(shown('suggested')).toBe('—')
+
+        type('Cost Price *', '2217')
+        type('Selling Price *', '5000')
+        await waitFor(() => expect(shown('real')).toBe('55.66%'))
+        expect(shown('suggested')).toContain('2,993')
+        expect(shown('profit')).toContain('2,783')
+        const section = screen.getByRole('region', { name: 'Margins (before tax)' })
+        expect(within(section).queryAllByRole('textbox')).toHaveLength(0)
+        expect(within(section).queryAllByRole('spinbutton')).toHaveLength(0)
+    })
+
+    test('uses the target margin from Settings and flags a price below cost', async () => {
+        await openNewProduct({ ...settings, target_margin: 0.5 })
+        type('Cost Price *', '10')
+        type('Selling Price *', '8')
+        await waitFor(() => expect(shown('real')).toBe('-25%'))
+        expect(shown('target')).toBe('50%')
+        expect(screen.getByTestId('margin-profit').className).toContain('text-destructive')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Use suggested price: $15.00' }))
+        expect((screen.getByLabelText('Selling Price *') as HTMLInputElement).value).toBe('15')
+    })
+})
