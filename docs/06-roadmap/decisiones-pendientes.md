@@ -17,7 +17,7 @@
 | D6 | Descuentos: ¿topes por rol? ¿motivo obligatorio? ¿aprobación de gerente? | `create_sale`, RLS | Tope por rol y motivo sobre cierto monto, auditado | Pendiente |
 | D7 | Fidelidad: ¿cómo se acumulan y canjean los puntos? ¿los reembolsos los restan? | [clientes](../03-modulos/clientes.md) | Derivar de las órdenes (trigger/vista), no editar a mano | **Supuesto aplicado, sin validar**: `floor(total_spent)`, reembolsos restan. En COP ≈ 1 punto por peso — escala por revisar |
 | D8 | Reembolsos: ¿parciales? ¿ventana de tiempo? ¿quién autoriza? ¿devuelve al stock siempre? | `refund_order` | Solo gerente/admin, con motivo; parcial por ítem como evolución | Pendiente |
-| D9 | Stock: ¿se permite vender sin stock o sin fila de inventario? ¿stock negativo? | `create_sale`, `CHECK` | No permitir negativo; productos sin control de stock marcados explícitamente | **Supuesto aplicado, sin validar**: nunca negativo; vender sin fila de inventario falla. Excepción añadida en F2: una venta **offline** nunca se rechaza por falta de stock (se descuenta hasta 0 y el faltante queda en `sync_issues.stock_shortfall`), decisión tomada 2026-09-22 (ver [offline-y-sincronizacion](offline-y-sincronizacion.md)) |
+| D9 | Stock: ¿se permite vender sin stock o sin fila de inventario? ¿stock negativo? | `create_sale`, `CHECK` | No permitir negativo; productos sin control de stock marcados explícitamente | **Supuesto aplicado, sin validar**: nunca negativo; vender sin fila de inventario falla. Excepción añadida en F2: una venta **offline** nunca se rechaza por falta de stock (se descuenta hasta 0 y el faltante queda en `sync_issues.stock_shortfall`), decisión tomada 2026-09-22 (ver [offline-y-sincronizacion](offline-y-sincronizacion.md)). Los productos sin control de stock ya existen (`stock_mode = 'none'`, ver D-stock) |
 | D10 | Variantes: ¿se venden desde el POS? ¿qué atributos? | UI del POS, inventario | Si sí: selector de variante y alta en productos | Pendiente |
 | D11 | Ajustes: ¿en BD (`settings`), en cliente, o ambos? | [ajustes](../03-modulos/ajustes.md) | **Solo BD** (tabla `settings`) con RLS solo-admin | Pendiente |
 | D12 | Idioma de la interfaz | UI | Definir si se traduce (i18n) o se queda en inglés | **Decidido (2026-09-21)**: ES por defecto + EN; idioma por usuario (`profiles.locale`), sin segmento `[locale]` en la URL |
@@ -32,6 +32,7 @@
 | D21 | Ticket POS de 80 mm: ¿comprobante interno o factura electrónica (CUFE, QR, resolución DIAN)? | `receipt-ticket.tsx`, ventas al por menor | Comprobante **no fiscal** para esta fase; factura electrónica es un proyecto aparte (DIAN, numeración autorizada, firma) | **Decidido (2026-09-22, propietario)**: no es factura electrónica |
 | D-promos | ¿Paquetes fijos multi-producto? ¿Tabs? ¿Precio en líneas expandidas? | `promotions`, `create_sale`, `tab_add_items`, POS | Paquetes a precio fijo; expansión en RPC con precio **asignado**; tabs **sí** (migración `20260925000001`) | **Decidido (2026-09-22)**: ver abajo |
 | D-margin | ¿Utilidad bruta? ¿Congelar costo/lista en la venta? | `sales_report`, reportes | Base cobrada − `cost_price` actual; markdown de promo vs lista actual; sin snapshot v1 | **Decidido (2026-09-22)**: ver abajo |
+| D-stock | ¿Productos sin stock (café)? ¿Presentaciones anidadas (caja de 15 cigarrillos vs. suelto) con precio propio y stock compartido? | `products`, `create_sale`, `tab_add_items`, compras, POS | Stock en la unidad más pequeña; presentación = producto enlazado al base con factor; un nivel | **Decidido (2026-09-28, propietario)**: ver abajo |
 | D-audit | Retención de `audit_log`: crece sin límite y nadie puede borrarla (append-only por diseño). ¿Archivar filas antiguas, particionar por fecha, o dejarla crecer? | `audit_log`, `docs/03-modulos/auditoria.md` | Sin propuesta todavía: depende del volumen real y de si hay una obligación legal de conservación | Pendiente |
 
 ## Supuestos aplicados en la etapa 1 (a validar con el negocio)
@@ -92,6 +93,16 @@ Decisión: una cuenta abierta se puede diferir a pendiente **sin** ficha de clie
 Motivo: en el mostrador a menudo se fía a alguien que no está en el catálogo (un conocido, una mesa).
 Impacto: migración `20261008000001_defer_tab_v2.sql`, `defer-tab-dialog.tsx`, [cuentas por cobrar](../03-modulos/cuentas-por-cobrar.md).
 
+### D-stock — Decidido 2026-09-28 (propietario)
+Decisión: tres modos por producto (`products.stock_mode`): `own` (como hasta ahora), `none` (siempre vendible, sin inventario — cafés,
+preparados) y `linked` (**presentación**: vender 1 descuenta `stock_units` del producto base). El stock se cuenta en la **unidad más pequeña**
+(el cigarrillo suelto); la caja es otro producto con precio, SKU y costo propios. **Un solo nivel** (el base siempre es `own`). No hay
+«abrir caja» manual ni fracciones.
+Supuestos sin validar: el costo de cada presentación es **independiente** (el formulario solo sugiere costo del base × unidades); las recetas
+de insumos (café → gramos de grano) quedan para una fase posterior; se relaciona con D10 (las variantes siguen sin venderse).
+Impacto: migración `20261009000001_stock_modes.sql`, `lib/stock.ts`, formulario de productos, POS, inventario, compras, promociones.
+Detalle: [productos § Modos de stock](../03-modulos/productos.md#modos-de-stock).
+
 ### D-margin — Decidido 2026-09-22
 Decisión: en `sales_report` (solo gerente+): **ingreso** = lo cobrado (`orders.total` / líneas asignadas);
 **promo_markdown** = lista actual × qty − base asignada (líneas con `promotion_id`); **COGS** = qty ×
@@ -100,6 +111,14 @@ El descuento de combo **no** se mezcla con `orders.discount` (descuento global).
 Motivo: evitar reportar precio de lista (p. ej. 20 000) cuando se cobró el paquete (17 000); utilidad operativa
 aceptable con costo de catálogo actual.
 Impacto: migración `20260924000003_sales_report_promo_margin.sql`, `/reports`, [reportes](../03-modulos/reportes.md).
+
+### D-pricing — Supuesto 2026-09-28 [Por verificar]
+Supuesto: el formulario de producto muestra márgenes de solo lectura con las fórmulas de la hoja del negocio (`EJEMPLO PORCENTAJE
+PRODUCTO.xlsx`): margen unitario = costo × objetivo, precio sugerido = costo + margen, utilidad = venta − costo, % real = utilidad / venta.
+El objetivo es un ajuste de tienda (`settings.target_margin`, 35 % por defecto, solo admin). Por validar con el propietario: si el 35 %
+es el valor correcto, si debe variar por categoría o producto, y si el % real debería compararse con el objetivo como margen sobre venta.
+Impacto: `lib/margin.ts`, `components/products/margin-summary.tsx`, `/settings`. Sin migración (clave nueva en `settings`).
+Detalle: [productos § Márgenes](../03-modulos/productos.md#márgenes).
 
 ## Detalle de las decisiones de mayor impacto
 
@@ -117,7 +136,7 @@ Añadir `store_id` después es costoso (migración de datos, RLS, reportes). Si 
 
 ### D9 — Stock
 Determina si una venta sin fila de `inventory` falla o se permite, y si existe "producto sin control de inventario" (servicios, bebidas
-preparadas). Impacta la UX del POS.
+preparadas). Impacta la UX del POS. El segundo punto se resolvió con D-stock (`stock_mode = 'none'`); la regla de «nunca negativo» sigue sin validar.
 
 ## Cómo registrar una decisión
 

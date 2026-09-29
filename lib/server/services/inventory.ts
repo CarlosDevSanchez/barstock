@@ -9,6 +9,8 @@ import { searchFilter, type Page } from './_shared'
 export type InventoryListItem = Tables<'inventory'> & {
     product: Pick<Tables<'products'>, 'id' | 'name' | 'sku' | 'cost_price'>
     variant: Pick<Tables<'product_variants'>, 'id' | 'name'> | null
+    /** Presentations that sell from this row (a box × 15 of these singles), largest first. */
+    presentations: Array<Pick<Tables<'products'>, 'id' | 'name' | 'stock_units'>>
 }
 
 export interface InventorySummary {
@@ -21,7 +23,8 @@ export interface InventorySummary {
     stock_value: number
 }
 
-const SELECT = '*, product:products!inner(id, name, sku, cost_price, deleted_at), variant:product_variants(id, name)'
+const SELECT =
+    '*, product:products!inner(id, name, sku, cost_price, deleted_at, stock_mode), variant:product_variants(id, name)'
 // Small business: the whole inventory fits comfortably; PostgREST caps a response at 1000 rows anyway.
 const SUMMARY_LIMIT = 1000
 
@@ -37,6 +40,8 @@ export async function listInventory(
         .from('inventory')
         .select(SELECT)
         .is('product.deleted_at', null)
+        // Untracked products and presentations have no stock of their own (a presentation's lives on its base).
+        .eq('product.stock_mode', 'own')
         .order('quantity', { ascending: true })
         .limit(SUMMARY_LIMIT)
     const filter = searchFilter(q, ['name', 'sku'])
@@ -45,9 +50,15 @@ export async function listInventory(
     const { data, error } = await query
     assertNoError(error)
 
+    const presentations = await presentationsByBase(supabase)
     const items: InventoryListItem[] = data.map(({ product, ...row }) => {
-        const { deleted_at: _deleted, ...visible } = product
-        return { ...row, product: visible, variant: row.variant }
+        const { deleted_at: _deleted, stock_mode: _mode, ...visible } = product
+        return {
+            ...row,
+            product: visible,
+            variant: row.variant,
+            presentations: row.variant_id === null ? (presentations.get(row.product_id) ?? []) : []
+        }
     })
     const isLow = (item: InventoryListItem) => item.quantity <= item.low_stock_threshold
     const summary: InventorySummary = {
@@ -62,6 +73,25 @@ export async function listInventory(
     const matching = low ? items.filter(isLow) : items
     const { from, to } = pageRange({ page, pageSize })
     return { rows: matching.slice(from, to + 1), total: matching.length, summary }
+}
+
+/** Every live presentation, grouped by base (a few per store: cheaper than an `in` over up to 1000 row ids). */
+async function presentationsByBase(
+    supabase: AppSupabaseClient
+): Promise<Map<string, InventoryListItem['presentations']>> {
+    const byBase = new Map<string, InventoryListItem['presentations']>()
+    const { data, error } = await supabase
+        .from('products')
+        .select('id, name, stock_units, stock_product_id')
+        .eq('stock_mode', 'linked')
+        .is('deleted_at', null)
+        .order('stock_units', { ascending: false })
+    assertNoError(error)
+    for (const { stock_product_id: baseId, ...presentation } of data) {
+        if (!baseId) continue
+        byBase.set(baseId, [...(byBase.get(baseId) ?? []), presentation])
+    }
+    return byBase
 }
 
 export async function setThreshold(

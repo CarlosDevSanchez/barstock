@@ -36,8 +36,10 @@ export function PromotionCard({
 }: PromotionCardProps) {
     const t = useTranslations('pos')
     const money = useMoney()
-    const maxQty = maxAddable(promotion.available, qtyInCart)
-    const soldOut = promotion.available === null || promotion.available <= 0
+    // available null = only untracked components (e.g. two coffees): never runs out.
+    const unlimited = promotion.available === null
+    const maxQty = unlimited ? Number.POSITIVE_INFINITY : maxAddable(promotion.available, qtyInCart)
+    const soldOut = !unlimited && (promotion.available ?? 0) <= 0
     const canAdd = !soldOut && maxQty > 0
     const recipe = formatPromoRecipe(promotion)
     const stockDetail =
@@ -45,7 +47,11 @@ export function PromotionCard({
     const recipeWithStock = promotion.items
         .map(item => {
             const stock =
-                item.product?.stock === null || item.product?.stock === undefined ? '—' : String(item.product.stock)
+                item.product?.stock_mode === 'none'
+                    ? '∞'
+                    : item.product?.stock === null || item.product?.stock === undefined
+                      ? '—'
+                      : String(item.product.stock)
             return `${item.quantity}× ${item.product?.name ?? '—'} (stock ${stock})`
         })
         .join(' · ')
@@ -91,9 +97,19 @@ export function PromotionCard({
                         variant={soldOut ? 'destructive' : 'secondary'}
                         className="text-[10px]"
                         title={stockDetail}
-                        aria-label={soldOut ? t('outOfStock') : t('packagesLeft', { count: promotion.available ?? 0 })}
+                        aria-label={
+                            soldOut
+                                ? t('outOfStock')
+                                : unlimited
+                                  ? t('alwaysAvailable')
+                                  : t('packagesLeft', { count: promotion.available ?? 0 })
+                        }
                     >
-                        {soldOut ? t('outOfStock') : t('packagesLeft', { count: promotion.available ?? 0 })}
+                        {soldOut
+                            ? t('outOfStock')
+                            : unlimited
+                              ? t('alwaysAvailable')
+                              : t('packagesLeft', { count: promotion.available ?? 0 })}
                     </Badge>
                 </div>
             </CardContent>

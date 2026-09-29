@@ -3,16 +3,22 @@ import { assertNoError, notFound } from '@/lib/server/errors'
 import { trySignedGetUrl } from '@/lib/server/storage'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import { pageRange } from '@/lib/validation/common'
+import { effectiveStock, type StockMode } from '@/lib/stock'
 import type { ProductCreate, ProductsQuery, ProductUpdate } from '@/lib/validation/resources'
 import type { Tables } from '@/types/database'
 import { assertMoneyScale, searchFilter, type Page } from './_shared'
 
 // `image_url` is the legacy, unused column (kept in the DB, never written again); `image_key` is never sent to the
 // client (lib/server/storage.ts: "don't let the client see or choose an object key") — only the signed URL is.
-export type ProductListItem = Omit<Tables<'products'>, 'image_url' | 'image_key'> & {
+export type ProductListItem = Omit<Tables<'products'>, 'image_url' | 'image_key' | 'stock_mode'> & {
     category: Pick<Tables<'categories'>, 'id' | 'name'> | null
-    /** Units in stock (product-level inventory row); null when the product has no inventory row. */
+    stock_mode: StockMode
+    /** Whole sellable units: its own row, or floor(base / stock_units) for a presentation; null when untracked. */
     stock: number | null
+    /** Units on the row it sells from (the base for a presentation); null when untracked. */
+    stock_base_quantity: number | null
+    /** The base product of a presentation (`stock_mode = 'linked'`), else null. */
+    stock_base: { id: string; name: string } | null
     /** Signed R2 URL for image_key (1h TTL), or null when there is no image or storage is not configured. */
     image_url: string | null
 }
@@ -22,32 +28,84 @@ export type ProductListItem = Omit<Tables<'products'>, 'image_url' | 'image_key'
 export type ProductDetail = Omit<Tables<'products'>, 'image_url'> & { image_url: string | null }
 
 /** Shared with `getPosSnapshot` (lib/server/services/pos.ts), so both return the same row shape. */
-export const LIST_SELECT = '*, category:categories(id, name), inventory(quantity, variant_id)'
+export const LIST_SELECT =
+    '*, category:categories(id, name), inventory(quantity, variant_id), stock_base:stock_product_id(id, name)'
 
-/** Turns raw `LIST_SELECT` rows into `ProductListItem`s (stock derived, image key swapped for a signed URL). */
+type InventoryRows = Array<{ quantity: number; variant_id: string | null }>
+const productRowQuantity = (rows: InventoryRows) => rows.find(row => row.variant_id === null)?.quantity ?? null
+
+/**
+ * Units on the stock rows of the given base products (presentations sell from them). PostgREST's typed embeds
+ * cannot reach a base's inventory through the self-reference, so this is one extra query, skipped when empty.
+ */
+export async function baseStockQuantities(
+    supabase: AppSupabaseClient,
+    baseIds: readonly string[]
+): Promise<Map<string, number>> {
+    const quantities = new Map<string, number>()
+    const unique = [...new Set(baseIds)]
+    if (unique.length === 0) return quantities
+    const { data, error } = await supabase
+        .from('inventory')
+        .select('product_id, quantity')
+        .in('product_id', unique)
+        .is('variant_id', null)
+    assertNoError(error)
+    for (const row of data) quantities.set(row.product_id, row.quantity)
+    return quantities
+}
+
+type MappedProduct<T> = Omit<T, 'inventory' | 'stock_mode' | 'image_url' | 'image_key'> & {
+    stock_mode: StockMode
+    stock: number | null
+    stock_base_quantity: number | null
+    image_url: string | null
+}
+
+/**
+ * Turns raw `LIST_SELECT` rows into `ProductListItem`s: stock derived from the product's own row, or from its base's
+ * row for a presentation (one extra query, only when the page has presentations), image key swapped for a signed URL.
+ */
 export async function mapProductRows<
     T extends {
-        inventory: Array<{ quantity: number; variant_id: string | null }>
+        inventory: InventoryRows
+        stock_base: { id: string; name: string } | null
+        stock_mode: string
+        stock_units: number
         image_url: string | null
         image_key: string | null
     }
->(
-    data: T[]
-): Promise<
-    Array<Omit<T, 'inventory' | 'image_url' | 'image_key'> & { stock: number | null; image_url: string | null }>
-> {
+>(supabase: AppSupabaseClient, data: T[]): Promise<Array<MappedProduct<T>>> {
+    const baseQuantity = await baseStockQuantities(
+        supabase,
+        data.flatMap(row => (row.stock_mode === 'linked' && row.stock_base ? [row.stock_base.id] : []))
+    )
+
     return Promise.all(
-        data.map(async ({ inventory, image_url: _legacy, image_key, ...product }) => ({
-            ...product,
-            stock: inventory.find(row => row.variant_id === null)?.quantity ?? null,
-            image_url: await trySignedGetUrl(image_key)
-        }))
+        data.map(async ({ inventory, image_url: _legacy, image_key, ...product }) => {
+            const mode = product.stock_mode as StockMode
+            const base =
+                mode === 'none'
+                    ? null
+                    : mode === 'linked'
+                      ? (baseQuantity.get(product.stock_base?.id ?? '') ?? null)
+                      : productRowQuantity(inventory)
+            // TS cannot see through a spread of a generic that `stock_mode` is overridden, hence the assertion.
+            const mapped = {
+                ...product,
+                stock_mode: mode,
+                stock: effectiveStock(mode, base, product.stock_units),
+                stock_base_quantity: base,
+                image_url: await trySignedGetUrl(image_key)
+            } as MappedProduct<T>
+            return mapped
+        })
     )
 }
 
 export async function listProducts(
     supabase: AppSupabaseClient,
-    { page, pageSize, q, category_id, active, ids }: ProductsQuery
+    { page, pageSize, q, category_id, active, ids, stock_mode }: ProductsQuery
 ): Promise<Page<ProductListItem>> {
     // `.order('id')` after name breaks ties deterministically: without it, offset pagination can duplicate or skip
     // rows whenever two products share a name (or Postgres returns equal-name rows in a different order per page).
@@ -62,12 +120,13 @@ export async function listProducts(
     if (category_id) query = query.eq('category_id', category_id)
     if (active !== undefined) query = query.eq('is_active', active)
     if (ids) query = query.in('id', ids)
+    if (stock_mode) query = query.in('stock_mode', stock_mode)
 
     const { from, to } = pageRange({ page, pageSize })
     const { data, count, error } = await query.range(from, to)
     assertNoError(error)
 
-    const rows = await mapProductRows(data)
+    const rows = await mapProductRows(supabase, data)
     return { rows, total: count ?? 0 }
 }
 
@@ -75,18 +134,22 @@ export interface TopProduct {
     product_id: string
     name: string
     selling_price: number
-    /** Units in stock right now (product-level row); null when the product has no inventory row. */
+    /** Whole sellable units right now (see ProductListItem.stock); null when untracked or without a row. */
     stock: number | null
     category_name: string | null
     /** Units sold in the window, excluding refunded orders. */
     quantity: number
+    stock_mode: StockMode
+    stock_product_id: string | null
+    stock_units: number
+    stock_base_quantity: number | null
 }
 
 /** Store-wide best sellers of the last `days` days (mode of sale), for the POS quick-sell panel. */
 export async function listTopProducts(supabase: AppSupabaseClient, days = 30, limit = 5): Promise<TopProduct[]> {
     const { data, error } = await supabase.rpc('top_selling_products', { p_days: days, p_limit: limit })
     assertNoError(error)
-    return data
+    return data.map(row => ({ ...row, stock_mode: row.stock_mode as StockMode }))
 }
 
 export async function getProduct(supabase: AppSupabaseClient, id: string): Promise<ProductDetail> {

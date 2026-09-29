@@ -6,8 +6,10 @@ import { ApiError } from '@/lib/api/client'
 setupDom()
 const { cleanup, fireEvent, render, screen, waitFor, within } = await import('@testing-library/react')
 
+// A real UUID: it is also the base picked by "Create presentation", and stock_product_id must be a GUID.
+const EXISTING_ID = '11111111-1111-4111-8111-111111111111'
 const existing = product({
-    id: 'p-1',
+    id: EXISTING_ID,
     name: 'Wireless Mouse',
     sku: 'ELEC-001',
     cost_price: 15,
@@ -15,7 +17,7 @@ const existing = product({
     tax_rate: 0.0725
 })
 const create = mock(async (body: unknown) => ({ id: 'new', ...(body as object) }))
-const update = mock(async (_id: string, body: unknown) => ({ id: 'p-1', ...(body as object) }))
+const update = mock(async (_id: string, body: unknown) => ({ id: EXISTING_ID, ...(body as object) }))
 const remove = mock(async () => {})
 
 void mock.module('@/lib/api/products', () => ({
@@ -144,7 +146,7 @@ describe('product form validation', () => {
         fireEvent.click(within(dialog).getByRole('button', { name: 'Update Product' }))
 
         await waitFor(() => expect(update).toHaveBeenCalledTimes(1))
-        expect(update.mock.calls[0]?.[0]).toBe('p-1')
+        expect(update.mock.calls[0]?.[0]).toBe(EXISTING_ID)
         expect(update.mock.calls[0]?.[1]).toMatchObject({ selling_price: 31, tax_rate: 0.0725 })
     })
 })
@@ -283,6 +285,87 @@ describe('deleting', () => {
 
         fireEvent.click(within(screen.getByRole('table')).getByRole('button', { name: 'Delete Wireless Mouse' }))
         fireEvent.click(within(await screen.findByRole('alertdialog')).getByRole('button', { name: 'Delete' }))
-        await waitFor(() => expect(remove).toHaveBeenCalledWith('p-1'))
+        await waitFor(() => expect(remove).toHaveBeenCalledWith(EXISTING_ID))
+    })
+})
+
+describe('stock modes in the product form', () => {
+    test('a plain product is sent as tracking its own stock', async () => {
+        renderPage('manager')
+        await screen.findAllByText('Wireless Mouse')
+        clickAddProduct()
+        const dialog = await screen.findByRole('dialog')
+        type('Product Name *', 'Widget')
+        type('Cost Price *', '4')
+        type('Selling Price *', '9')
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create Product' }))
+
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+        expect(create.mock.calls[0]?.[0]).toMatchObject({ stock_mode: 'own', stock_product_id: null, stock_units: 1 })
+    })
+
+    test('"Create presentation" opens a new product already linked to that base', async () => {
+        renderPage('manager')
+        await screen.findAllByText('Wireless Mouse')
+        fireEvent.click(
+            within(screen.getByRole('table')).getByRole('button', { name: 'Create a presentation of Wireless Mouse' })
+        )
+        const dialog = await screen.findByRole('dialog')
+        type('Product Name *', 'Mouse box x15')
+        type('Cost Price *', '200')
+        type('Selling Price *', '400')
+
+        // Units are required for a presentation: nothing is sent until they are filled in.
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create Product' }))
+        expect(await within(dialog).findByText('Required')).toBeTruthy()
+        expect(create).not.toHaveBeenCalled()
+
+        type('Base units per sale *', '15')
+        expect(await within(dialog).findByTestId('stock-link-preview')).toBeTruthy()
+        fireEvent.click(within(dialog).getByRole('button', { name: 'Create Product' }))
+
+        await waitFor(() => expect(create).toHaveBeenCalledTimes(1))
+        expect(create.mock.calls[0]?.[0]).toMatchObject({
+            stock_mode: 'linked',
+            stock_product_id: EXISTING_ID,
+            stock_units: 15
+        })
+    })
+})
+
+describe('margins in the product form', () => {
+    const openNewProduct = async (storeSettings = settings) => {
+        renderPage('manager', storeSettings)
+        await screen.findAllByText('Wireless Mouse')
+        clickAddProduct()
+        return screen.findByRole('dialog')
+    }
+    const shown = (key: string) => screen.getByTestId(`margin-${key}`).textContent
+
+    test('shows the spreadsheet figures as the cost and price are typed (read-only, no inputs)', async () => {
+        await openNewProduct({ ...settings, currency: 'COP' })
+        expect(shown('target')).toBe('35%')
+        expect(shown('suggested')).toBe('—')
+
+        type('Cost Price *', '2217')
+        type('Selling Price *', '5000')
+        await waitFor(() => expect(shown('real')).toBe('55.66%'))
+        expect(shown('suggested')).toContain('2,993')
+        expect(shown('profit')).toContain('2,783')
+        const section = screen.getByRole('region', { name: 'Margins (before tax)' })
+        expect(within(section).queryAllByRole('textbox')).toHaveLength(0)
+        expect(within(section).queryAllByRole('spinbutton')).toHaveLength(0)
+    })
+
+    test('uses the target margin from Settings and flags a price below cost', async () => {
+        await openNewProduct({ ...settings, target_margin: 0.5 })
+        type('Cost Price *', '10')
+        type('Selling Price *', '8')
+        await waitFor(() => expect(shown('real')).toBe('-25%'))
+        expect(shown('target')).toBe('50%')
+        expect(screen.getByTestId('margin-profit').className).toContain('text-destructive')
+
+        fireEvent.click(screen.getByRole('button', { name: 'Use suggested price: $15.00' }))
+        expect((screen.getByLabelText('Selling Price *') as HTMLInputElement).value).toBe('15')
     })
 })

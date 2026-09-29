@@ -48,6 +48,8 @@ interface CartSheetProps {
     lines: CartLineView[]
     lookupSettled: boolean
     problemWith: (line: CartLineView) => string | null
+    /** Highest quantity the line may reach (stock shared across presentations); null = no cap. */
+    maxQuantityFor: (line: CartLineView) => number | null
     totals: PreviewTotals
     discount: number
     onDiscountChange: (value: number) => void
@@ -106,6 +108,7 @@ export function CartSheet({
     lines,
     lookupSettled,
     problemWith,
+    maxQuantityFor,
     totals,
     discount,
     onDiscountChange,
@@ -200,10 +203,7 @@ export function CartSheet({
                                         {lines.map(line => {
                                             const key = cartLineKey(line.item)
                                             const problem = problemWith(line)
-                                            const maxStock =
-                                                line.kind === 'product'
-                                                    ? line.product?.stock
-                                                    : line.promotion?.available
+                                            const maxStock = maxQuantityFor(line)
                                             const title =
                                                 line.kind === 'product'
                                                     ? (line.product?.name ??
@@ -272,9 +272,7 @@ export function CartSheet({
                                                             className="h-7 w-7"
                                                             aria-label={t('increaseQty')}
                                                             disabled={
-                                                                maxStock !== null &&
-                                                                maxStock !== undefined &&
-                                                                line.item.quantity >= maxStock
+                                                                maxStock !== null && line.item.quantity >= maxStock
                                                             }
                                                             onClick={() =>
                                                                 onUpdateQuantity(key, line.item.quantity + 1)

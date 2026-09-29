@@ -65,6 +65,25 @@ Corren con el RLS del que llama: el dashboard de un cajero solo suma **sus** ven
 
 Solo cuentan órdenes `completed` (los reembolsos se excluyen). Los días se agrupan en la zona horaria de `settings.timezone` (por defecto `America/Bogota`).
 
+## Modos de stock (`20261009000001`)
+
+Productos sin control de stock (`none`) y presentaciones que venden del stock de otro producto (`linked`); detalle funcional en
+[productos](../03-modulos/productos.md#modos-de-stock). Toda RPC que mueve stock pasa por cuatro funciones internas (sin `GRANT` a nadie):
+
+| Función | Qué hace |
+|---|---|
+| `_stock_target(product_id, variant_id)` | De dónde sale el stock **hoy**: la fila propia (`own`, factor 1), la del base (`linked`, factor `stock_units`) o nada (`none`, factor 0) |
+| `_lock_inventory(uuid[])` | Bloquea (`FOR UPDATE`) las filas en **un orden global** (`product_id`, `variant_id`): una venta con caja + sueltos, o dos ventas que resuelven al mismo base por caminos distintos, no se interbloquean |
+| `_take_stock(...)` | Descuenta `cantidad × factor` con `UPDATE … WHERE quantity >= n` (`Insufficient stock for "X"`), o en modo *lenient* (venta offline) toma lo que haya. Registra el movimiento `sale` y devuelve la foto (`stock_product_id`, `stock_units`, `taken` en unidades del base). Acepta una foto previa (línea de cuenta que ya existía) |
+| `_return_stock(...)` | Devuelve unidades según la foto de la línea (null = línea antigua, su propio producto; 0 = nada). Registra `return` |
+
+Redefinidas para usarlas: `create_sale` (online y offline; el faltante offline se anota en **unidades del base** a nombre del base),
+`tab_add_items`, `tab_remove_item`, `void_tab`, `_create_order_from_tab` (copia la foto), `refund_order` (devuelve a la foto, aunque el
+producto haya cambiado de modo o de factor), `receive_purchase` (rechaza `none`; comprar N de una presentación suma `N × stock_units` al base con
+`unit_cost = costo / stock_units`) y `void_purchase` (resta según la foto de `purchase_order_items`). `dashboard_summary` solo cuenta stock bajo
+de productos `own`; `top_selling_products` devuelve el stock efectivo (`floor(base / stock_units)`, null si `none`). `adjust_inventory` no cambia:
+el inventario solo lista filas `own`.
+
 ## Triggers
 
 | Trigger | Tabla | Qué hace |
@@ -73,7 +92,8 @@ Solo cuentan órdenes `completed` (los reembolsos se excluyen). Los días se agr
 | `on_auth_user_created` → `handle_new_user` | `auth.users` | Crea el perfil. Rol solo de `app_metadata`; **activo solo si el servidor asignó rol** |
 | `on_auth_user_app_metadata_role_changed` → `sync_profile_role_from_app_metadata` | `auth.users` | Aplica el rol cuando la clave `role` de `app_metadata` cambia (GoTrue la escribe en un `UPDATE` posterior al `INSERT`) |
 | `protect_profile_columns` | `profiles` | `id`/`email` inmutables; solo admin cambia `role`/`is_active`; protege al último admin |
-| `create_inventory_for_product` | `products` | Crea la fila de inventario (cantidad 0, umbral de `settings.low_stock_threshold` o 10). El seed fija cantidades iniciales |
+| `create_inventory_for_product` | `products` | Crea la fila de inventario (cantidad 0, umbral de `settings.low_stock_threshold` o 10). El seed fija cantidades iniciales. La crea también para `none`/`linked` (se ignora; así volver a `own` es trivial) |
+| `products_stock_mode_guard` (`BEFORE INSERT/UPDATE`) | `products` | El base de una presentación debe existir, estar sin borrar y ser `own` (un solo nivel). Un producto que es base de presentaciones vivas no puede dejar de ser `own` ni borrarse. Pasar de `own` a otro modo exige cantidad 0. Errores `BS409` → 409 (`20261009000001`) |
 | `orders_refresh_customer_totals` | `orders` | Recalcula `customers.total_spent` (Σ órdenes `completed`) y `loyalty_points = floor(total_spent)` (D7). Los reembolsos restan |
 | `audit_row_change` (`AFTER INSERT OR UPDATE OR DELETE`) | `products`, `categories`, `promotions`, `promotion_items`, `inventory`, `orders`, `customers`, `suppliers`, `settings`, `profiles`, `tabs`, `tab_items`, `tab_payments`, `expense_categories`, `expenses` | Escribe una fila en `audit_log` con el actor (de `auth.uid()`/`profiles`, o `system` sin JWT), la acción y, en un `UPDATE`, solo las columnas que cambiaron (`{before, after}`, sin `updated_at`). Un `UPDATE` que no cambia nada no genera fila. `…0016` |
 | `audit_log_immutable` (`BEFORE UPDATE OR DELETE`, `BEFORE TRUNCATE`) | `audit_log` | Lanza `raise exception` siempre, para cualquier rol (incluido `service_role`): es la capa que hace el log append-only. `…0016` |

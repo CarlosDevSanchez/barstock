@@ -3,7 +3,13 @@ import { assertNoError } from '@/lib/server/errors'
 import type { AppSupabaseClient } from '@/lib/server/supabase'
 import type { Tables } from '@/types/database'
 import { LIST_SELECT as PRODUCTS_SELECT, mapProductRows, type ProductListItem } from './products'
-import { LIST_SELECT as PROMOTIONS_SELECT, mapPromotionRow, type PromotionListItem } from './promotions'
+import {
+    LIST_SELECT as PROMOTIONS_SELECT,
+    mapPromotionRow,
+    promotionBaseIds,
+    type PromotionListItem
+} from './promotions'
+import { baseStockQuantities } from './products'
 
 export interface PosSnapshot {
     generated_at: string
@@ -53,10 +59,12 @@ export async function getPosSnapshot(supabase: AppSupabaseClient): Promise<PosSn
     assertNoError(categoriesRes.error)
     assertNoError(customersRes.error)
 
+    const promotionBases = await baseStockQuantities(supabase, promotionBaseIds(promotionsRes.data))
+
     return {
         generated_at: new Date().toISOString(),
-        products: await mapProductRows(productsRes.data),
-        promotions: promotionsRes.data.map(mapPromotionRow),
+        products: await mapProductRows(supabase, productsRes.data),
+        promotions: promotionsRes.data.map(row => mapPromotionRow(row, promotionBases)),
         categories: categoriesRes.data,
         customers: customersRes.data
     }

@@ -24,9 +24,12 @@ Una compra recibida **aumenta stock** y escribe movimientos `purchase` en `inven
 - Proveedor debe existir (`P0002`). Ítems con `quantity > 0`, `unit_cost ≥ 0` y escala monetaria de la tienda (`P0001` si no).
 - Si se pasa `cash_session_id`: la sesión debe estar `open` (`FOR UPDATE`); `business_day_id` se toma de la sesión. El total de la OC reduce el efectivo esperado de esa caja (`_session_cash.purchases`).
 - Inserta `purchase_orders` con `status = received`, `po_number` `PO-YYMMDD-######`, líneas, suma stock (`variant_id is null`) y movimientos positivos. Fila de inventario ausente → `P0001`.
+- [Modos de stock](productos.md#modos-de-stock): un producto sin control (`none`) → `P0001` «This product does not track stock». Una **presentación** suma
+  `cantidad × stock_units` a su base; el movimiento guarda `unit_cost = costo / stock_units` (costo por unidad del base) y la línea
+  (`purchase_order_items`) la foto `stock_product_id/stock_units` para poder anularla.
 
 ### Reglas de `void_purchase`
-- Motivo obligatorio. Solo `status = received`. Antes de tocar nada, comprueba (por producto, sumando líneas) que hay stock suficiente; si no → `P0001` y stock intacto. Luego resta, escribe movimiento `purchase` negativo (mismo proveedor/costo, `notes` = motivo) y pone `cancelled`.
+- Motivo obligatorio. Solo `status = received`. Antes de tocar nada, comprueba (por fila de stock —el base de una presentación—, sumando líneas en unidades del base) que hay stock suficiente; si no → `P0001` y stock intacto. Luego resta, escribe movimiento `purchase` negativo (mismo proveedor/costo, `notes` = motivo) y pone `cancelled`.
 
 ### Historial
 Rango inválido o > 366 días → excepción. Solo OC `received` con `received_at` en `[from, to+1)` en la zona horaria de `settings` (igual que `sales_report`). JSON: `purchases`, `total`, `products` (`last_unit_cost` = `unit_price` de la recepción más reciente; `average_unit_cost` = Σ(qty×price)/Σ(qty)).

@@ -5,25 +5,29 @@ import { pageRange } from '@/lib/validation/common'
 import type { PromotionCreate, PromotionsQuery, PromotionUpdate } from '@/lib/validation/resources'
 import type { Tables } from '@/types/database'
 import { packagesAvailable } from '@/lib/promotion-allocate'
+import { effectiveStock, type StockMode } from '@/lib/stock'
+import { baseStockQuantities } from './products'
 import { assertMoneyScale, searchFilter, type Page } from './_shared'
 
 export type PromotionItemRow = Pick<Tables<'promotion_items'>, 'id' | 'product_id' | 'quantity'> & {
     product:
         | (Pick<Tables<'products'>, 'id' | 'name' | 'is_active' | 'deleted_at' | 'selling_price' | 'tax_rate'> & {
+              /** Whole units sellable (floor(base / units) for a presentation); null when untracked. */
               stock: number | null
+              stock_mode: StockMode
           })
         | null
 }
 
 export type PromotionListItem = Tables<'promotions'> & {
     items: PromotionItemRow[]
-    /** Packages sellable from component stock; null if any component lacks an inventory row. */
+    /** Packages sellable from component stock; null when no component tracks stock (no limit). */
     available: number | null
 }
 
 /** Shared with `getPosSnapshot` (lib/server/services/pos.ts), so both return the same row shape. */
 export const LIST_SELECT =
-    '*, items:promotion_items(id, product_id, quantity, product:products(id, name, is_active, deleted_at, selling_price, tax_rate, inventory(quantity, variant_id)))'
+    '*, items:promotion_items(id, product_id, quantity, product:products(id, name, is_active, deleted_at, selling_price, tax_rate, stock_mode, stock_units, stock_product_id, inventory(quantity, variant_id)))'
 
 export type RawPromotionRow = Tables<'promotions'> & {
     items: Array<{
@@ -31,28 +35,58 @@ export type RawPromotionRow = Tables<'promotions'> & {
         product_id: string
         quantity: number
         product:
-            | (Pick<Tables<'products'>, 'id' | 'name' | 'is_active' | 'deleted_at' | 'selling_price' | 'tax_rate'> & {
+            | (Pick<
+                  Tables<'products'>,
+                  | 'id'
+                  | 'name'
+                  | 'is_active'
+                  | 'deleted_at'
+                  | 'selling_price'
+                  | 'tax_rate'
+                  | 'stock_mode'
+                  | 'stock_units'
+                  | 'stock_product_id'
+              > & {
                   inventory: Array<{ quantity: number; variant_id: string | null }>
               })
             | null
     }> | null
 }
 
-export function mapPromotionRow(row: RawPromotionRow): PromotionListItem {
+/** Bases of the presentations used as components, whose stock `mapPromotionRow` needs (see baseStockQuantities). */
+export function promotionBaseIds(rows: RawPromotionRow[]): string[] {
+    return rows.flatMap(row =>
+        (row.items ?? []).flatMap(item =>
+            item.product?.stock_mode === 'linked' && item.product.stock_product_id
+                ? [item.product.stock_product_id]
+                : []
+        )
+    )
+}
+
+export function mapPromotionRow(row: RawPromotionRow, baseQuantity: ReadonlyMap<string, number>): PromotionListItem {
     const items: PromotionItemRow[] = (row.items ?? []).map(({ product, ...item }) => {
         if (!product) return { ...item, product: null }
-        const { inventory, ...rest } = product
+        const { inventory, stock_units, stock_product_id, ...rest } = product
+        const mode = rest.stock_mode as StockMode
+        const base =
+            mode === 'linked'
+                ? (baseQuantity.get(stock_product_id ?? '') ?? null)
+                : (inventory.find(inv => inv.variant_id === null)?.quantity ?? null)
         return {
             ...item,
-            product: {
-                ...rest,
-                stock: inventory.find(inv => inv.variant_id === null)?.quantity ?? null
-            }
+            product: { ...rest, stock_mode: mode, stock: effectiveStock(mode, base, stock_units) }
         }
     })
     const sellable = items.length > 0 && items.every(i => i.product?.is_active && i.product.deleted_at === null)
     const available = sellable
-        ? packagesAvailable(items.map(i => ({ quantity: i.quantity, stock: i.product!.stock })))
+        ? packagesAvailable(
+              items.map(i => ({
+                  quantity: i.quantity,
+                  stock: i.product!.stock,
+                  untracked: i.product!.stock_mode === 'none'
+              }))
+          )
         : 0
     const { items: _raw, ...promo } = row
     return { ...promo, items, available }
@@ -107,8 +141,9 @@ export async function listPromotions(
     const { data, count, error } = await query.range(from, to)
     assertNoError(error)
 
+    const bases = await baseStockQuantities(supabase, promotionBaseIds(data))
     return {
-        rows: data.map(row => mapPromotionRow(row)),
+        rows: data.map(row => mapPromotionRow(row, bases)),
         total: count ?? 0
     }
 }
@@ -122,7 +157,7 @@ export async function getPromotion(supabase: AppSupabaseClient, id: string): Pro
         .maybeSingle()
     assertNoError(error)
     if (!data) throw notFound('Promotion not found')
-    return mapPromotionRow(data)
+    return mapPromotionRow(data, await baseStockQuantities(supabase, promotionBaseIds([data])))
 }
 
 export async function createPromotion(supabase: AppSupabaseClient, input: PromotionCreate): Promise<PromotionListItem> {

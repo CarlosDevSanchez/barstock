@@ -6,14 +6,14 @@ import { QueryError } from '@/components/query-error'
 import type { ProductListItem } from '@/lib/api/products'
 import type { InfiniteApiList } from '@/hooks/use-infinite-api-list'
 import { ProductCard } from './product-card'
-import { maxAddable } from './qty-confirm-overlay'
 
 interface ProductGridProps {
     catalog: InfiniteApiList<ProductListItem>
     pendingId: string | null
     pendingQty: number
     /** Units of this product already in the cart (for the addable cap). */
-    qtyInCart: (productId: string) => number
+    /** Units of a product still addable given the cart (presentations share their base's stock). */
+    maxAddableFor: (product: ProductListItem) => number
     onSelect: (productId: string) => void
     onChangeQty: (qty: number) => void
     onConfirm: () => void
@@ -42,7 +42,7 @@ export function ProductGrid({
     catalog,
     pendingId,
     pendingQty,
-    qtyInCart,
+    maxAddableFor,
     onSelect,
     onChangeQty,
     onConfirm
@@ -84,7 +84,7 @@ export function ProductGrid({
         <div className="@container">
             <div className={GRID_CLASSES}>
                 {catalog.items.map(product => {
-                    const maxQty = maxAddable(product.stock, qtyInCart(product.id))
+                    const maxQty = maxAddableFor(product)
                     return (
                         <ProductCard
                             key={product.id}

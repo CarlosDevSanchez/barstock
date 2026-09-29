@@ -21,7 +21,8 @@ function promo(overrides: Partial<PromotionListItem> = {}): PromotionListItem {
             deleted_at: null,
             selling_price: 3,
             tax_rate: 0,
-            stock: 10
+            stock: 10,
+            stock_mode: 'own' as const
         }
     }
     const snack = {
@@ -35,7 +36,8 @@ function promo(overrides: Partial<PromotionListItem> = {}): PromotionListItem {
             deleted_at: null,
             selling_price: 5,
             tax_rate: 0,
-            stock: 10
+            stock: 10,
+            stock_mode: 'own' as const
         }
     }
     return {
@@ -139,7 +141,8 @@ describe('PromotionCard', () => {
                         deleted_at: null,
                         selling_price: 3,
                         tax_rate: 0,
-                        stock: 20
+                        stock: 20,
+                        stock_mode: 'own'
                     }
                 }
             ]

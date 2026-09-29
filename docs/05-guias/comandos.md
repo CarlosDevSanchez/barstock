@@ -53,10 +53,14 @@ bun run db:types                                # regenera types/database.ts (tr
 supabase status -o env                          # URLs y claves locales (API_URL, ANON_KEY, SERVICE_ROLE_KEY)
 supabase migration new <tema>                   # nueva migración con timestamp
 supabase stop                                   # apaga los contenedores
-# contra un proyecto remoto (paso controlado, ver 06-seed-y-migraciones):
-supabase link --project-ref <ref>
+# contra el proyecto real (paso controlado: backup + verificar-checkout.md; migrar ANTES de desplegar el código).
+# El ref sale de NEXT_PUBLIC_SUPABASE_URL de .env.production (otro archivo: ENV_FILE=.env.staging bun run ...).
+# Pide la contraseña de la BD (Project Settings → Database) o la lee de SUPABASE_DB_PASSWORD; nunca en un archivo.
+bun run db:remote:link                          # enlaza la CLI a ese proyecto
+bun run db:remote:status                        # migraciones aplicadas en remoto vs locales (solo lectura)
+bun run db:remote:dry                           # qué aplicaría un push, sin aplicarlo (solo lectura)
+bun run db:remote:push                          # muestra el dry-run y pide escribir el ref para confirmar
 supabase db pull                                # comparar el esquema real con la baseline
-supabase db push                                # aplica migraciones al remoto
 ```
 
 Mailpit (correos de invitación y restablecer contraseña): <http://127.0.0.1:54324> · Studio: <http://127.0.0.1:54323>.

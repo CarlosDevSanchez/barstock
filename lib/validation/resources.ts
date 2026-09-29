@@ -14,6 +14,7 @@ import {
     nullableUuid,
     positiveInt,
     requiredText,
+    targetMargin,
     taxRate
 } from './common'
 
@@ -43,7 +44,19 @@ export const categoryCreateSchema = z.object({
 })
 export const categoryUpdateSchema = categoryCreateSchema.partial()
 
-export const productCreateSchema = z.object({
+/**
+ * How a product's stock is counted: `own` (its inventory row), `none` (always sellable, e.g. coffee) or `linked`
+ * (a presentation: selling 1 takes `stock_units` from the base product `stock_product_id`, e.g. a box of 15).
+ */
+export const STOCK_MODES = ['own', 'none', 'linked'] as const
+
+const stockUnits = numberField()
+    .int('validation.wholeNumber')
+    .min(2, 'validation.minTwoUnits')
+    .max(10_000, 'validation.tooLarge')
+
+/** Plain object (no refinements) so the form can `.extend()` it; the API uses the refined schemas below. */
+export const productFieldsSchema = z.object({
     name: requiredText(200),
     description: nullableText(2000),
     sku: requiredText(64),
@@ -56,9 +69,42 @@ export const productCreateSchema = z.object({
     // app/api/v1/products/[id]/image/route.ts and lib/server/storage.ts.
     is_active: z.boolean().optional(),
     // Optional initial threshold. Absent means the settings default (create_inventory_for_product). Not a products column.
-    low_stock_threshold: z.preprocess(toNumber, lowStockThresholdNumber.optional())
+    low_stock_threshold: z.preprocess(toNumber, lowStockThresholdNumber.optional()),
+    stock_mode: z.enum(STOCK_MODES).optional(),
+    stock_product_id: nullableUuid,
+    stock_units: z.preprocess(toNumber, stockUnits.optional())
 })
-export const productUpdateSchema = productCreateSchema.omit({ low_stock_threshold: true }).partial()
+
+/**
+ * A presentation needs its base and how many base units one sale takes; any other mode clears both, so switching
+ * a presentation back to `own`/`none` never leaves a stale link behind (the DB CHECKs would reject it anyway).
+ */
+export function refineStockMode(
+    value: { stock_mode?: (typeof STOCK_MODES)[number]; stock_product_id?: string | null; stock_units?: number },
+    ctx: z.RefinementCtx
+) {
+    if (value.stock_mode !== 'linked') return
+    if (!value.stock_product_id) {
+        ctx.addIssue({ code: 'custom', message: 'validation.required', path: ['stock_product_id'] })
+    }
+    if (value.stock_units === undefined) {
+        ctx.addIssue({ code: 'custom', message: 'validation.required', path: ['stock_units'] })
+    }
+}
+
+export function normalizeStockMode<
+    T extends { stock_mode?: (typeof STOCK_MODES)[number]; stock_product_id?: string | null; stock_units?: number }
+>(value: T): T {
+    if (value.stock_mode === undefined || value.stock_mode === 'linked') return value
+    return { ...value, stock_product_id: null, stock_units: 1 }
+}
+
+export const productCreateSchema = productFieldsSchema.superRefine(refineStockMode).transform(normalizeStockMode)
+export const productUpdateSchema = productFieldsSchema
+    .omit({ low_stock_threshold: true })
+    .partial()
+    .superRefine(refineStockMode)
+    .transform(normalizeStockMode)
 
 /** One product line inside a fixed-price package. Unique product_id per promotion (enforced here + DB UNIQUE). */
 export const promotionItemSchema = z.object({
@@ -234,6 +280,8 @@ export const settingsSchema = z.object({
         numberField().int('validation.wholeNumber').min(0, 'validation.minZero').max(100_000, 'validation.tooLarge')
     ),
     tax_rate: taxRate,
+    // Markup on the cost the product form measures prices against (informative only: never enforced on a sale).
+    target_margin: targetMargin,
     // How long a till may operate offline before create_sale clamps an offline sale's occurred_at to this window
     // (sync_issues.occurred_at_clamped). See F2, docs/06-roadmap/offline-y-sincronizacion.md.
     offline_max_hours: z.preprocess(
@@ -256,7 +304,12 @@ export const productsQuerySchema = paginationSchema.extend({
     category_id: optionalUuid,
     active: queryBoolean,
     // Refreshes specific products (e.g. the current cart) with their live price and stock.
-    ids: uuidList
+    ids: uuidList,
+    // `stock_mode=own` (a presentation's base picker) or `own,linked` (anything a purchase can stock).
+    stock_mode: z.preprocess(
+        value => (typeof value === 'string' && value !== '' ? value.split(',') : undefined),
+        z.array(z.enum(STOCK_MODES)).min(1).max(3).optional()
+    )
 })
 export const promotionsQuerySchema = paginationSchema.extend({
     active: queryBoolean,
