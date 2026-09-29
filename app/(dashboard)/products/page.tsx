@@ -209,7 +209,7 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                             <TextField name="name" label={t('name')} className="col-span-2" />
                             <TextField name="description" label={t('description')} className="col-span-2" />
                             {product ? (
-                                <TextField name="sku" label={t('sku')}  />
+                                <TextField name="sku" label={t('sku')} />
                             ) : (
                                 <div className="flex items-end gap-2">
                                     <TextField name="sku" label={t('sku')} className="flex-1" />
