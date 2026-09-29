@@ -56,7 +56,7 @@ export function MarginSummary() {
                 <h3 className="text-sm font-medium">{t('marginTitle')}</h3>
                 <p className="text-sm text-muted-foreground">{t('marginHint')}</p>
             </div>
-            <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm sm:grid-cols-5">
+            <dl className="grid grid-cols-2 gap-x-4 gap-y-4 text-sm sm:grid-cols-4">
                 {rows.map(row => (
                     <div key={row.key} className="min-w-0">
                         <dt className="text-muted-foreground">{row.label}</dt>

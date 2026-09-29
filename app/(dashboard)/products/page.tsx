@@ -209,7 +209,7 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                             <TextField name="name" label={t('name')} className="col-span-2" />
                             <TextField name="description" label={t('description')} className="col-span-2" />
                             {product ? (
-                                <TextField name="sku" label={t('sku')} />
+                                <TextField name="sku" label={t('sku')}  />
                             ) : (
                                 <div className="flex items-end gap-2">
                                     <TextField name="sku" label={t('sku')} className="flex-1" />
@@ -224,13 +224,14 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                                     </Button>
                                 </div>
                             )}
-                            <TextField name="barcode" label={t('barcode')} />
+                            <TextField name="barcode" label={t('barcode')} className="col-span-2" />
                             <SelectField
                                 name="category_id"
                                 label={t('category')}
                                 placeholder={t('selectCategory')}
                                 noneLabel={t('noCategory')}
                                 options={categories}
+                                className="col-span-2"
                             />
                             <TextField
                                 name="tax_rate"
@@ -239,6 +240,7 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                                 step="0.01"
                                 min="0"
                                 max="100"
+                                className="col-span-2"
                             />
                             <TextField
                                 name="cost_price"
@@ -246,6 +248,7 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                                 type="number"
                                 step={priceStep}
                                 min="0"
+                                className="col-span-2"
                             />
                             <TextField
                                 name="selling_price"

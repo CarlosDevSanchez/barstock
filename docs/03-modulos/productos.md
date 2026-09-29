@@ -46,8 +46,13 @@ Sección **Inventario** del formulario (`components/products/stock-mode-fields.t
 - `stock` en la API es el **stock efectivo**: `own` = sus unidades; `linked` = `floor(base / stock_units)` (cajas completas); `none` = `null`.
   `stock_base_quantity` son las unidades del base y `stock_base` su `{id, name}` (el POS los usa para el tope compartido, `lib/stock.ts`).
 - El formulario valida: en `linked`, base y «Unidades del base por venta» (entero 2–10 000) son obligatorios; muestra en vivo «Vender 1
-  descuenta 15 × Cigarrillo · disponibles ahora: N» y ofrece el **costo sugerido** (costo del base × unidades) sin imponerlo. El umbral de stock
-  bajo solo se pide en `own`.
+  descuenta 15 × Cigarrillo · disponibles ahora: N». **No sugiere costo ni precio** para la presentación: el costo y el precio los escribe
+  quien crea el producto (antes había un botón «costo del base × unidades» que, con el paquete como base, proponía cifras absurdas). El
+  umbral de stock bajo solo se pide en `own`.
+- **Error frecuente: poner el paquete como base.** Si el base es el paquete y la presentación dice «10 unidades del base», el sistema entiende
+  que vender 1 descuenta **10 paquetes**. Para comprar por paquete y vender por unidad, la **unidad** es el base (`own`, costo 1 300) y el
+  paquete es la presentación ×10: comprar 1 paquete suma 10 unidades, vender 1 unidad descuenta 1, e Inventario muestra el equivalente
+  («= 2 × Paquete + 3 sueltas»). La ayuda del modo `linked` lo explica en el formulario.
 - Las líneas vendidas guardan una **foto** de dónde salió el stock (`order_items.stock_product_id/stock_units`): un reembolso devuelve al
   mismo sitio aunque el producto cambie después. Detalle en [funciones](../02-base-de-datos/04-triggers-y-funciones.md#modos-de-stock-20261009000001).
 - Decisión y supuestos: D-stock en [decisiones pendientes](../06-roadmap/decisiones-pendientes.md). Recetas de insumos (café → gramos) quedan fuera.

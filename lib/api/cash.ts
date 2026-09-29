@@ -19,6 +19,7 @@ export interface DeskSession {
     register_id: string
     register_name: string
     opening_float: number
+    opened_at: string
     /** R-1: blind cash count. Null while open, for a cashier — manager+ and closed sessions always get a number. */
     expected_cash: number | null
     users: { id: string; full_name: string | null }[]

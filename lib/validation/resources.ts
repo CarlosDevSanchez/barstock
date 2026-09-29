@@ -50,9 +50,11 @@ export const categoryUpdateSchema = categoryCreateSchema.partial()
  */
 export const STOCK_MODES = ['own', 'none', 'linked'] as const
 
+// 1 is valid on its own: normalizeStockMode sends it for `own`/`none` (the DB requires it there) and the API parses
+// that output again. The "at least 2" rule only applies to a presentation (refineStockMode).
 const stockUnits = numberField()
     .int('validation.wholeNumber')
-    .min(2, 'validation.minTwoUnits')
+    .min(1, 'validation.minOne')
     .max(10_000, 'validation.tooLarge')
 
 /** Plain object (no refinements) so the form can `.extend()` it; the API uses the refined schemas below. */
@@ -89,6 +91,8 @@ export function refineStockMode(
     }
     if (value.stock_units === undefined) {
         ctx.addIssue({ code: 'custom', message: 'validation.required', path: ['stock_units'] })
+    } else if (value.stock_units < 2) {
+        ctx.addIssue({ code: 'custom', message: 'validation.minTwoUnits', path: ['stock_units'] })
     }
 }
 

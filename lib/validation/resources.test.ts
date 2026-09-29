@@ -47,6 +47,20 @@ describe('products', () => {
         expect(productUpdateSchema.parse({ name: 'New' })).toEqual({ name: 'New' })
         expect(productUpdateSchema.parse({})).toEqual({})
     })
+    test('the form output of an own/none product passes the API schema again (stock_units normalized to 1)', () => {
+        for (const stock_mode of ['own', 'none'] as const) {
+            const form = productCreateSchema.parse({ ...base, stock_mode, stock_units: '' })
+            expect(form.stock_units).toBe(1)
+            expect(productCreateSchema.safeParse(JSON.parse(JSON.stringify(form))).success).toBe(true)
+            expect(productUpdateSchema.safeParse(JSON.parse(JSON.stringify(form))).success).toBe(true)
+        }
+    })
+    test('a presentation needs at least 2 units', () => {
+        const linked = { ...base, stock_mode: 'linked', stock_product_id: id }
+        const one = productCreateSchema.safeParse({ ...linked, stock_units: 1 })
+        expect(one.success ? null : one.error.issues[0]?.message).toBe('validation.minTwoUnits')
+        expect(productCreateSchema.safeParse({ ...linked, stock_units: 2 }).success).toBe(true)
+    })
 })
 
 describe('promotions', () => {

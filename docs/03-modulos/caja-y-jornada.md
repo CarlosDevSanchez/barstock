@@ -70,6 +70,10 @@ Las escrituras de jornada y sesión son RPC. `cash_registers` se inserta por RLS
 
 - `/cash` (nav **Jornada**; el ítem «Caja» del menú sigue siendo el punto de venta). Historial para gerente+. «Ajustar» solo admin y solo si `needs_review`.
 - El POS muestra «Sin jornada abierta» o «No eres responsable de ninguna caja».
+- Si el usuario está en una caja abierta, la cabecera del POS (también en móvil) muestra una píldora con el nombre de la caja y
+  un cronómetro `HH:MM:SS` desde `opened_at` (`components/pos/cash-session-timer.tsx`); enlaza a `/cash` para cerrarla y se
+  pone ámbar a partir de 12 h (`LONG_SESSION_HOURS`, umbral de UX, no una regla de negocio). `GET /business-days/current`
+  devuelve `opened_at` en cada sesión. Sin red, la consulta de la caja falla y la píldora no aparece [Inferido].
 - El panel del admin enlaza a `/cash` si hay jornadas por revisar.
 - Reportes: «Por fechas» (el `sales_report` de siempre) o «Por jornada».
 

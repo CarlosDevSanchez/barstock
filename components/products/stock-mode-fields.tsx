@@ -1,14 +1,12 @@
 'use client'
 
 import { useState } from 'react'
-import { useFormContext, useWatch } from 'react-hook-form'
+import { useWatch } from 'react-hook-form'
 import { useTranslations } from 'next-intl'
-import { Button } from '@/components/ui/button'
 import { FormField, FormItem, FormLabel } from '@/components/ui/form'
 import { SearchableSelect } from '@/components/searchable-select'
 import { SelectField, TextField } from '@/components/form-fields'
 import { TranslatedFormMessage } from '@/components/translated-form-message'
-import { useMoney } from '@/components/session-provider'
 import { productsApi } from '@/lib/api/products'
 import type { StockMode } from '@/lib/stock'
 import { useApiQuery } from '@/hooks/use-api-query'
@@ -28,8 +26,6 @@ interface StockModeFieldsProps {
  */
 export function StockModeFields({ productId, initialBase }: StockModeFieldsProps) {
     const t = useTranslations('products')
-    const money = useMoney()
-    const form = useFormContext()
     const mode = useWatch({ name: 'stock_mode' }) as StockMode
     const baseId = useWatch({ name: 'stock_product_id' }) as string
     const units = Number(useWatch({ name: 'stock_units' }))
@@ -54,7 +50,6 @@ export function StockModeFields({ productId, initialBase }: StockModeFieldsProps
         }))
     ]
     const validUnits = Number.isInteger(units) && units >= 2
-    const suggestedCost = selected && validUnits ? selected.cost_price * units : null
 
     return (
         <div className="col-span-2 space-y-4 rounded-md border p-4">
@@ -77,7 +72,7 @@ export function StockModeFields({ productId, initialBase }: StockModeFieldsProps
             </p>
 
             {mode === 'linked' && (
-                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 items-start">
                     <FormField
                         name="stock_product_id"
                         render={({ field }) => (
@@ -111,17 +106,6 @@ export function StockModeFields({ productId, initialBase }: StockModeFieldsProps
                                 available: Math.floor((selected.stock ?? 0) / units)
                             })}
                         </p>
-                    )}
-                    {suggestedCost !== null && (
-                        <Button
-                            type="button"
-                            variant="outline"
-                            size="sm"
-                            className="sm:col-span-2 justify-self-start"
-                            onClick={() => form.setValue('cost_price', String(suggestedCost), { shouldDirty: true })}
-                        >
-                            {t('useSuggestedCost', { cost: money(suggestedCost) })}
-                        </Button>
                     )}
                 </div>
             )}

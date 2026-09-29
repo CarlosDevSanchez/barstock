@@ -54,7 +54,7 @@ test('open a day and a till, sell, then close the till with a count', async ({ b
     await expect(count.getByText('Expected cash')).toHaveCount(0)
     await count.getByLabel('Counted cash').fill('120')
     await expect(count.getByText('Difference')).toHaveCount(0)
-    await count.getByRole('button', { name: 'Count', exact: true }).click()
+    await count.getByRole('button', { name: 'Close till', exact: true }).click()
     await expect(page.getByRole('button', { name: 'Count', exact: true })).toHaveCount(0)
     // The cashier only learns the difference AFTER closing, via a toast.
     await expect(page.locator('[data-sonner-toast]').filter({ hasText: 'Difference' })).toBeVisible()

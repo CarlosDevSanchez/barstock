@@ -39,6 +39,7 @@ import { useOnlineStatus } from '@/hooks/use-online-status'
 import { usePosSnapshot } from '@/hooks/use-pos-snapshot'
 import { AddToTabDialog } from '@/components/pos/add-to-tab-dialog'
 import { CartBubble } from '@/components/pos/cart-bubble'
+import { CashSessionTimer } from '@/components/pos/cash-session-timer'
 import { CartSheet, type CartLineView, type CheckoutPayment } from '@/components/pos/cart-sheet'
 import { OpenTabDialog } from '@/components/pos/open-tab-dialog'
 import { ProductGrid } from '@/components/pos/product-grid'
@@ -80,7 +81,8 @@ export default function POSPage() {
     const router = useRouter()
     const { user, settings } = useSession()
     const desk = useApiQuery(signal => cashApi.current(signal), 'pos-cash-desk')
-    const onATill = desk.data?.sessions.some(session => session.users.some(person => person.id === user.id)) ?? false
+    const myTill = desk.data?.sessions.find(session => session.users.some(person => person.id === user.id))
+    const onATill = myTill !== undefined
     const cashNotice = !desk.data ? null : !desk.data.day ? t('noBusinessDay') : onATill ? null : t('notResponsible')
     const money = useMoney()
     const decimals = currencyDecimals(settings.currency)
@@ -451,9 +453,14 @@ export default function POSPage() {
     return (
         <>
             <div className="space-y-6 print:hidden">
-                <div className="hidden lg:block">
-                    <h1 className="text-3xl font-bold">{t('title')}</h1>
-                    <p className="text-muted-foreground">{t('subtitle')}</p>
+                <div className="flex items-start justify-between gap-3">
+                    <div className="hidden lg:block">
+                        <h1 className="text-3xl font-bold">{t('title')}</h1>
+                        <p className="text-muted-foreground">{t('subtitle')}</p>
+                    </div>
+                    {myTill ? (
+                        <CashSessionTimer registerName={myTill.register_name} openedAt={myTill.opened_at} />
+                    ) : null}
                 </div>
                 {cashNotice ? <p className="text-sm text-amber-700 dark:text-amber-400">{cashNotice}</p> : null}
 
