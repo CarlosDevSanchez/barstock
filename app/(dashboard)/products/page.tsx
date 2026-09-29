@@ -209,9 +209,9 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                             <TextField name="name" label={t('name')} className="col-span-2" />
                             <TextField name="description" label={t('description')} className="col-span-2" />
                             {product ? (
-                                <TextField name="sku" label={t('sku')} />
+                                <TextField name="sku" label={t('sku')} className="col-span-2 lg:col-span-1" />
                             ) : (
-                                <div className="flex items-end gap-2">
+                                <div className="flex items-end gap-2 col-span-2 lg:col-span-1">
                                     <TextField name="sku" label={t('sku')} className="flex-1" />
                                     <Button
                                         type="button"
@@ -224,14 +224,14 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                                     </Button>
                                 </div>
                             )}
-                            <TextField name="barcode" label={t('barcode')} className="col-span-2" />
+                            <TextField name="barcode" label={t('barcode')} className="col-span-2 lg:col-span-1" />
                             <SelectField
                                 name="category_id"
                                 label={t('category')}
                                 placeholder={t('selectCategory')}
                                 noneLabel={t('noCategory')}
                                 options={categories}
-                                className="col-span-2"
+                                className="col-span-2 lg:col-span-1"
                             />
                             <TextField
                                 name="tax_rate"
@@ -240,7 +240,7 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                                 step="0.01"
                                 min="0"
                                 max="100"
-                                className="col-span-2"
+                                className="col-span-2 lg:col-span-1"
                             />
                             <TextField
                                 name="cost_price"
@@ -248,7 +248,7 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                                 type="number"
                                 step={priceStep}
                                 min="0"
-                                className="col-span-2"
+                                className="col-span-2 lg:col-span-1"
                             />
                             <TextField
                                 name="selling_price"
@@ -256,6 +256,7 @@ function ProductDialog({ product, base, categories, onClose, onSaved }: ProductD
                                 type="number"
                                 step={priceStep}
                                 min="0"
+                                className="col-span-2 lg:col-span-1"
                             />
                             <MarginSummary />
                             <StockModeFields
