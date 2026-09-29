@@ -19,7 +19,14 @@ import { ListCardRow, ResponsiveList } from '@/components/responsive-list'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
-import { Dialog, DialogContent, DialogFooter, DialogHeader, DialogTitle } from '@/components/ui/dialog'
+import {
+    Dialog,
+    DialogContent,
+    DialogDescription,
+    DialogFooter,
+    DialogHeader,
+    DialogTitle
+} from '@/components/ui/dialog'
 import { Input } from '@/components/ui/input'
 import { Label } from '@/components/ui/label'
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select'
@@ -383,24 +390,50 @@ function MovementDialog({
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>{t('movement')}</DialogTitle>
+                    <DialogDescription>{t('movementHint')}</DialogDescription>
                 </DialogHeader>
-                <div className="space-y-3">
-                    <Select value={kind} onValueChange={value => setKind(value as 'deposit' | 'withdrawal')}>
-                        <SelectTrigger aria-label={t('movement')}>
-                            <SelectValue />
-                        </SelectTrigger>
-                        <SelectContent>
-                            <SelectItem value="deposit">{t('deposit')}</SelectItem>
-                            <SelectItem value="withdrawal">{t('withdrawal')}</SelectItem>
-                        </SelectContent>
-                    </Select>
-                    <Input
-                        inputMode="decimal"
-                        value={amount}
-                        aria-label={t('amount')}
-                        onChange={e => setAmount(e.target.value)}
-                    />
-                    <Input value={reason} aria-label={t('reason')} onChange={e => setReason(e.target.value)} />
+                <div className="space-y-4">
+                    <div className="space-y-1">
+                        <Label htmlFor="movement-kind">{t('kind')}</Label>
+                        <Select value={kind} onValueChange={value => setKind(value as 'deposit' | 'withdrawal')}>
+                            <SelectTrigger id="movement-kind" aria-describedby="movement-kind-hint">
+                                <SelectValue />
+                            </SelectTrigger>
+                            <SelectContent>
+                                <SelectItem value="deposit">{t('deposit')}</SelectItem>
+                                <SelectItem value="withdrawal">{t('withdrawal')}</SelectItem>
+                            </SelectContent>
+                        </Select>
+                        <p id="movement-kind-hint" className="text-xs text-muted-foreground">
+                            {t('kindHint')}
+                        </p>
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="movement-amount">{t('amount')}</Label>
+                        <Input
+                            id="movement-amount"
+                            inputMode="decimal"
+                            value={amount}
+                            aria-describedby="movement-amount-hint"
+                            onChange={e => setAmount(e.target.value)}
+                        />
+                        <p id="movement-amount-hint" className="text-xs text-muted-foreground">
+                            {t('amountHint')}
+                        </p>
+                    </div>
+                    <div className="space-y-1">
+                        <Label htmlFor="movement-reason">{t('reason')}</Label>
+                        <Input
+                            id="movement-reason"
+                            value={reason}
+                            placeholder={t('reasonPlaceholder')}
+                            aria-describedby="movement-reason-hint"
+                            onChange={e => setReason(e.target.value)}
+                        />
+                        <p id="movement-reason-hint" className="text-xs text-muted-foreground">
+                            {t('reasonHint')}
+                        </p>
+                    </div>
                 </div>
                 <DialogFooter>
                     <Button variant="outline" onClick={() => onOpenChange(false)}>
@@ -461,24 +494,35 @@ function CountDialog({
             <DialogContent>
                 <DialogHeader>
                     <DialogTitle>{t('count')}</DialogTitle>
+                    <DialogDescription>{t('countHint')}</DialogDescription>
                 </DialogHeader>
                 {session ? (
-                    <div className="space-y-3 text-sm">
+                    <div className="space-y-4 text-sm">
                         {session.expected_cash !== null ? (
                             <p>
                                 {t('expected')}: {money(session.expected_cash)}
                             </p>
                         ) : null}
-                        <Input
-                            inputMode="decimal"
-                            value={counted}
-                            aria-label={t('counted')}
-                            onChange={event => setCounted(event.target.value)}
-                        />
-                        {difference !== null && !Number.isNaN(difference) ? (
-                            <p>
-                                {t('difference')}: {money(difference)}
+                        <div className="space-y-1">
+                            <Label htmlFor="count-counted">{t('counted')}</Label>
+                            <Input
+                                id="count-counted"
+                                inputMode="decimal"
+                                value={counted}
+                                aria-describedby="count-counted-hint"
+                                onChange={event => setCounted(event.target.value)}
+                            />
+                            <p id="count-counted-hint" className="text-xs text-muted-foreground">
+                                {t('countedHint')}
                             </p>
+                        </div>
+                        {difference !== null && !Number.isNaN(difference) ? (
+                            <div className="space-y-1">
+                                <p>
+                                    {t('difference')}: {money(difference)}
+                                </p>
+                                <p className="text-xs text-muted-foreground">{t('differenceHint')}</p>
+                            </div>
                         ) : null}
                     </div>
                 ) : null}
@@ -510,7 +554,7 @@ function CountDialog({
                             }
                         }}
                     >
-                        {t('count')}
+                        {t('countConfirm')}
                     </Button>
                 </DialogFooter>
             </DialogContent>

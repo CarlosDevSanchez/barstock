@@ -12,6 +12,7 @@ export interface DeskSession {
     register_id: string
     register_name: string
     opening_float: number
+    opened_at: string
     /** R-1: null while open for a cashier (blind cash count); manager+ and closed sessions always get a number. */
     expected_cash: number | null
     users: { id: string; full_name: string | null }[]
@@ -59,7 +60,7 @@ export async function getCashDesk(supabase: AppSupabaseClient, user: SessionUser
     if (day) {
         const { data: openSessions, error } = await supabase
             .from('cash_sessions')
-            .select('id, register_id, opening_float')
+            .select('id, register_id, opening_float, opened_at')
             .eq('business_day_id', day.id)
             .eq('status', 'open')
             .order('opened_at')
@@ -102,6 +103,7 @@ export async function getCashDesk(supabase: AppSupabaseClient, user: SessionUser
                 register_id: session.register_id,
                 register_name: registerName,
                 opening_float: session.opening_float,
+                opened_at: session.opened_at,
                 expected_cash: typeof expected === 'number' ? expected : null,
                 users: sessionUsers.map(link => ({ id: link.user_id, full_name: staffById.get(link.user_id) ?? null })),
                 movements: (movements.data ?? [])

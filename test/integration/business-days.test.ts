@@ -340,10 +340,12 @@ describe('business days and cash sessions', () => {
         expect(movement.status).toBe(201)
 
         // R-1: the cashier's own live view is blind to the till's expected cash; a manager's is not.
-        const live = dataOf<{ sessions: { expected_cash: number | null; movements: { reason: string }[] }[] }>(
-            await cashierHttp.get(current, 'business-days/current')
-        )
+        const live = dataOf<{
+            sessions: { expected_cash: number | null; opened_at: string; movements: { reason: string }[] }[]
+        }>(await cashierHttp.get(current, 'business-days/current'))
         expect(live.sessions[0]?.expected_cash).toBeNull()
+        // The POS till timer counts from here.
+        expect(Number.isNaN(Date.parse(live.sessions[0]?.opened_at ?? ''))).toBe(false)
         expect(live.sessions[0]?.movements[0]?.reason).toBe('cambio')
         const liveAsManager = dataOf<{ sessions: { expected_cash: number | null }[] }>(
             await managerHttp.get(current, 'business-days/current')
